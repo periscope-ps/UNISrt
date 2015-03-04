@@ -15,7 +15,6 @@ import schedulers.adaptive
 #import schedulers.graphcoloring as coloring
 from test.test_support import args_from_interpreter_flags
 
-TRACEROUTE = "ps:tools:blipp:linux:net:traceroute:hopip"
 BANDWIDTH = "ps:tools:blipp:linux:net:iperf:bandwidth"
 
 class Helm(object):

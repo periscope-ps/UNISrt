@@ -68,8 +68,8 @@ class UNISrt(object):
         try to address this issue:
         - ms stores lots of data, and may be separated from unis
         - this data is accessible via /data url. They shouldn't be kept on runtime environment (too much)
-        - however, sometimes they my be needed. e.g. HELM schedules traceroute measurement, and need the
-        results to schedule following iperf tests
+        - however, sometimes they may be needed. e.g. HELM schedules traceroute measurement, and needs the
+          results to schedule following iperf tests
         '''
         # use unis instance as a temporary solution
         ret = self._unis.get('/data/' + query)

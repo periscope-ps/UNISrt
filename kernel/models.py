@@ -254,7 +254,6 @@ class measurement(NetworkResource):
     def __init__(self, data, unisrt, localnew):
         super(measurement, self).__init__(data, unisrt, localnew)
         if 'ts' in data: self.ts = data['ts']
-        if 'participants' in data: self.participants = data['participants']
         self.probe = data['configuration']
         self.resources = self.probe.get('resources', None)
         self.eventTypes = data['eventTypes']
@@ -264,7 +263,10 @@ class measurement(NetworkResource):
         self.every = data['configuration']['schedule_params']['every']
         self.num_tests = data['configuration']['schedule_params']['num_tests']
         
-        unisrt.measurements[self.localnew and 'new' or 'existing'][data['id']] = self
+        src = self.services.ip
+        dst = data['configuration']['address']        
+        #unisrt.measurements[self.localnew and 'new' or 'existing'][data['id']] = self
+        unisrt.measurements[self.localnew and 'new' or 'existing']['.'.join([src, dst, self.eventTypes])] = self
         
     def prep_schema(self):
         return self.data
