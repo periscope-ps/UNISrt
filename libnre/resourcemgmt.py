@@ -185,7 +185,7 @@ def getResourceLists(unisrt, services):
     def incr(ntwkrsrc):
         '''
         currently, L2 graph is of name strings, rather than a graph of objects (should be updated momentarily)
-        So, you need to know what object does a name represent, in order to retrieve it from UNISrt
+        So, you need to know what object a name represent, in order to retrieve it from UNISrt
         '''
         if unisrt.unis_url + '/nodes/' + ntwkrsrc in unisrt.nodes['existing']:
             unisrt.nodes['existing'][unisrt.unis_url + '/nodes/' + ntwkrsrc].usecounter += 1
@@ -200,7 +200,7 @@ def getResourceLists(unisrt, services):
         elif ntwkrsrc in unisrt.ipports['existing']:
             unisrt.ipports['existing'][ntwkrsrc].usecounter += 1
         else:
-            print ntwkrsrc + " cannot be found in UNISrt"
+            print ntwkrsrc + " cannot be found in UNISrt"            
 
     paths = {}
     # pair up to create m(m-1) traceroute measurements
@@ -274,18 +274,19 @@ def getGENIResourceLists(unisrt, pairs):
     '''        
     paths = {}
     for pair in pairs:
-        key = unisrt.unis_url + "/paths/" + unisrt.services['existing'][pair['from']].node.name + \
-        '%' + unisrt.services['existing'][pair['to']].node.name
-        hops = unisrt.paths['existing'][key].hops
-            
-        dst_ip_set = map(lambda x: x.address, unisrt.services['existing'][pair['to']].node.ipports.values())
-        candi0 = unisrt.ports['existing'][unisrt.unis_url + "/ports/" + hops[0].replace('+', '_')].ip
-        candi1 = unisrt.ports['existing'][unisrt.unis_url + "/ports/" + hops[-1].replace('+', '_')].ip
-        dst_ip = filter(lambda x: x in dst_ip_set, [candi0, candi1])
-        assert len(dst_ip) == 1
-        dst_ip = dst_ip[0]
-        paths[(pair['from'], dst_ip)] = hops
-        #paths[(src, dst)].insert(0, src.over)
-        #paths[(src, dst)].append(dst.over)
+        key = (pair[0], pair[1])
+        hops = map(lambda x: x.name, unisrt.paths['existing'][unisrt.unis_url + "/paths/" + pair[0] + '%' + pair[1]].hops)
+        
+        # dst_ip_set = map(lambda x: x.address, unisrt.services['existing'][pair['to']].node.ipports.values())
+        # candi0 = unisrt.ports['existing'][unisrt.unis_url + "/ports/" + hops[0].replace('+', '_')].ip
+        # candi1 = unisrt.ports['existing'][unisrt.unis_url + "/ports/" + hops[-1].replace('+', '_')].ip
+        # dst_ip = filter(lambda x: x in dst_ip_set, [candi0, candi1])
+        # assert len(dst_ip) == 1
+        # dst_ip = dst_ip[0]
+        # paths[(pair['from'], dst_ip)] = hops
+        
+        hops.insert(0, pair[0])
+        hops.append(pair[1])
+        paths[key] = hops
         
     return paths

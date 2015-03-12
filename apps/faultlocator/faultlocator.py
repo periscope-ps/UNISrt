@@ -13,6 +13,7 @@ from apps.helm import helm
 # temporarily hard code all eventType to PING
 # it should be determined by symptom
 HARDCODED_EVENTTYPE = "ps:tools:blipp:linux:net:ping"
+HARDCODED_TYPE = "ping"
 
 class FaultLocator(object):
     '''
@@ -26,8 +27,8 @@ class FaultLocator(object):
         with open(config_file) as f:
             self.conf = json.loads(f.read())
             
-        # turn service string names into service objects in UNISrt
-        self.probes = map(lambda x: map(lambda y: self.unisrt.services['existing'][y], x), self.conf['blipps'])
+        # turn string name list into objects tuples
+        self.pairs = map(lambda x: tuple(map(lambda y: self.unisrt.nodes['existing'][y].name, x)), self.conf['pairs'])
         self.alarms = self.conf['alarms']
     
     def trigger(self, pair, alarm):
@@ -36,12 +37,13 @@ class FaultLocator(object):
         and apply statistical tool (alarm function) to tell if this path went wrong
         alarm function should be chosen/provided
         '''
-        
+        return object()
+    
         # (src, dst, type)==>measurement definition==>metadata==>measurement results
         measurement_data = \
         self.unisrt.poke_remote(
         self.unisrt.metadata[self.localnew and 'new' or 'existing'][
-        self.unisrt.measurements['existing']['.'.join([pair[0], pair[1], HARDCODED_EVENTTYPE])].href].id)        
+        self.unisrt.measurements['existing']['.'.join([pair[0], pair[1]])].href].id)
         
         alarm_func = __import__(alarm, fromlist = [alarm])
         return alarm_func(measurement_data)
@@ -59,39 +61,47 @@ class FaultLocator(object):
         1) pull all the potential insertion nodes
         2) filter out the nodes without BLiPP agents connected
         3) return sub paths for each inquiry path
-        '''
-        #before finishing the blipp-filter mechanism, bogus it:
-        blipp_vm4 = self.unisrt.services['existing']['http://dev.incntre.iu.edu:8889/services/54d9881de779893d95b3faec']
-        blipp_vm5 = self.unisrt.services['existing']['http://dev.incntre.iu.edu:8889/services/54d98849e779893d95b3faf4']
-        return {(pairs[0][0], pairs[0][1]): [[pairs[0][0], blipp_vm4], [blipp_vm4, blipp_vm5], [blipp_vm5, pairs[0][1]]]}
-    
+        '''    
         def blipp_sec(hops):
-            # make blipp sections: transform [1, 2, 3] into [[1, 2], [2, 3]]
-            return
+            # make "blipp sections": transform [1, 2, 3] into [[1, 2], [2, 3]]
+            ret = list()
+            section = list()
+            for hop in hops:
+                section.append(hop)
+                if True:#hasattr(hop, 'services') and 'blipp' in map(lambda x: x.name, hop.services.values()):
+                    if len(section) > 1:
+                        ret.append(section)
+                        section = list()
+                        section.append(hop)
+                    else:
+                        pass
+                else:
+                    pass
+                    
+            return ret
         
         paths = getGENIResourceLists(self.unisrt, pairs)
         
-        for k, v in paths:                    
+        for k, v in paths.items():                    
             paths[k] = blipp_sec(v)
             
         return paths
     
-    def querySchedule(self, paths):
+    def querySchedule(self, paths, schedule_params):
         '''
         consult HELM for schedules of all the paths
         '''
         scheduler = helm.Helm(self.unisrt)
-        return scheduler.schedule(paths, True)
-        return True
+        return scheduler.schedule(paths, schedule_params)
     
     def configOF(self, paths, schedules):
         '''
-        1) derive entrance hops from the input paths 
+        1) derive entrance hops from the inputed paths 
         2) at the controller, configure entrance hops to include blipp agent hosts into the slice
         '''
         pass
     
-    def diagnose(self, pair, path, symptom, schedules, conn):
+    def diagnose(self, pair, path, symptom, schedules, schedule_params, conn):
         '''
         param:
         1) post BLiPP tasks and wait for reports of all sections
@@ -103,18 +113,19 @@ class FaultLocator(object):
             
             measurement = build_measurement(self.unisrt, section[0])
             measurement["eventTypes"] = [HARDCODED_EVENTTYPE]
-            measurement["type"] = "ping"
-            ping_probe = {
+            measurement["type"] = HARDCODED_TYPE
+            probe = {
                        "$schema": "http://unis.incntre.iu.edu/schema/tools/ping",
-                       "--client": section[1] # dst name
+                       "--client": section[1],
+                       "address": section[1]
             }
-            self.unisrt.validate_add_defaults(ping_probe)
-            measurement["configuration"] = ping_probe
+            self.unisrt.validate_add_defaults(probe)
+            measurement["configuration"] = probe
             measurement["configuration"]["name"] = "ping"
             measurement["configuration"]["collection_size"] = 10000000
             measurement["configuration"]["collection_ttl"] = 1500000
             measurement["configuration"]["collection_schedule"] = "builtins.scheduled"
-            #measurement["configuration"]["schedule_params"] = HM.probe['schedule_params']
+            measurement["configuration"]["schedule_params"] = schedule_params
             measurement["configuration"]["reporting_params"] = 1
             measurement["configuration"]["resources"] = path
             measurement["scheduled_times"] = schedules[(section[0], section[-1])]
@@ -159,7 +170,7 @@ class FaultLocator(object):
             
     
     def loop(self):
-        bad_pairs = []
+        patient_list = []
         symptom_list = {}
         schedules = None
         reports = []
@@ -169,20 +180,22 @@ class FaultLocator(object):
                 # check through diagnose processes for results, report to user and push the task back to the monitoring queue
                 if report.poll():
                     pair, result = report.recv()
-                    self.probes.append(pair)
+                    self.pairs.append(pair)
                     print result
         
-            for index, pair in enumerate(self.probes):
+            for index, pair in enumerate(self.pairs):
                 # the nth blipp pair corresponds to the nth alarm defined in the conf file
                 symptom = self.trigger(pair, self.alarms[index])
                 if symptom:
-                    bad_pairs.append(pair)
+                    patient_list.append(pair)
                     symptom_list[pair] = symptom
-                    del self.probes[index]
+                    del self.pairs[index]
         
-            if bad_pairs:
+            if patient_list:
+                schedule_params = {'duration':10, 'num_tests':1, 'every':0}
+                
                 # prepare for diagnosis: decompose the paths, schedule probes
-                decomp_paths = self.querySubPath(bad_pairs)
+                decomp_paths = self.querySubPath(patient_list)
                 
                 restru_paths = dict()
                 for decomp_path in decomp_paths.values():
@@ -191,10 +204,10 @@ class FaultLocator(object):
                         restru_paths[(section[0], section[-1])] = section
                         
                 # restru_paths: a collection of all sections of different paths
-                schedules = self.querySchedule(restru_paths)
+                schedules = self.querySchedule(restru_paths, schedule_params)
                 
-                # for now, configOF is done here; could be dispatched to each diagnose process, so that each diagnose
-                # process continues on success of its configuring to allow more flexibility
+                # for now, OF configuration is done here; could be dispatched to each diagnose process,
+                # so that each diagnose process continues on success of its configuring to allow more flexibility
                 if schedules:
                     self.configOF(decomp_paths, schedules)
                 else:
@@ -205,10 +218,10 @@ class FaultLocator(object):
                 for k, v in decomp_paths.items():
                     parent_conn, child_conn = Pipe()
                     reports.append(parent_conn)
-                    diagnose_proc = Process(target = self.diagnose, args = (k, v, symptom_list[k], schedules, child_conn, ))
+                    diagnose_proc = Process(target = self.diagnose, args = (k, v, symptom_list[k], schedules, schedule_params, child_conn, ))
                     diagnose_proc.start()
                     
-                del bad_pairs[:]
+                del patient_list[:]
                     
             sleep(30)
             
@@ -218,4 +231,10 @@ def run(unisrt, args):
     driver of this application
     '''
     faultlocator = FaultLocator(unisrt, args)
+    faultlocator.loop()
+    
+if __name__ == '__main__':
+    import kernel.unisrt
+    unisrt = kernel.unisrt.UNISrt()
+    faultlocator = FaultLocator(unisrt, '/home/mzhang/workspace/nre/apps/faultlocator/faultlocator.conf')
     faultlocator.loop()

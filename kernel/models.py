@@ -40,8 +40,8 @@ class node(NetworkResource):
             self.domain = domain
         try:
             self.id = data['id']
-#            self.name = data['name']
-            self.name = re.match('(?P<name>[^.]+)', data['id'], re.M|re.I).group('name')
+            self.name = data['name']
+#            self.name = re.match('(?P<name>[^.]+)', data['id'], re.M|re.I).group('name')
         except KeyError:
             try:
                 self.id = data['id']
@@ -261,12 +261,15 @@ class measurement(NetworkResource):
         self.services = data.get('services', None)
         self.measurement_params = data['configuration']['schedule_params']
         self.every = data['configuration']['schedule_params']['every']
-        self.num_tests = data['configuration']['schedule_params']['num_tests']
+        # following keys are not exist in the legacy blipp measurements (cpu etc.); shall modify blipp next
+        # use random value for now since they involve only one host and shouldn't be retrieved by faultlocator
+        self.num_tests = data['configuration']['schedule_params'].get('num_tests', 'inf')
+        src = data['configuration'].get('source', str(id(self)))
+        dst = data['configuration'].get('destination', str(id(self)))
         
-        src = self.services.ip
-        dst = data['configuration']['address']        
+            
         #unisrt.measurements[self.localnew and 'new' or 'existing'][data['id']] = self
-        unisrt.measurements[self.localnew and 'new' or 'existing']['.'.join([src, dst, self.eventTypes])] = self
+        unisrt.measurements[self.localnew and 'new' or 'existing']['.'.join([src, dst])] = self
         
     def prep_schema(self):
         return self.data
@@ -292,7 +295,10 @@ class path(NetworkResource):
     '''
     def __init__(self, data, unisrt, localnew):
         super(path, self).__init__(data, unisrt, localnew)
-        self.hops = map(lambda x: x['href'][13:-3], data['hops'])
+        
+        # should convert each hop to the corresponding object
+        str_hops = map(lambda x: x['href'], data['hops'])
+        self.hops = map(lambda x: unisrt.nodes['existing'][x], str_hops)
         
         unisrt.paths[self.localnew and 'new' or 'existing'][data['selfRef']] = self
 
