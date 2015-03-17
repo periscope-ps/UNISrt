@@ -163,8 +163,8 @@ def run(unisrt, args):
     driver of this application
     '''
     pass
-    
-if __name__ == '__main__':
+
+def main():
     import kernel.unisrt
     unisrt = kernel.unisrt.UNISrt()
     helm = Helm(unisrt)
@@ -190,3 +190,6 @@ if __name__ == '__main__':
     schedule_params = {'duration':10, 'num_tests':1, 'every':0}    
     schedules = helm.schedule(paths, schedule_params)
     helm.post_measurements(paths, schedules, schedule_params)
+    
+if __name__ == '__main__':
+    main()

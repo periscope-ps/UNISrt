@@ -139,7 +139,7 @@ class FaultLocator(object):
         report = {}
         while sections:
             time.sleep(60)
-            self.unisrt.syncRuntime(resources = [models.metadata])
+            #self.unisrt.syncRuntime(resources = [models.metadata])
             found = []
             for section in sections:
                 if '.'.join([section[0]['selfRef'], HARDCODED_EVENTTYPE]) in self.unisrt.metadata['existing']:                    

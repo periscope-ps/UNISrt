@@ -28,7 +28,7 @@ MIME = {
     'PSXML': 'application/perfsonar+xml',
     }
 
-CONFIGFILE = "/home/mzhang/workspace/UNISrt/UNISrt/UNISrt.conf"
+CONFIGFILE = "/home/mzhang/workspace/nre/kernel/nre.conf"
 HELMCONF = "/home/mzhang/workspace/UNISrt/samples/HELM/helm.conf"
 
 HOSTNAME = socket.gethostname() ### this needs to get the fqdn for DOMAIN to be right down below

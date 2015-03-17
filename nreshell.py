@@ -22,7 +22,8 @@ class NREShell(cmd.Cmd):
         list objects of requested model
         if no model specified, list all of them
         '''
-        pass
+        print self.unisrt.measurements
+        print self.unisrt
     
     def do_la(self, app):
         '''
@@ -50,7 +51,9 @@ class NREShell(cmd.Cmd):
         print "Quitting."
         raise SystemExit
 
-
-if __name__ == '__main__':
+def main():
     nreshell = NREShell()
     nreshell.cmdloop('Welcome to the UNIS Runtime Environment!')
+
+if __name__ == '__main__':
+    main()

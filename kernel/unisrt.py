@@ -6,6 +6,8 @@ Created on Oct 2, 2013
 import time
 import validictory
 from copy import deepcopy
+from websocket import create_connection
+from multiprocessing import Process, Pipe
 
 import settings as UNISrt_settings
 import unis_client
@@ -63,6 +65,11 @@ class UNISrt(object):
         self.timestamp = 0
         self.syncRuntime()
         
+        # temporary list of subscription
+        subscribe_list = [node, service, measurement, metadata]
+        for item in subscribe_list:
+            self._subscribeRuntime(item)
+        
     def poke_remote(self, query):
         '''
         try to address this issue:
@@ -95,11 +102,31 @@ class UNISrt(object):
         this function should convert the input data into Python runtime objects
         data: a dictionary containing network element data
         model: the type of the object e.g. node, port...
+        should be run only once at the init; after that pubsub should do the job
         '''
         # sorting: in unisrt res dictionaries, a newer record of same index will be saved
         data.sort(key=lambda x: x.get('ts', 0), reverse=False)
         for v in data:
             model(v, self, localnew)
+            
+    def _subscribeRuntime(self, channel):
+        '''
+        subscribe a channel(resource) to UNIS, and listen for any new updates on that channel
+        '''
+        def subscriber(channel_name, channel_object, conn):
+            url = self.unis_url.replace('http', 'ws', 1)
+            url = url + '/subscribe/' + channel_name
+            ws = create_connection(url)
+            data = ws.recv()
+            while data:
+                channel_object(json.loads(data), self, False)
+                data = ws.recv()
+            ws.close()
+        
+        name_str = channel.__name__
+        parent_conn, child_conn = Pipe()
+        s = Process(target = subscriber, args = (name_str, channel, child_conn, ))
+        s.start()
             
     def syncRuntime(self, resources=[domain, node, port, service, path, measurement, metadata]):
         '''
@@ -127,10 +154,4 @@ class UNISrt(object):
             self.updateRuntime(self._unis.get(plural + '?ts=gt=' + str(self.timestamp)), element, False)
             
         self.timestamp = int(time.time() * 10e5)
-        
-    def subscribeRuntime(self):
-        '''
-        someone, maybe the config file specify what model objects need be kept sync by pubsub
-        '''
-        pass
         

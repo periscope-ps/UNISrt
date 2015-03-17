@@ -217,7 +217,7 @@ def getResourceLists(unisrt, services):
         
     while traceroutes:
         time.sleep(60)
-        unisrt.syncRuntime(resources = [models.metadata])
+        #unisrt.syncRuntime(resources = [models.metadata])
         found = []
         for v in traceroutes:
             if '.'.join([v[0]['selfRef'], TRACEROUTE]) in unisrt.metadata['existing']:                    
