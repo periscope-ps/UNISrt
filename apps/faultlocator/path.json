@@ -1,0 +1,11 @@
+{
+  "src": "domain_al2s.net.internet2.edu_node_sdn-sw.chic.net.internet2.edu",
+  "dst": "domain_al2s.net.internet2.edu_node_sdn-sw.salt.net.internet2.edu",
+  "directed": false,
+  "hops": [
+    {
+      "href": "http://dev.incntre.iu.edu:8889/links/domain_al2s.net.internet2.edu_node_sdn-sw.salt.net.internet2.edu_port_eth3_2_link_I2-SALT-SUNN-100GE-07766",
+      "rel": "full"
+    }
+  ]
+}

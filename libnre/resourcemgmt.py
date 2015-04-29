@@ -213,11 +213,10 @@ def getResourceLists(unisrt, services):
             if not paths[(src.node.name, dst.node.name)]:
                 runTR(src, dst)
 
-    unisrt.syncRuntime(resources = [models.measurement])
+    unisrt.uploadRuntime('measurements')
         
     while traceroutes:
         time.sleep(60)
-        #unisrt.syncRuntime(resources = [models.metadata])
         found = []
         for v in traceroutes:
             if '.'.join([v[0]['selfRef'], TRACEROUTE]) in unisrt.metadata['existing']:                    
@@ -229,13 +228,10 @@ def getResourceLists(unisrt, services):
                 unisrt.updateRuntime([v[0]], models.measurement, True)
 
                 found.append(v)
-            else:
-                break
 
         map(lambda x: traceroutes.remove(x), found)
-        break
 
-    unisrt.syncRuntime(resources = [models.measurement])
+    unisrt.uploadRuntime('measurements')
 
     ip_resolver = buildIPresolver()
 
@@ -275,7 +271,7 @@ def getGENIResourceLists(unisrt, pairs):
     paths = {}
     for pair in pairs:
         key = (pair[0], pair[1])
-        hops = map(lambda x: x.name, unisrt.paths['existing'][unisrt.unis_url + "/paths/" + pair[0] + '%' + pair[1]].hops)
+        hops = map(lambda x: x, unisrt.paths['existing'][pair[0] + '%' + pair[1]].hops)
         
         # dst_ip_set = map(lambda x: x.address, unisrt.services['existing'][pair['to']].node.ipports.values())
         # candi0 = unisrt.ports['existing'][unisrt.unis_url + "/ports/" + hops[0].replace('+', '_')].ip

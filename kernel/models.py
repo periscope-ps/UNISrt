@@ -107,7 +107,8 @@ class port(NetworkResource):
     def __init__(self, data, unisrt, localnew, node=None, capacity=1e3, queue=None):
         super(port, self).__init__(data, unisrt, localnew)
         self.node = node
-        self.name = data['name']
+        if 'name' in data:
+            self.name = data['name']
         if 'id' in data:
             self.id = data['id']
         else:
@@ -256,20 +257,19 @@ class measurement(NetworkResource):
         if 'ts' in data: self.ts = data['ts']
         self.probe = data['configuration']
         self.resources = self.probe.get('resources', None)
+        self.selfRef = data['selfRef']
         self.eventTypes = data['eventTypes']
         self.scheduled_times = data.get('scheduled_times', None)
         self.services = data.get('services', None)
         self.measurement_params = data['configuration']['schedule_params']
         self.every = data['configuration']['schedule_params']['every']
-        # following keys are not exist in the legacy blipp measurements (cpu etc.); shall modify blipp next
-        # use random value for now since they involve only one host and shouldn't be retrieved by faultlocator
         self.num_tests = data['configuration']['schedule_params'].get('num_tests', 'inf')
-        src = data['configuration'].get('source', str(id(self)))
-        dst = data['configuration'].get('destination', str(id(self)))
+        src = data['configuration']['src']
+        dst = data['configuration']['dst']
         
             
         #unisrt.measurements[self.localnew and 'new' or 'existing'][data['id']] = self
-        unisrt.measurements[self.localnew and 'new' or 'existing']['.'.join([src, dst])] = self
+        unisrt.measurements[self.localnew and 'new' or 'existing']['%'.join([src, dst])] = self
         
     def prep_schema(self):
         return self.data
@@ -284,7 +284,7 @@ class metadata(NetworkResource):
         self.eventType = data['eventType']
         self.id = data['id']
         
-        unisrt.metadata[self.localnew and 'new' or 'existing']['.'.join([self.measurement, self.eventType])] = self
+        unisrt.metadata[self.localnew and 'new' or 'existing']['%'.join([self.measurement, self.eventType])] = self
         
     def prep_schema(self):
         return self.data
@@ -298,9 +298,9 @@ class path(NetworkResource):
         
         # should convert each hop to the corresponding object
         str_hops = map(lambda x: x['href'], data['hops'])
-        self.hops = map(lambda x: unisrt.nodes['existing'][x], str_hops)
+        self.hops = map(lambda x: unisrt.links['existing'][x], str_hops)
         
-        unisrt.paths[self.localnew and 'new' or 'existing'][data['selfRef']] = self
+        unisrt.paths[self.localnew and 'new' or 'existing']['%'.join([data['src'], data['dst']])] = self
 
 class domain(NetworkResource):
     '''

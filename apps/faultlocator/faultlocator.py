@@ -12,12 +12,12 @@ from apps.helm import helm
 
 # temporarily hard code all eventType to PING
 # it should be determined by symptom
-HARDCODED_EVENTTYPE = "ps:tools:blipp:linux:net:ping"
+HARDCODED_EVENTTYPE = "ps:tools:blipp:linux:net:ping:ttl"
 HARDCODED_TYPE = "ping"
 
 class FaultLocator(object):
     '''
-    define a class whose objects:
+    define a class whose objects are:
     1) triggered by user registered alarm
     2) make probe plan accordingly
     3) analyze the fault location
@@ -27,26 +27,23 @@ class FaultLocator(object):
         with open(config_file) as f:
             self.conf = json.loads(f.read())
             
-        # turn string name list into objects tuples
         self.pairs = map(lambda x: tuple(map(lambda y: self.unisrt.nodes['existing'][y].name, x)), self.conf['pairs'])
         self.alarms = self.conf['alarms']
     
     def trigger(self, pair, alarm):
         '''
-        pull probe results for a certain pair of BLiPP service from UNISrt,
-        and apply statistical tool (alarm function) to tell if this path went wrong
-        alarm function should be chosen/provided
+        pull probe results for a certain pair of (BLiPP enabled) nodes from nre,
+        and apply statistical tool (user defined alarm function) to tell if this
+        path went wrong
         '''
-        return object()
     
-        # (src, dst, type)==>measurement definition==>metadata==>measurement results
-        measurement_data = \
-        self.unisrt.poke_remote(
-        self.unisrt.metadata[self.localnew and 'new' or 'existing'][
-        self.unisrt.measurements['existing']['.'.join([pair[0], pair[1]])].href].id)
+        # (src, dst, type)==>measurement definition==>metadata==>ms results
+        meas = self.unisrt.measurements['existing']['%'.join([pair[0], pair[1]])].selfRef
+        meta = self.unisrt.metadata['existing']['%'.join([meas, HARDCODED_EVENTTYPE])].id
+        measurement_data = self.unisrt.poke_remote(meta)
         
-        alarm_func = __import__(alarm, fromlist = [alarm])
-        return alarm_func(measurement_data)
+        alarm_module = __import__(alarm, fromlist = [alarm])
+        return alarm_module.alarm(measurement_data)
         
     def querySubPath(self, pairs):
         '''
@@ -108,7 +105,7 @@ class FaultLocator(object):
         2) analyze for this bad path
         3) then send report back to parent_conn
         '''
-        print "%s assigning tasks to sections...", pair        
+        print "%s assigning tasks to sections..." % pair.__str__()        
         for section in path:
             
             measurement = build_measurement(self.unisrt, section[0])
@@ -130,16 +127,15 @@ class FaultLocator(object):
             measurement["configuration"]["resources"] = path
             measurement["scheduled_times"] = schedules[(section[0], section[-1])]
             
-            self.unisrt.updateRuntime([measurement], models.measurement, True)
+            self.unisrt.updateRuntime([measurement], 'measurements', True)
         
-        self.unisrt.syncRuntime(resources = [models.measurement])
+        self.unisrt.uploadRuntime('measurements')
         
-        print "%s waiting for each section...", pair
+        print "%s waiting for each section..." % pair.__str__()
         sections = list(path)
         report = {}
         while sections:
             time.sleep(60)
-            #self.unisrt.syncRuntime(resources = [models.metadata])
             found = []
             for section in sections:
                 if '.'.join([section[0]['selfRef'], HARDCODED_EVENTTYPE]) in self.unisrt.metadata['existing']:                    
@@ -150,11 +146,8 @@ class FaultLocator(object):
                     #self.unisrt.updateRuntime([v[0]], models.measurement, True)
 
                     found.append(section)
-                else:
-                    break
 
             map(lambda x: sections.remove(x), found)
-            break
         
         result = self.analyze(symptom, report)
         
@@ -200,7 +193,7 @@ class FaultLocator(object):
                 restru_paths = dict()
                 for decomp_path in decomp_paths.values():
                     for section in decomp_path:
-                        # BUG ATTENTION: section may be repeated
+                        # BUG ATTENTION: failed on repeated section
                         restru_paths[(section[0], section[-1])] = section
                         
                 # restru_paths: a collection of all sections of different paths
@@ -223,7 +216,7 @@ class FaultLocator(object):
                     
                 del patient_list[:]
                     
-            sleep(30)
+            sleep(60)
             
 def run(unisrt, args):
     '''

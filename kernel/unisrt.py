@@ -3,19 +3,41 @@ Created on Oct 2, 2013
 
 @author: mzhang
 '''
-import time
 import validictory
 from copy import deepcopy
 from websocket import create_connection
 from multiprocessing import Process, Pipe
 
-import settings as UNISrt_settings
 import unis_client
+import settings as nre_settings
+from schema_cache import SchemaCache
 from models import *
 from libnre.utils import *
-from schema_cache import SchemaCache
 
-logger = UNISrt_settings.get_logger('unisrt')
+logger = nre_settings.get_logger('unisrt')
+
+# map name strings to class objects
+resources_classes = {
+    "domains": domain,
+    "nodes": node,
+    "ports": port,
+    "links": link,
+    "services": service,
+    "paths": path,
+    "measurements": measurement,
+    "metadata": metadata
+}
+# map plural (which RESTful url uses) to singular (websocket pubsub url uses)
+resources_subscription = {
+    "domains": "domain",
+    "nodes": "node",
+    "ports": "port",
+    "links": "link",
+    "services": "service",
+    "paths": "path",
+    "measurements": "measurement",
+    "metadata": "metadata"
+}
 
 class UNISrt(object):
     '''
@@ -35,40 +57,28 @@ class UNISrt(object):
         utils.add_defaults(data, schema)
     
     def __init__(self):
-        fconf = get_file_config(UNISrt_settings.CONFIGFILE)
-        self.conf = deepcopy(UNISrt_settings.STANDALONE_DEFAULTS)
+        fconf = get_file_config(nre_settings.CONFIGFILE)
+        self.conf = deepcopy(nre_settings.STANDALONE_DEFAULTS)
         utils.merge_dicts(self.conf, fconf)
         
-        self._unis = unis_client.UNISInstance(self.conf)
         self.unis_url = str(self.conf['properties']['configurations']['unis_url'])
         self.ms_url = str(self.conf['properties']['configurations']['ms_url'])
+        self._unis = unis_client.UNISInstance(self.conf)
         
         self._schemas = SchemaCache()
-        
-        # for now, only deals with the following list of elements
-        self.domains = {'new': {}, 'existing': {}}
-        self.nodes = {'new': {}, 'existing': {}}
-        self.ports = {'new': {}, 'existing': {}}
-        self.ipports = {'new': {}, 'existing': {}}
-        self.links = {'new': {}, 'existing': {}}
-        
-        self.paths = {'new': {}, 'existing': {}}
-        self.services = {'new': {}, 'existing': {}}
-        
-        self.measurements = {'new': {}, 'existing': {}}
-        
-        self.metadata = {'new': {}, 'existing': {}}
-        self.data = {'new': {}, 'existing': {}}
+        self._resources = self.conf['resources']
         
         # time skew can cause disasters. set to 0 to initialize
         # I now rely on well synchronized client and server clocks in pulling
         self.timestamp = 0
-        self.syncRuntime()
+        #self.syncRuntime()
         
-        # temporary list of subscription
-        subscribe_list = [node, service, measurement, metadata]
-        for item in subscribe_list:
-            self._subscribeRuntime(item)
+        for resource in self._resources:
+            setattr(self, resource, {'new': {}, 'existing': {}})
+        
+        for resource in self._resources:
+            self.updateRuntime(self._unis.get(resource + '?ts=gt=' + str(self.timestamp)), resource, False)
+            self.subscribeRuntime(resource)
         
     def poke_remote(self, query):
         '''
@@ -82,52 +92,52 @@ class UNISrt(object):
         ret = self._unis.get('/data/' + query)
         return ret
             
-    def _uploadRuntime(self, element_name):
+    def uploadRuntime(self, resource_name):
         '''
         it only upload the "local new born" objects, not the entire runtime environment
-        it should only serve as a part of syncRuntime(), because calling this function
-        without synchronizing with UNIS may cause inconsistency
         '''        
         while True:
             try:
-                pair = getattr(self, element_name)['new'].popitem()
-                url = '/' + element_name
+                pair = getattr(self, resource_name)['new'].popitem()
+                url = '/' + resource_name
                 data = pair[1].prep_schema()
                 self._unis.post(url, data)
             except KeyError:
                 return
             
-    def updateRuntime(self, data, model, localnew):
+    def updateRuntime(self, data, resource_name, localnew):
         '''
         this function should convert the input data into Python runtime objects
-        data: a dictionary containing network element data
-        model: the type of the object e.g. node, port...
-        should be run only once at the init; after that pubsub should do the job
         '''
+        model = resources_classes[resource_name]
+        
         # sorting: in unisrt res dictionaries, a newer record of same index will be saved
         data.sort(key=lambda x: x.get('ts', 0), reverse=False)
+        
         for v in data:
             model(v, self, localnew)
             
-    def _subscribeRuntime(self, channel):
+    def subscribeRuntime(self, resource_name):
         '''
         subscribe a channel(resource) to UNIS, and listen for any new updates on that channel
         '''
-        def subscriber(channel_name, channel_object, conn):
+        def subscriber(name, model, conn):
             url = self.unis_url.replace('http', 'ws', 1)
-            url = url + '/subscribe/' + channel_name
+            url = url + '/subscribe/' + name
             ws = create_connection(url)
             data = ws.recv()
             while data:
-                channel_object(json.loads(data), self, False)
+                model(json.loads(data), self, False)
                 data = ws.recv()
             ws.close()
         
-        name_str = channel.__name__
+        channel_str = resources_subscription[resource_name]
+        channel_obj = resources_classes[resource_name]
         parent_conn, child_conn = Pipe()
-        s = Process(target = subscriber, args = (name_str, channel, child_conn, ))
+        s = Process(target = subscriber, args = (channel_str, channel_obj, child_conn, ))
         s.start()
-            
+
+"""
     def syncRuntime(self, resources=[domain, node, port, service, path, measurement, metadata]):
         '''
         synchronize the data with UNIS db:
@@ -154,4 +164,4 @@ class UNISrt(object):
             self.updateRuntime(self._unis.get(plural + '?ts=gt=' + str(self.timestamp)), element, False)
             
         self.timestamp = int(time.time() * 10e5)
-        
+"""

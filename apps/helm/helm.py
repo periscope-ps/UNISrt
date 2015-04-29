@@ -6,9 +6,7 @@ Created on Sep 27, 2013
 '''
 import pytz
 import datetime, dateutil.parser
-from copy import deepcopy
 
-from kernel import models
 from libnre.utils import *
 from libnre.resourcemgmt import *
 
@@ -150,12 +148,12 @@ class Helm(object):
             measurement['configuration']['destination'] = pair[1]
             measurement["scheduled_times"] = schedules[pair]
         
-            self.unisrt.updateRuntime([measurement], models.measurement, True)
+            self.unisrt.updateRuntime([measurement], 'measurements', True)
             
         if test_flag:
             self.unisrt.measurements['new'].clear()
         else:
-            self.unisrt.syncRuntime(resources = [models.measurement])
+            self.unisrt.uploadRuntime('measurements')
     
 def run(unisrt, args):
     '''
