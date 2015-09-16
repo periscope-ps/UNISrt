@@ -20,7 +20,7 @@ setup(
     name = "nre",
     version = version,
     py_modules=['nreshell', 'settings'],
-    packages = ["kernel", "libnre", "apps", "apps.helm", "apps.helm.schedulers", "apps.faultlocator", "apps.faultlocator.alarms"],
+    packages = ["kernel", "libnre", "apps", "apps.helm", "apps.helm.schedulers", "apps.beacon", "apps.beacon.alarms"],
     package_data = {},
     author = "Miao Zhang",
     author_email="miaozhan@indiana.edu",

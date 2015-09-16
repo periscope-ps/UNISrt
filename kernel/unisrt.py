@@ -6,7 +6,7 @@ Created on Oct 2, 2013
 import validictory
 from copy import deepcopy
 from websocket import create_connection
-from multiprocessing import Process, Pipe
+import threading
 
 import unis_client
 import settings as nre_settings
@@ -78,33 +78,8 @@ class UNISrt(object):
         
         for resource in self._resources:
             self.updateRuntime(self._unis.get(resource + '?ts=gt=' + str(self.timestamp)), resource, False)
-            self.subscribeRuntime(resource)
-        
-    def poke_remote(self, query):
-        '''
-        try to address this issue:
-        - ms stores lots of data, and may be separated from unis
-        - this data is accessible via /data url. They shouldn't be kept on runtime environment (too much)
-        - however, sometimes they may be needed. e.g. HELM schedules traceroute measurement, and needs the
-          results to schedule following iperf tests
-        '''
-        # use unis instance as a temporary solution
-        ret = self._unis.get('/data/' + query)
-        return ret
-            
-    def uploadRuntime(self, resource_name):
-        '''
-        it only upload the "local new born" objects, not the entire runtime environment
-        '''        
-        while True:
-            try:
-                pair = getattr(self, resource_name)['new'].popitem()
-                url = '/' + resource_name
-                data = pair[1].prep_schema()
-                self._unis.post(url, data)
-            except KeyError:
-                return
-            
+            threading.Thread(name=resource, target=self.subscribeRuntime, args=(resource,)).start()
+
     def updateRuntime(self, data, resource_name, localnew):
         '''
         this function should convert the input data into Python runtime objects
@@ -116,7 +91,60 @@ class UNISrt(object):
         
         for v in data:
             model(v, self, localnew)
-            
+
+    def uploadRuntime(self, resource_name):
+        '''
+        this function upload specified resource to UNIS
+        '''        
+        while True:
+            try:
+                kv = getattr(self, resource_name)['new'].popitem()
+                
+                # TODO: use attribute "id" to indicate an object downloaded from UNIS
+                # for this sort of objects, only update their values.
+                # this requires to remove "id" from all local created objects, not done yet
+                # also, the put() function may not do pubsub, so change to existing manually
+                if hasattr(kv[1], 'id'):
+                    url = '/' + resource_name + '/' + getattr(kv[1], 'id')
+                    data = kv[1].prep_schema()
+                    self._unis.put(url, data)
+                    getattr(self, resource_name)['existing'][kv[0]] = kv[1]
+                else:
+                    url = '/' + resource_name
+                    data = kv[1].prep_schema()
+                    self._unis.post(url, data)
+                    
+            except KeyError:
+                return
+    
+    def subscribeRuntime(self, resource_name):
+        '''
+        subscribe a channel(resource) to UNIS, and listen for any new updates on that channel
+        '''
+        name = resources_subscription[resource_name]
+        model = resources_classes[resource_name]
+        url = self.unis_url.replace('http', 'ws', 1)
+        url = url + '/subscribe/' + name
+        ws = create_connection(url)
+        data = ws.recv()
+        while data:
+            model(json.loads(data), self, False)
+            data = ws.recv()
+        ws.close()
+
+    def poke_remote(self, query):
+        '''
+        try to address this issue:
+        - ms stores lots of data, and may be separated from unis
+        - this data is accessible via /data url. They shouldn't be kept on runtime environment (too much)
+        - however, sometimes they may be needed. e.g. HELM schedules traceroute measurement, and needs the
+          results to schedule following iperf tests
+        '''
+        # use unis instance as a temporary solution
+        ret = self._unis.get('/data/' + query)
+        return ret
+    
+"""            
     def subscribeRuntime(self, resource_name):
         '''
         subscribe a channel(resource) to UNIS, and listen for any new updates on that channel
@@ -137,7 +165,7 @@ class UNISrt(object):
         s = Process(target = subscriber, args = (channel_str, channel_obj, child_conn, ))
         s.start()
 
-"""
+
     def syncRuntime(self, resources=[domain, node, port, service, path, measurement, metadata]):
         '''
         synchronize the data with UNIS db:

@@ -9,18 +9,51 @@ from collections import defaultdict
 from copy import deepcopy
 
 from kernel import models
+from libnre.networkfunc import *
 from libnre.utils import *
 
 TRACEROUTE = "ps:tools:blipp:linux:net:traceroute:hopip"
 
-def getResourceLists(unisrt, services):
+def getResourceLists(unisrt, ends, obj_class, obj_layer='l3'):
     '''
-    take a list of services (BLiPP services etc.), each of which runs on a node, and return
-    the resource lists between each pair.
-    It obtains resource lists via various approaches: query a graph, operate BLiPP to run
-    an actual traceroute or other possible solutions. Eventually, a cross-layer-graph is constructed
-    according to how much we know about the network. And the resource list is derived from this graph
-    '''    
+    INPUT:
+    ends -- a pair of unis objects that can be the ends of a communication
+    obj_layer -- specifies the interested layer of the returned resources
+    obj_class -- specifies the interested object classes of the returned resources
+                 needs to comply to obj_layer
+    
+    it takes a pair of unis objects (nodes, BLiPP services etc.), and return the resource list in between.
+    it obtains the resources via various approaches:
+    1. try to find the L3 hops directly from perfSONAR archive
+    2. if failed, uses traceroute for BLiPP services* or forwarding simulation for nodes
+    3. depends on the requested layers, L2 info may be queried by SSSP algorithm
+    4. filter the right classes of objects
+    
+    ----------------------------------------------------
+    * traceroute takes some time, therefore this function should be spawned concurrently to overlap the
+      total waiting time, if there are multiple end pairs. shall address this ASAP.
+    '''
+    
+    def incr(ntwkrsrc):
+        '''
+        currently, L2 graph is of name strings, rather than a graph of objects (should be updated momentarily)
+        So, you need to know what object a name represent, in order to retrieve it from UNISrt
+        '''
+        if unisrt.unis_url + '/nodes/' + ntwkrsrc in unisrt.nodes['existing']:
+            unisrt.nodes['existing'][unisrt.unis_url + '/nodes/' + ntwkrsrc].usecounter += 1
+        elif ntwkrsrc in unisrt.links['existing']:
+            unisrt.links['existing'][ntwkrsrc].usecounter += 1
+            for s, d in unisrt.links['existing'][ntwkrsrc].endpoints.iteritems():
+                try:
+                    unisrt.ports['existing']['selfRef'][s].usecounter += 1
+                    unisrt.ports['existing']['selfRef'][d].usecounter += 1
+                except KeyError as e:
+                    print e
+        elif ntwkrsrc in unisrt.ipports['existing']:
+            unisrt.ipports['existing'][ntwkrsrc].usecounter += 1
+        else:
+            print ntwkrsrc + " cannot be found in UNISrt"
+    
     def makedict(self, remain):
         ret = defaultdict(dict)
         while True:
@@ -144,8 +177,31 @@ def getResourceLists(unisrt, services):
         ip_resolver.update(tmp)
         
         return ip_resolver
+    
+    def vtraceroute(src, dst):
+        '''
+        need to split this function into two,
+        1. query path objects
+        2. use forwarding tables
+        '''
+        try:
+            hops = unisrt.paths['existing']['%'.join([src.name, dst.name])].hops
+            return hops
+        except KeyError:
+            return None
         
-    def runTR(src, dst):
+        hops = [src]
+        while hops[-1] != dst:
+            out_port = hops[-1].services['routing'].rules[dst.id]
+            the_link = unisrt.links['existing'][out_port]
+            two_ends = the_link.endpoints
+            the_other_end = two_ends.values()[0]
+            the_node = unisrt.ports['existing'][the_other_end].node
+            hops.append(the_link)
+            hops.append(the_node)
+        return hops
+        
+    def run_traceroute(src, dst):
         # start making a traceroute measurement object
         measurement = build_measurement(unisrt, src.selfRef)
         measurement['eventTypes'] = [TRACEROUTE]
@@ -162,9 +218,20 @@ def getResourceLists(unisrt, services):
         measurement['configuration']['collection_size'] = 10000000
         measurement['configuration']['collection_ttl'] = 1500000
         measurement['configuration']['schedule_params'] = {"every": 30}
-                
-        traceroutes.append((measurement, src, dst))
+        
         unisrt.updateRuntime([measurement], models.measurement, True)
+        unisrt.uploadRuntime('measurements')
+        
+        while True:
+            time.sleep(60)
+            if '.'.join([measurement['selfRef'], TRACEROUTE]) in unisrt.metadata['existing']:
+                # turn off this traceroute measurement, after it posted its result
+                measurement['configuration']['status'] = "OFF"
+                unisrt.updateRuntime([measurement], models.measurement, True)
+                unisrt.uploadRuntime('measurements')
+                
+                hops = unisrt.poke_remote(unisrt.metadata['existing']['.'.join([measurement['selfRef'], TRACEROUTE])].id)
+                return hops[0]['value']
         
     def psapi(src, dst):
         '''
@@ -182,86 +249,52 @@ def getResourceLists(unisrt, services):
         except (IOError, KeyError):
             return None
 
-    def incr(ntwkrsrc):
-        '''
-        currently, L2 graph is of name strings, rather than a graph of objects (should be updated momentarily)
-        So, you need to know what object a name represent, in order to retrieve it from UNISrt
-        '''
-        if unisrt.unis_url + '/nodes/' + ntwkrsrc in unisrt.nodes['existing']:
-            unisrt.nodes['existing'][unisrt.unis_url + '/nodes/' + ntwkrsrc].usecounter += 1
-        elif ntwkrsrc in unisrt.links['existing']:
-            unisrt.links['existing'][ntwkrsrc].usecounter += 1
-            for s, d in unisrt.links['existing'][ntwkrsrc].endpoints.iteritems():
-                try:
-                    unisrt.ports['existing']['selfRef'][s].usecounter += 1
-                    unisrt.ports['existing']['selfRef'][d].usecounter += 1
-                except KeyError as e:
-                    print e
-        elif ntwkrsrc in unisrt.ipports['existing']:
-            unisrt.ipports['existing'][ntwkrsrc].usecounter += 1
+    
+    
+    hops = psapi(ends[0].name, ends[1].name)
+    
+    if not hops:
+        if type(ends[0]) is models.service:
+            hops = run_traceroute(ends[0], ends[1])    
+        elif type(ends[0]) is models.node:
+            hops = vtraceroute(ends[0], ends[1])
         else:
-            print ntwkrsrc + " cannot be found in UNISrt"            
+            print "ERROR: only service or node is acceptable"
+            return None
+    
+    if obj_layer == 'l3':
+        return filter(lambda x: type(x) is obj_class, hops)
 
-    paths = {}
-    # pair up to create m(m-1) traceroute measurements
-    traceroutes = []
-    for src in services:
-        for dst in services:
-            if src.id == dst.id:
-                continue
-            paths[(src.node.name, dst.node.name)] = psapi(src.node.name, dst.node.name)
-            if not paths[(src.node.name, dst.node.name)]:
-                runTR(src, dst)
-
-    unisrt.uploadRuntime('measurements')
-        
-    while traceroutes:
-        time.sleep(60)
-        found = []
-        for v in traceroutes:
-            if '.'.join([v[0]['selfRef'], TRACEROUTE]) in unisrt.metadata['existing']:                    
-                hops = unisrt.poke_remote(unisrt.metadata['existing']['.'.join([v[0]['selfRef'], TRACEROUTE])].id)
-                paths[(v[1].node.name, v[2].node.name)] = hops[0]['value']
-                    
-                # turn off this traceroute measurement, after it posted its result
-                v[0]['configuration']['status'] = "OFF"
-                unisrt.updateRuntime([v[0]], models.measurement, True)
-
-                found.append(v)
-
-        map(lambda x: traceroutes.remove(x), found)
-
-    unisrt.uploadRuntime('measurements')
-
+    # from here to the end, attempt to expend l3 to multi-layer
+    multi_hops = hops
     ip_resolver = buildIPresolver()
 
-    for v in paths.values():
-        load = []
-        temp = deepcopy(v)
-        for hop in temp:
-            if hop in ip_resolver:
-                incr(hop)
-                v[v.index(hop)] = ip_resolver[hop] # at the IP-L2 edge, we only map the vertex to a node(switch/router)
-                load.append(ip_resolver[hop])
-            else:
-                # when an IP hop cannot be mapped to a L2 port, it's like floating in the air
-                # it exists in the L3 topo but lacks info to tie it to any hardware.
-                # these are the third kind of ipports (first two kinds are built by rspec and router config respectively)
-                # don't upload ipport at this moment
-                models.ipport({'address':{'address': hop, 'type': 'ipv4'}}, unisrt, False)
-                incr(hop)
-                del load[:]
+    load = []
+    temp = deepcopy(multi_hops)
+    for hop in temp:
+        if hop in ip_resolver:
+            incr(hop)
+            multi_hops[multi_hops.index(hop)] = ip_resolver[hop] # at the IP-L2 edge, we only map the vertex to a node(switch/router)
+            load.append(ip_resolver[hop])
+        else:
+            # when an IP hop cannot be mapped to a L2 port, it's like floating in the air
+            # it exists in the L3 topo but lacks info to tie it to any hardware.
+            # these are the third kind of ipports (first two kinds are built by rspec and router config respectively)
+            # don't upload ipport at this moment
+            models.ipport({'address':{'address': hop, 'type': 'ipv4'}}, unisrt, False)
+            incr(hop)
+            del load[:]
 
-            if len(load) == 2:
-                resourcesL2 = []
-                map(lambda x: resourcesL2.extend(list(x)), unisrt.graphL2.dijkstra(*load)[1])
-                v[v.index(ip_resolver[hop]) - 1 : v.index(ip_resolver[hop]) + 1] = resourcesL2[:-1]
-                load = [load[1]]
+        if len(load) == 2:
+            resourcesL2 = []
+            map(lambda x: resourcesL2.extend(list(x)), unisrt.graphL2.dijkstra(*load)[1])
+            multi_hops[multi_hops.index(ip_resolver[hop]) - 1 : multi_hops.index(ip_resolver[hop]) + 1] = resourcesL2[:-1]
+            load = [load[1]]
                     
-        # update counters after the entire path got identified, to avoid double counting on an adjacent switch
-        map(incr, list(set(v) - set(temp)))
+    # update counters after the entire path got identified, to avoid double counting on an adjacent switch
+    map(incr, list(set(multi_hops) - set(temp)))
 
-    return paths
+    return multi_hops
     
 def getGENIResourceLists(unisrt, pairs):
     '''

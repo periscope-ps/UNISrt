@@ -11,9 +11,13 @@ class NetworkResource(object):
     Super class of UNIS models
     '''
     def __init__(self, data, unisrt, localnew):
-        self.localnew = localnew
         self.unisrt = unisrt
+        self.localnew = localnew
         self.usecounter = 0
+        try:
+            self.id = data['id']
+        except KeyError:
+            pass
         # "data" holds a dict duplicating object attribute values
         # I keep this duplicated data because it was the input to
         # construct an object, and is also needed as an output to
@@ -21,6 +25,12 @@ class NetworkResource(object):
         # It can be removed, but you have to convert data back and
         # forward again
         self.data = data
+        
+    def renew_local(self, res_inst_key):
+        res_name = self.__class__.__name__ + 's'
+        res_obj = getattr(self.unisrt, res_name)
+        res_obj['new'][res_inst_key] = self
+        del res_obj['existing'][res_inst_key]
         
     def prep_schema(self):
         '''
@@ -69,10 +79,10 @@ class node(NetworkResource):
                     self.ports[value['selfRef']] = port(value, unisrt, localnew, self)
                 
         if 'services' in data:
-            for k, v in data['services'].iteritems():
-                v['name'] = k
+            for v in data['services']:
+                value = unisrt._unis.get(v['href'])
                 if not hasattr(self, 'services'): self.services = {}
-                self.services[v['name']] = service(v, unisrt, localnew, self)
+                self.services[value['serviceType']] = service(value, unisrt, localnew, self)
                 
         if 'selfRef' in data:
             self.selfRef = data['selfRef']
@@ -80,13 +90,6 @@ class node(NetworkResource):
             self.selfRef = self.unisrt.unis_url + '/nodes/' + self.id
         
         unisrt.nodes[self.localnew and 'new' or 'existing'][self.selfRef] = self
-        
-    def add_attr(self, attr):
-        attr_nm = attr.__class__.__name__ + 's'
-        if hasattr(self, attr_nm):
-            getattr(self, attr_nm)[attr.id] = attr
-        else:
-            setattr(self, attr_nm, {attr.id: attr})
         
     def prep_schema(self):
         ret = {}
@@ -144,7 +147,12 @@ class port(NetworkResource):
         '''
         if 'selfRef' not in data:
             data['selfRef'] = self.unisrt.unis_url + '/ports/' + self.id
-        unisrt.ports[self.localnew and 'new' or 'existing'][data['selfRef']] = self
+        
+        # ATTENTION: port, ipport, service and node may be built by upper level object
+        # but unisrt.init may cause trouble by rebuilding them with insufficient arguments
+        # here is only a temporary solution for port objects.
+        if data['selfRef'] not in unisrt.ports[self.localnew and 'new' or 'existing']:
+            unisrt.ports[self.localnew and 'new' or 'existing'][data['selfRef']] = self
         
     def prep_schema(self):
         ret = {}
@@ -154,7 +162,7 @@ class port(NetworkResource):
         return ret
 
 class link(NetworkResource):
-    def __init__(self, data, unisrt, localnew, end=None):
+    def __init__(self, data, unisrt, localnew):
         super(link, self).__init__(data, unisrt, localnew)
         self.id = data['id']
         if 'name' in data:
@@ -174,7 +182,7 @@ class link(NetworkResource):
                 self.endpoints = {data['endpoints']['source']['href']:data['endpoints']['sink']['href']}
                 
 
-        unisrt.links[self.localnew and 'new' or 'existing'][data['selfRef']] = self
+        unisrt.links[self.localnew and 'new' or 'existing'][self.endpoints.keys()[0]] = self
         
 class service(NetworkResource):
     '''
@@ -183,7 +191,7 @@ class service(NetworkResource):
     def __init__(self, data, unisrt, localnew, node=None):
         super(service, self).__init__(data, unisrt, localnew)
         self.id = data['id']
-        self.name = data['name']
+        #self.name = data['name']
         self.serviceType = data['serviceType']
         
         # ok, write ip to a node for now, for blipp use case
@@ -195,13 +203,15 @@ class service(NetworkResource):
             
         if 'rules' in data:
             self.rules = data['rules']
+            
+        if 'name' in data:
+            self.name = data['name']
         
         if node:
             self.node = node
-        elif 'runningOn' in data:#see the comments in prep_schema()
+        elif 'runningOn' in data:
             try:
                 self.node = unisrt.nodes['existing'][data['runningOn']['href']]
-                self.node.add_attr(self)
             except KeyError, e:
                 print "node %s hasn't been found in rt" % str(e)
                 
@@ -215,7 +225,7 @@ class service(NetworkResource):
         ret = {}
         ret['status'] = "ON"
         ret['id'] = self.id
-        ret['name'] = self.name
+        #ret['name'] = self.name
         ret['serviceType'] = self.serviceType
         ret['runningOn'] = {'href': self.node.selfRef, 'rel': "full"}
         if hasattr(self, 'rules'): ret['rules'] = self.rules
@@ -260,16 +270,18 @@ class measurement(NetworkResource):
         self.selfRef = data['selfRef']
         self.eventTypes = data['eventTypes']
         self.scheduled_times = data.get('scheduled_times', None)
-        self.services = data.get('services', None)
+        self.service = data.get('service', None)
         self.measurement_params = data['configuration']['schedule_params']
         self.every = data['configuration']['schedule_params']['every']
         self.num_tests = data['configuration']['schedule_params'].get('num_tests', 'inf')
-        src = data['configuration']['src']
-        dst = data['configuration']['dst']
+        self.src = data['configuration']['src']
+        self.dst = data['configuration']['dst']
         
-            
+        # need to consider the key some more: a service should be allowed to run multiple measurement on a same eventType
+        unisrt.measurements[self.localnew and 'new' or 'existing']['%'.join([self.service, '+'.join(self.eventTypes)])] = self
         #unisrt.measurements[self.localnew and 'new' or 'existing'][data['id']] = self
-        unisrt.measurements[self.localnew and 'new' or 'existing']['%'.join([src, dst])] = self
+        pass
+        
         
     def prep_schema(self):
         return self.data
@@ -298,7 +310,7 @@ class path(NetworkResource):
         
         # should convert each hop to the corresponding object
         str_hops = map(lambda x: x['href'], data['hops'])
-        self.hops = map(lambda x: unisrt.links['existing'][x], str_hops)
+        self.hops = map(lambda x: unisrt.nodes['existing'][x], str_hops)
         
         unisrt.paths[self.localnew and 'new' or 'existing']['%'.join([data['src'], data['dst']])] = self
 

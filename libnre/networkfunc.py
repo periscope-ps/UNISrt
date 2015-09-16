@@ -8,7 +8,7 @@ import utils
 
 flipflop = {'flip': 'flop', 'flop': 'flip'}
 
-def launchRuntime(self):
+def launchRuntime():
     '''
     running logics in a network e.g. 'services' should be presented as functions
     in this rt. Here, we start all the concurrent functions
@@ -74,7 +74,7 @@ def launchRuntime(self):
             next(swt) # push the functions to the first yield statement
             self.switches[k] = swt
                 
-def launchRuntimeL2(self):
+def launchRuntimeL2():
     '''
     running logics in a network e.g. 'services' should be presented as functions
     in this rt. Here, we start all the concurrent functions
