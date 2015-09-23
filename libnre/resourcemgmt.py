@@ -185,7 +185,7 @@ def getResourceLists(unisrt, ends, obj_class, obj_layer='l3'):
         2. use forwarding tables
         '''
         try:
-            hops = unisrt.paths['existing']['%'.join([src.name, dst.name])].hops
+            hops = unisrt.paths['existing']['%'.join([src.id, dst.id])].hops
             return hops
         except KeyError:
             return None
@@ -251,13 +251,13 @@ def getResourceLists(unisrt, ends, obj_class, obj_layer='l3'):
 
     
     
-    hops = psapi(ends[0].name, ends[1].name)
+    hops = psapi(ends[0].name, ends[-1].name)
     
     if not hops:
         if type(ends[0]) is models.service:
-            hops = run_traceroute(ends[0], ends[1])    
+            hops = run_traceroute(ends[0], ends[-1])    
         elif type(ends[0]) is models.node:
-            hops = vtraceroute(ends[0], ends[1])
+            hops = vtraceroute(ends[0], ends[-1])
         else:
             print "ERROR: only service or node is acceptable"
             return None

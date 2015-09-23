@@ -214,6 +214,12 @@ class service(NetworkResource):
                 self.node = unisrt.nodes['existing'][data['runningOn']['href']]
             except KeyError, e:
                 print "node %s hasn't been found in rt" % str(e)
+        if hasattr(self, 'node'):
+            if hasattr(self.node, 'services'):
+                self.node.services[data['serviceType']] = self
+            else:
+                self.node.services = {data['serviceType']: self}
+                
                 
         try:
             # this exception should be caused by some BLiPP service nodes are not included in I2 topo

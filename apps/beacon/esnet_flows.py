@@ -109,7 +109,7 @@ def make_direct_flow(dpid, entry, name, vlan):
             }
 
 def make_rewrite_flow(dpid, smac, inp, outp, inv, outv, name):
-    
+    '''
     # temporary solution
     # matching ipv4_dst on flows coming from the far side vlan
     import re
@@ -166,7 +166,7 @@ def make_rewrite_flow(dpid, smac, inp, outp, inv, outv, name):
             'actions': 'set_vlan_vid='+str(outv)+',output='+str(outp)
             }
     # end of temporary solution
-        
+    '''
     return {'switch': dpid,
             'name': 'mod-'+str(name),
             'active': 'true',
