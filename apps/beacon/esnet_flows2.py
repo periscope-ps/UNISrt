@@ -7,8 +7,8 @@ import json
 
 DPID_LBL = "00:00:00:00:00:00:00:18"
 DPID_NER = "00:00:00:00:00:00:00:0a"
-DPID_BNL = "00:00:00:00:00:00:00:03"
 DPID_ANL = "00:00:00:00:00:00:00:02"
+DPID_BNL = "00:00:00:00:00:00:00:03"
 
 #DPID_LBL = "00:00:00:00:00:00:00:01"
 #DPID_NER = "00:00:00:00:00:00:00:02"
@@ -43,13 +43,13 @@ paths['1hop'] = [{'hop':'lbl', 'vlan_a':'3291', 'vlan_z':'3293'},
 
 # tmp
 paths['myhop'] = [
-                  {'hop':'lbl', 'vlan_a':'3291', 'vlan_z':'3291'},
+                  #{'hop':'lbl', 'vlan_a':'3291', 'vlan_z':'3291'},
                   
                   
                   
                   
                   {'hop':'nersc', 'vlan_a':'3291', 'vlan_z':'3292'},
-                  #{'hop':'nersc', 'vlan_a':'3291', 'vlan_z':'3295'},
+                  {'hop':'nersc', 'vlan_a':'3291', 'vlan_z':'3295'},
                   {'hop':'nersc', 'vlan_a':'3294', 'vlan_z':'3292'},
                   #{'hop':'nersc', 'vlan_a':'3294', 'vlan_z':'3295'},
                   
@@ -58,7 +58,7 @@ paths['myhop'] = [
                   
                   
                   
-                  {'hop':'anl', 'vlan_a':'3291', 'vlan_z':'3292'}
+                  #{'hop':'anl', 'vlan_a':'3291', 'vlan_z':'3292'}
                   ]
 # tmp end
 
@@ -139,6 +139,32 @@ def make_rewrite_flow(dpid, smac, inp, outp, inv, outv, name):
             'priority': 1000,
             'eth_type': 0x0800,
             'ipv4_dst': '192.168.2.4',
+            'actions': 'set_vlan_vid='+str(outv)+',output='+str(outp)
+            }
+        
+    if outv == '3295' and p.match(name):
+        return {'switch': dpid,
+            'name': 'mod-'+str(name),
+            'active': 'true',
+            #'eth_vlan_vid': inv,
+            #'in_port': inp,
+            #'src-mac': smac,
+            'priority': 1000,
+            'eth_type': 0x0800,
+            'ipv4_dst': '192.168.2.5',
+            'actions': 'set_vlan_vid='+str(outv)+',output='+str(outp)
+            }
+        
+    if outv == '3292' and p.match(name):
+        return {'switch': dpid,
+            'name': 'mod-'+str(name),
+            'active': 'true',
+            #'eth_vlan_vid': inv,
+            #'in_port': inp,
+            #'src-mac': smac,
+            'priority': 1000,
+            'eth_type': 0x0800,
+            'ipv4_dst': '192.168.2.2',
             'actions': 'set_vlan_vid='+str(outv)+',output='+str(outp)
             }
         

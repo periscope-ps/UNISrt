@@ -3,17 +3,30 @@ Created on Jan 26, 2015
 
 @author: mzhang
 '''
-import sys, threading, re
-from time import sleep
+import re
+import sys
+import threading
+import kernel.models as models
 
-from libnre.resourcemgmt import *
+from time import sleep, time
 from libnre.utils import *
-from apps.helm import helm
 
 # temporarily hard code constants
+INTERVAL = 60
+PING_TOLERANCE = 50
+IPERF_TOLERANCE = 90
+INPATIANT_TOLERANCE = 1
 HARDCODED_SERVICETYPE = "ps:tools:blipp"
-HARDCODED_EVENTTYPE = "ps:tools:blipp:linux:net:ping:rtt"
-HARDCODED_TYPE = "ping"
+RTT = "ps:tools:blipp:linux:net:ping:rtt"
+BANDWIDTH = "ps:tools:blipp:linux:net:iperf:bandwidth"
+SLICE_IP = {
+    'slc-slice-perf.chpc.utah.edu': '192.168.2.3',
+    'slc-slice-beacon.chpc.utah.edu': '192.168.2.4',
+    'slc-slice-beacon1.chpc.utah.edu': '192.168.2.5',
+    'dresci': '192.168.2.2'
+}
+
+logger = settings.get_logger('beacon')
 
 class Beacon(object):
     '''
@@ -22,12 +35,11 @@ class Beacon(object):
     2) make probe plan accordingly
     3) analyze the fault location
     '''
-    
-    class report():
-        def __init__(self):
-            self.content = None
             
     def __init__(self, unisrt, config_file):
+        if config_file == None:
+            raise IOError("configuration file is missing")
+        
         self.unisrt = unisrt
         with open(config_file) as f:
             self.conf = json.loads(f.read())
@@ -35,33 +47,32 @@ class Beacon(object):
         try:
             self.pairs = map(lambda x: tuple(map(lambda y: self.unisrt.nodes['existing'][y], x)), self.conf['pairs'])
         except KeyError:
-            print "nodes intended to monitor may not exist in UNIS yet"
+            logger.info("nodes intended to monitor may not exist in UNIS yet")
             sys.exit()
             
         self.alarms = self.conf['alarms']
+        self.events = self.conf['monitoring-events']
     
-    def trigger(self, pair, alarm):
+    def trigger(self, event_type, measurement, tolerance, no_look_back = 0):
         '''
-        pull probe results for a certain pair of (BLiPP enabled) nodes from nre,
-        and apply statistical tool (user defined alarm function) to tell if this
-        path went wrong
+        poll probe results from certain measurement, and apply statistical tool
+        (user defined alarm function) to tell if this path went wrong
+        the resolving logic: measurement ==> metadata ==> ms results
         '''
-        # (src, dst, type) ==> measurement definition ==> metadata ==> ms results
-        measurements = filter(lambda x: '%'.join([x.src, x.dst]) == '%'.join([pair[0].name, pair[-1].name]), self.unisrt.measurements['existing'].values())
+        start = time()
+        while '%'.join([measurement.selfRef, event_type]) not in self.unisrt.metadata['existing'] and time() - start < tolerance:
+            logger.info("The measurement task {m} has not returned any results yet".format(m = measurement))
+            sleep(5)
         
-        if measurements:
-            for measurement in measurements:
-                if HARDCODED_EVENTTYPE in measurement.eventTypes:
-                    try:
-                        meta = self.unisrt.metadata['existing']['%'.join([measurement.selfRef, HARDCODED_EVENTTYPE])]
-                        alarm_module = __import__(alarm, fromlist = [alarm])
-                        return alarm_module.alarm(self.unisrt, measurement, meta)
-                    except KeyError:
-                        print 'The measurement task has not returned any results yet'
-                        return None
-        else:
-            print 'The source-destination pair %s - %s has not been under monitoring' % (pair[0].name, pair[1].name)
-            return None
+        remain = max(0, tolerance - (time() - start))
+        
+        alarm_name = self.alarms[event_type]
+        alarm_module = __import__(alarm_name, fromlist = [alarm_name])
+        try:
+            meta = self.unisrt.metadata['existing']['%'.join([measurement.selfRef, event_type])]
+            return alarm_module.alarm(self.unisrt, measurement, meta, no_look_back, remain)
+        except KeyError:
+            return alarm_module.complain(None)
         
     def querySubPath(self, pairs):
         '''
@@ -78,15 +89,14 @@ class Beacon(object):
             '''
             make "blipp sections": transform [1(B), 2(B), 3, 4(B)] into [[1, 2], [2, 3, 4]]
             '''
-            # Approximation: to find the optimal coverage inside a network is non-trivial
+            # TODO: to find the optimal coverage inside a network is non-trivial
             # for now, we use predefined knowledge to answer this specific testbed
             for index, hop in enumerate(hops):
-                if hop.name == 'domain_es.net_node_lbl-mr2':
-                    hops[index] = self.unisrt.nodes['existing']['http://dev.crest.iu.edu:8889/nodes/domain_utah.edu_node_slc-slice-perf.chpc.utah.edu']
                 if hop.name == 'domain_es.net_node_nersc-mr2':
-                    hops[index] = self.unisrt.nodes['existing']['http://dev.crest.iu.edu:8889/nodes/domain_utah.edu_node_slc-slice-beacon.chpc.utah.edu']
-                if hop.name == 'domain_es.net_node_anl-mr2':
-                    hops[index] = self.unisrt.nodes['existing']['http://dev.crest.iu.edu:8889/nodes/domain_indiana.edu_node_dresci']
+                    hops.insert(index, self.unisrt.nodes['existing']['http://dev.crest.iu.edu:8889/nodes/domain_utah.edu_node_slc-slice-beacon.chpc.utah.edu'])
+                    hops.insert(index, self.unisrt.nodes['existing']['http://dev.crest.iu.edu:8889/nodes/domain_utah.edu_node_slc-slice-beacon1.chpc.utah.edu'])
+                    hops.insert(index, self.unisrt.nodes['existing']['http://dev.incntre.iu.edu:8889/nodes/domain_es.net_node_nersc-mr2'])
+                    break
                     
             ret = list()
             section = list()
@@ -104,12 +114,26 @@ class Beacon(object):
                     
             if len(section) > 1:
                 ret.append(section)
+            
+            # work around the one-place-two-probe issue at NERSC
+            for section in ret:
+                if section[0].name in ['slc-slice-beacon.chpc.utah.edu', 'slc-slice-beacon1.chpc.utah.edu'] and\
+                        section[-1].name in ['slc-slice-beacon.chpc.utah.edu', 'slc-slice-beacon1.chpc.utah.edu']:
+                    ret.remove(section)
                 
             return ret
         
+        
         paths = dict()
         for pair in pairs:
-            paths[pair] = getResourceLists(self.unisrt, pair, models.node)
+            try:
+                sleep(20) # waiting for subscribed channel to update
+                backbone_path = filter(lambda x: x.status == 'ON', self.unisrt.paths['existing']['%'.join([pair[0].selfRef, pair[1].selfRef])])
+                assert len(backbone_path) == 1
+                
+                paths[pair] = [pair[0]] + backbone_path[0].hops + [pair[1]]
+            except KeyError:
+                logger.info("the queried path is not found in UNIS")
         
         for k, v in paths.items():
             paths[k] = blipp_sec(v)
@@ -119,167 +143,299 @@ class Beacon(object):
     def querySchedule(self, sections, schedule_params):
         '''
         consult HELM for schedules of all the paths
+        But now, it merely return the current time as the schedule
         '''
         import datetime, pytz
-        import apps.helm.schedulers as schedulers
+        import apps.helm.schedulers.adaptive as adaptive
         now = datetime.datetime.utcnow()
         now += datetime.timedelta(seconds = 60) # there will be certain time gap before blipp reads its schedule
         now = pytz.utc.localize(now)
         schedules = {}
         for section in sections:
-            schedules[(section[0], section[-1])] = schedulers.adaptive.build_basic_schedule(now,
+            schedules[frozenset([section[0], section[-1]])] = adaptive.build_basic_schedule(now,
                         datetime.timedelta(seconds = schedule_params['every']),
                         datetime.timedelta(seconds = schedule_params['duration']),
                         schedule_params['num_to_schedule'],
                         [])
         return schedules
     
-        scheduler = helm.Helm(self.unisrt)
-        return scheduler.schedule(sections, schedule_params)
-    
-    def configOF(self, paths, schedules):
+    def configOF(self, paths):
         '''
-        1) derive entrance hops from the inputed paths 
-        2) at the controller, configure entrance hops to include blipp agent hosts into the slice
+        the input is a list of path objects e.g. backup paths to enable or,
+        diagnose-purpose subpath, which is used by BLiPP agent hosts
         '''
+        assert isinstance(paths, list)
+        for item in paths:
+            assert isinstance(item, models.path)
+        
+        # TODO: need some mechanism to generate SDN controller scripts based on this path list
         import subprocess
-        subprocess.call(['./esnet_flows.py', '--ip=tb-of-ctrl-1.es.net', '--port=9090', 'del', '2hop'])
-        subprocess.call(['./esnet_flows2.py', '--ip=tb-of-ctrl-1.es.net', '--port=9090', 'add', 'myhop'])
+        if len(paths) == 2:
+            subprocess.call(['apps/beacon/esnet_flows2.py', '--ip=tb-of-ctrl-1.es.net', '--port=9090', 'add', 'myhop'])
+        else:
+            subprocess.call(['apps/beacon/esnet_flows2.py', '--ip=tb-of-ctrl-1.es.net', '--port=9090', 'del', 'myhop'])
+            subprocess.call(['apps/beacon/esnet_flows.py', '--ip=tb-of-ctrl-1.es.net', '--port=9090', 'del', '2hop'])
+            subprocess.call(['apps/beacon/esnet_flows.py', '--ip=tb-of-ctrl-1.es.net', '--port=9090', 'add', '1hop'])
+        return
     
-    def diagnose(self, pair, decomp_path, symptom, schedules, schedule_params, report):
-        '''
-        param:
-        1) post BLiPP tasks and wait for reports of all sections
-        2) analyze for this bad path
-        3) then send report back to parent_conn
-        '''
-        # Approximation: instead of one BLiPP probe host, we have to use two different hosts to
-        # probe on two directions. This produce a challenge to tell which one to use on certain target
-        # host, since it is actually caused by the SDN switch's limitation.
-        # Here we drop one side manually and only test the nersc-dresci subpath.
-        decomp_path = filter(lambda x: filter(lambda y: y.name == 'dresci', x), decomp_path)
-        
-        probes = []
-        for section in decomp_path:
-            print "assigning tasks to section %s - %s" % (section[0].name, section[-1].name)
-            
-            # use only one end (0 end) to launch a ping
-            probe_service = section[0].services[HARDCODED_SERVICETYPE]
-            # messy, just pick the only proper measurement
-            p = re.compile(probe_service.selfRef + '%.*' + HARDCODED_EVENTTYPE + '.*')
-            probe_meas_k = filter(lambda x: p.match(x), self.unisrt.measurements['existing'].keys())
-            assert len(probe_meas_k) == 1
-            probe_meas_k = probe_meas_k[0]
-            m = self.unisrt.measurements['existing'][probe_meas_k]
-            # should modify the attribute, not the data directly
-            m.data["eventTypes"] = [HARDCODED_EVENTTYPE]
-            m.data["type"] = HARDCODED_TYPE
-            m.data["configuration"]["$schema"] = "http://unis.incntre.iu.edu/schema/tools/ping"
-            m.data["configuration"]["status"] = "ON"
-            m.data["configuration"]["name"] = "ping"
-            m.data["configuration"]["collection_size"] = 10000000
-            m.data["configuration"]["collection_ttl"] = 1500000
-            m.data["configuration"]["collection_schedule"] = "builtins.scheduled"
-            m.data["configuration"]["schedule_params"] = schedule_params
-            m.data["configuration"]["reporting_params"] = 1
-            m.data["configuration"]["resources"] = 'path resources'
-            m.data['configuration']['src'] = section[0].name
-            m.data['configuration']['dst'] = section[-1].name
-            m.data["configuration"]["--client"] = section[0].name
-            m.data["configuration"]["address"] = section[-1].name
-            m.data["configuration"]["command"] = "ping -c 1 dresci.incntre.iu.edu"
-            m.data["scheduled_times"] = schedules[(section[0], section[-1])]
-            self.unisrt.validate_add_defaults(m.data["configuration"])
-            
-            m.renew_local(probe_meas_k)
-            probes.append(probe_meas_k)
-            
-        
-        self.unisrt.uploadRuntime('measurements')
-        
-        section_performances = {}
-        while probes:
-            time.sleep(60)
-            found = []
-            for probe in probes:
-                print "looking for result of measurement %s" % probe
-                
-                metadata_key = '%'.join([self.unisrt.measurements['existing'][probe].selfRef, HARDCODED_EVENTTYPE])
-                if metadata_key in self.unisrt.metadata['existing']:
-                    data = self.unisrt.poke_remote(self.unisrt.metadata['existing'][metadata_key].id)
-                    if data:
-                        section_performances[metadata_key] = data
-                        found.append(probe)
-
-            map(lambda x: probes.remove(x), found)
-            
-        report.content = self.analyze(symptom, section_performances)
-    
-    def analyze(self, path_perf, sec_perf):
+    def analyze(self, path_symp, sec_perf):
         '''
         looking at the performances of a path and each section of this path
         need some algorithm to tell where and what went wrong along the path
         '''
-        s = ''
-        for k, v in sec_perf.iteritems():
-            s = s + k.__str__() + v.__str__()
-        return 'result of ' + path_perf.__str__() + s
+        logger.info("path symptom is {ps}".format(ps = path_symp))
+        # no real analysis at this point, but to display the diagnose path healthiness (and turn it off after a pause)
+        for sec, perf in sec_perf.iteritems():
+            logger.info("section between {s} and {d} has issue: {p}".format(s = sec[0].name, d = sec[-1].name, p = perf[0]))
+            diag_path_name = '%'.join([sec[0].selfRef, sec[-1].selfRef])
+            if diag_path_name not in self.unisrt.paths['existing']:
+                diag_path_name = '%'.join([sec[-1].selfRef, sec[0].selfRef])
+            diag_path = self.unisrt.paths['existing'][diag_path_name][0]# arbitrarily pick 0
+            if not perf[0]:
+                diag_path.healthiness = 'good'
+            else:
+                diag_path.healthiness = 'bad'
+                
+            diag_path.renew_local(diag_path_name)
+        
+        self.unisrt.pushRuntime('paths')
+        
+        
+        print "!!! map refreshed: diagnose paths change colors"
+        sleep(10)
+        
+        
+        for sec, perf in sec_perf.iteritems():
+            diag_path_name = '%'.join([sec[0].selfRef, sec[-1].selfRef])
+            if diag_path_name not in self.unisrt.paths['existing']:
+                diag_path_name = '%'.join([sec[-1].selfRef, sec[0].selfRef])
+            diag_path = self.unisrt.paths['existing'][diag_path_name][0]# arbitrarily pick 0
+            diag_path.status = 'OFF'
+            diag_path.renew_local(diag_path_name)
+        
+        self.unisrt.pushRuntime('paths')
+        
+    def investigate(self, subpaths, event_type, schedules):
+        probes = {}
+        for section in subpaths:
+            # use beacon not end host, as the end host's long term probe causes nre measurement index issue
+            if section[0].name == 'slc-slice-perf.chpc.utah.edu' and\
+                section[-1].name == 'slc-slice-beacon1.chpc.utah.edu':
+                section = list(reversed(section))
+            
+            logger.info("assigning tasks to section [{end0}--{end1}]".format(end0 = section[0].name, end1 = section[-1].name))
+            
+            # should programmatically chose an end by node-service-measurement-eventType constraints
+            probe_service = section[0].services[HARDCODED_SERVICETYPE]
+            p = re.compile(probe_service.selfRef + '%.*' + event_type + '.*')
+            probe_meas_k = filter(lambda x: p.match(x), self.unisrt.measurements['existing'].keys())
+            if len(probe_meas_k) != 1:
+                logger.info("there are either too few or too many registered measurement(s) on the node can run this test. cannot decide...")
+                return None
+            probe_meas_k = probe_meas_k[0]
+            probe_meas = self.unisrt.measurements['existing'][probe_meas_k]
+            
+            probe_meas.status = "ON"
+            probe_meas.scheduled_times = schedules[frozenset([section[0], section[-1]])]
+            probe_meas.collection_schedule = "builtins.scheduled"
+            probe_meas.src = section[0].name
+            probe_meas.dst = section[-1].name
+            
+            if event_type == RTT:
+                probe_meas.probe_module = "cmd_line_probe"
+                probe_meas.command = "ping -c 1 " + SLICE_IP[probe_meas.dst]
+                probes[(section[0], section[-1])] = {'meas': probe_meas_k, 'no_look_back': time(), 'tolerance': PING_TOLERANCE}
+            elif event_type == BANDWIDTH:
+                probe_meas.probe_module = "json_probe"
+                probe_meas.command = "iperf3 -p 6001 --get-server-output -c " + SLICE_IP[probe_meas.dst]
+                probes[(section[0], section[-1])] = {'meas': probe_meas_k, 'no_look_back': time(), 'tolerance': IPERF_TOLERANCE}
+                
+            probe_meas.renew_local(probe_meas_k)
+            
+        self.unisrt.pushRuntime('measurements')
+        
+        sleep(30)
+        
+        section_results = {}
+        while probes:
+            found = []
+            for ends, probe in probes.iteritems():
+                logger.info("looking for result between {e0} and {e1}".format(e0 = ends[0].name, e1 = ends[1].name))
+                
+                if 'start time' not in probe:
+                    probe['start time'] = time()
+                elif time() - probe['start time'] > probe['tolerance']:
+                    # expire this probe
+                    found.append(ends)
+                    continue
+                
+                symptom, data = self.trigger(event_type, self.unisrt.measurements['existing'][probe['meas']], INPATIANT_TOLERANCE, probe['no_look_back'])
+                section_results[ends] = symptom, data
+                if not symptom:
+                    # since it is an impatient trigger, symptoms could be false, so we keep the probe
+                    # until the end. not completely safe, imagine: probe returns some time-sensitive
+                    # data and an actual symptom. beacon may keep trying during the tolerated time, and
+                    # later trials may make wrong decisions about the data
+                    found.append(ends)
+            
+            map(lambda x: probes.pop(x), found)
+                
+        return section_results
+        
+    def recover(self, pair, subpaths, symptom):
+        '''
+        for each problematic path, it investigate the sections, analyze the results, apply some (not yet implemented)
+        decision making intelligence and may recover the path with a backup one, followed by a performance verification
+        '''
+        def get_diagnose_paths(subpaths):
+            diagnose_paths = []
+            for section in subpaths:
+                path_name = '%'.join([section[0].selfRef, section[-1].selfRef])
+                if path_name in self.unisrt.paths['existing']:
+                    path = self.unisrt.paths['existing'][path_name][0]# arbitrarily pick 0
+                    path.status = 'ON'
+                    path.healthiness = 'unknown'
+                    path.renew_local(path_name)
+                else:
+                    tmp = list(section)
+                    data = {
+                        "directed": True,
+                        "$schema": "http://unis.crest.iu.edu/schema/20151104/path#",
+                        "src": tmp.pop(0).selfRef,
+                        "hops": [],
+                        "dst": tmp.pop(-1).selfRef,
+                        "healthiness": "unknown",
+                        "performance": "unknown",
+                        "status": "ON",
+                    }
+                    for item in tmp:
+                        data['hops'].append({'href': item.selfRef, 'rel': 'full'})
+                    path = models.path(data, self.unisrt, True)
+                diagnose_paths.append(path)
+                
+            self.unisrt.pushRuntime('paths')
+            
+            
+            print "!!! map refreshed: diagnose paths assigned (no results yet)"
+            
+            
+            return diagnose_paths
+        
+        
+        logger.info("phase 1. investigating the problematic path...")
+        diagnose_paths = get_diagnose_paths(subpaths)
+        # modify the slice topology to inject probes
+        self.configOF(diagnose_paths)
+        schedule_params = {'duration':50, 'num_to_schedule':1, 'every':2}
+        schedules = self.querySchedule(subpaths, schedule_params)
+        section_performances = self.investigate(subpaths, RTT, schedules)
+        
+        logger.info("phase 2. analyzing the result...")
+        self.analyze(symptom, section_performances)
+        
+        logger.info("phase 3. enabling a back up path regardless...")
+        key = '%'.join(map(lambda endhost: endhost.selfRef, pair))
+        old_path = filter(lambda x: x.status == 'ON', self.unisrt.paths['existing'][key])
+        new_path = filter(lambda x: x.status == 'OFF', self.unisrt.paths['existing'][key])
+        assert len(old_path) == 1
+        old_path[0].status = 'OFF'
+        new_path[0].status = 'ON' # a random pick path0 from all available paths of this pair
+        old_path[0].renew_local(key)
+        new_path[0].renew_local(key)
+        self.unisrt.pushRuntime('paths')
+        
+        
+        print "!!! map refreshed: a new main path emerged, and diagnose paths are gone"
+        
+        
+        logger.info("phase 4. verifying the performance of the new path...")
+        subpaths = [list(pair)]
+        self.configOF([new_path[0]])
+        schedule_params = {'duration':1, 'num_to_schedule':1, 'every':0}
+        schedules = self.querySchedule(subpaths, schedule_params)
+        
+        new_path_performances = self.investigate(subpaths, BANDWIDTH, schedules)
+        assert len(new_path_performances) == 1 # because it measures the whole path
+        new_path = filter(lambda x: x.status == 'ON', self.unisrt.paths['existing'][key])
+        new_path[0].performance = new_path_performances.values()[0][1]
+        new_path[0].healthiness = 'good' # criteria for good?
+        new_path[0].renew_local(key)
+        self.unisrt.pushRuntime('paths')
+        
+        logger.info("phase 5. adding pair {src} and {dst} back to monitoring...".format(src = pair[0].name, dst = pair[1].name))
+        
+        
+        
+        
+        print "!!! map refreshed: new main path turns in green (and hover to see its performance)"
+        
+        
+        
+        self.pairs.append(pair)
     
     def loop(self):
-        patient_list = {}
-        schedules = None
-        reports = {}
-        
+        last_check = {}
+        patients = {}
+        measurements = {}
         while True:
-            for report in reports.values():
-                if report.content:
-                    print 'get report ' + report.content
-                else:
-                    print 'no report yet'
-                # restore the pair, it is actually tricky as the fault may not be fixed at this moment
-                #self.pairs.append(the old pair)
-        
+            # step 1. examine each monitored path on their own trigger condition
             for index, pair in enumerate(self.pairs):
-                # the nth blipp pair corresponds to the nth alarm defined in the conf file
-                symptom = self.trigger(pair, self.alarms[index])
+                event_type = self.events[index]
+                if pair not in measurements:
+                    measurement = filter(lambda measurement: measurement.src == pair[0].name and\
+                                         measurement.dst == pair[1].name and\
+                                         event_type in measurement.eventTypes, self.unisrt.measurements['existing'].values())
+                    if len(measurement) == 0:
+                        logger.info("The event type {et} between source-destination pair {src} and {dst} is not found. Not monitoring them...".format(et = event_type, src = pair[0].name, dst = pair[1].name))
+                        sleep(INTERVAL)
+                        continue
+                    elif len(measurements) > 1:
+                        logger.info("The same event type {et} between source-destination pair {src} and {dst} is found in multiple measurement instances. Which to use?".format(et = event_type, src = pair[0].name, dst = pair[1].name))
+                        sleep(INTERVAL)
+                        continue
+                    else:
+                        measurements[pair] = measurement[0]
+                
+                
+                
+                
+                
+                
+                # check triggers and update path states accordingly
+                symptom, data = self.trigger(event_type, measurements[pair], PING_TOLERANCE, no_look_back=last_check.get(pair, 0))
+                last_check[pair] = time()
                 if symptom:
-                    patient_list[pair] = symptom
+                    path_name = '%'.join([pair[0].selfRef, pair[1].selfRef])
+                    path = filter(lambda x: x.status == 'ON', self.unisrt.paths['existing'][path_name])
+                    assert len(path) == 1
+                    path = path[0]
+                    path.healthiness = 'bad'
+                    path.renew_local(path_name)
+                    self.unisrt.pushRuntime('paths')
+                    
+                    
+                    
+                    print "!!! map refreshed: main path turning yellow"
+                    
+                    
+                    
+                    patients[pair] = symptom, data
                     del self.pairs[index]
                 else:
-                    print 'no symptom discovered'
+                    logger.info("no symptom discovered for source-destination pair {src} and {dst}".format(src = pair[0].name, dst = pair[1].name))
         
-            if patient_list:
-                schedule_params = {'duration':10, 'num_to_schedule':1, 'every':0}
+            # step 2. spawn recovery function on each problematic path
+            if patients:
                 # decompose the paths to BLiPP sections
-                decomp_paths = self.querySubPath(patient_list.keys())
+                decomp_paths = self.querySubPath(patients.keys())
                 
-                # section_pile: a collection of all sections of different paths. it's for scheduling purposes
-                section_pile = dict()
-                for decomp_path in decomp_paths.values():
-                    for section in decomp_path:
-                        # BUG ATTENTION: repeated sections will cause troubles
-                        section_pile[(section[0], section[-1])] = section
-                
-                # schedule all sections by using helm
-                schedules = self.querySchedule(section_pile, schedule_params)
-                
-                # modify the slice topology to inject probes
-                if schedules:
-                    self.configOF(decomp_paths, schedules)
-                else:
-                    print "Ooops, cannot schedule the test. Big trouble. Gonna try again now..."
-                    continue
-            
-                # spawn threads to handle each bad path
-                for k, v in decomp_paths.items():
-                    report = self.report()
-                    reports[k] = report
+                for pair, path in decomp_paths.items():
+                    # try to recover each problematic path
+                    threading.Thread(name=pair, target=self.recover, args=(pair, path, patients[pair], )).start()
                     
-                    threading.Thread(name=k, target=self.diagnose, args=(k, v, patient_list[k], schedules, schedule_params, report, )).start()
+                patients.clear()
                     
-                patient_list.clear()
-                    
-            sleep(60)
+            sleep(INTERVAL)
             
 def run(unisrt, args):
     '''

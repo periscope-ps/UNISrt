@@ -72,7 +72,7 @@ def build_measurement(unisrt, service):
     '''
     measurement = {"configuration": {}}
     muuid = uuid.uuid1().hex
-    measurement['$schema'] = "http://unis.incntre.iu.edu/schema/20140214/measurement#"
+    measurement['$schema'] = "http://unis.crest.iu.edu/schema/20151104/measurement#"
     measurement['service'] = service
     measurement['selfRef'] = unisrt.unis_url + "/measurements/" + muuid
     measurement['id'] = muuid

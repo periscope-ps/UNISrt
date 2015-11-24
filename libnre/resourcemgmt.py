@@ -180,16 +180,8 @@ def getResourceLists(unisrt, ends, obj_class, obj_layer='l3'):
     
     def vtraceroute(src, dst):
         '''
-        need to split this function into two,
-        1. query path objects
-        2. use forwarding tables
+        use stored forwarding tables to figure the routes
         '''
-        try:
-            hops = unisrt.paths['existing']['%'.join([src.id, dst.id])].hops
-            return hops
-        except KeyError:
-            return None
-        
         hops = [src]
         while hops[-1] != dst:
             out_port = hops[-1].services['routing'].rules[dst.id]
@@ -250,16 +242,18 @@ def getResourceLists(unisrt, ends, obj_class, obj_layer='l3'):
             return None
 
     
-    
+    # 1. query archive
     hops = psapi(ends[0].name, ends[-1].name)
     
     if not hops:
         if type(ends[0]) is models.service:
+            # 2. assign traceroute tasks if BLiPP service instances
             hops = run_traceroute(ends[0], ends[-1])    
         elif type(ends[0]) is models.node:
+            # 3. consult soft forwarding tables if just nodes
             hops = vtraceroute(ends[0], ends[-1])
         else:
-            print "ERROR: only service or node is acceptable"
+            print "ERROR: run out of ideas resolving the hops"
             return None
     
     if obj_layer == 'l3':

@@ -27,17 +27,18 @@ resources_classes = {
     "measurements": measurement,
     "metadata": metadata
 }
+
 # map plural (which RESTful url uses) to singular (websocket pubsub url uses)
-resources_subscription = {
-    "domains": "domain",
-    "nodes": "node",
-    "ports": "port",
-    "links": "link",
-    "services": "service",
-    "paths": "path",
-    "measurements": "measurement",
-    "metadata": "metadata"
-}
+#resources_subscription = {
+#    "domains": "domain",
+#    "nodes": "node",
+#    "ports": "port",
+#    "links": "link",
+#    "services": "service",
+#    "paths": "path",
+#    "measurements": "measurement",
+#    "metadata": "metadata"
+#}
 
 class UNISrt(object):
     '''
@@ -57,6 +58,7 @@ class UNISrt(object):
         utils.add_defaults(data, schema)
     
     def __init__(self):
+        logger.info("starting UNIS Network Runtime Environment...")
         fconf = get_file_config(nre_settings.CONFIGFILE)
         self.conf = deepcopy(nre_settings.STANDALONE_DEFAULTS)
         utils.merge_dicts(self.conf, fconf)
@@ -70,17 +72,17 @@ class UNISrt(object):
         
         # time skew can cause disasters. set to 0 to initialize
         # I now rely on well synchronized client and server clocks in pulling
-        self.timestamp = 0
+        #self.timestamp = 0
         #self.syncRuntime()
         
         for resource in self._resources:
             setattr(self, resource, {'new': {}, 'existing': {}})
         
         for resource in self._resources:
-            self.updateRuntime(self._unis.get(resource + '?ts=gt=' + str(self.timestamp)), resource, False)
+            self.pullRuntime(self._unis.get(resource), resource, False)
             threading.Thread(name=resource, target=self.subscribeRuntime, args=(resource,)).start()
 
-    def updateRuntime(self, data, resource_name, localnew):
+    def pullRuntime(self, data, resource_name, localnew):
         '''
         this function should convert the input data into Python runtime objects
         '''
@@ -92,27 +94,39 @@ class UNISrt(object):
         for v in data:
             model(v, self, localnew)
 
-    def uploadRuntime(self, resource_name):
+    def pushRuntime(self, resource_name):
         '''
         this function upload specified resource to UNIS
-        '''        
+        '''
+        def pushEntry(k, entry):
+            # TODO: use attribute "id" to indicate an object downloaded from UNIS
+            # for this sort of objects, only update their values.
+            # this requires to remove "id" from all local created objects, not done yet
+            # also, the put() function may not do pubsub, so change to existing manually
+            if hasattr(entry, 'id'):
+                url = '/' + resource_name + '/' + getattr(entry, 'id')
+                data = entry.prep_schema()
+                self._unis.put(url, data)
+                
+#                if k in getattr(self, resource_name)['existing'] and isinstance(getattr(self, resource_name)['existing'][k], list):
+#                    getattr(self, resource_name)['existing'][k].append(entry)
+#                else:
+#                    getattr(self, resource_name)['existing'][k] = entry
+                
+            else:
+                url = '/' + resource_name
+                data = entry.prep_schema()
+                self._unis.post(url, data)
+            
         while True:
             try:
-                kv = getattr(self, resource_name)['new'].popitem()
+                key, value = getattr(self, resource_name)['new'].popitem()
                 
-                # TODO: use attribute "id" to indicate an object downloaded from UNIS
-                # for this sort of objects, only update their values.
-                # this requires to remove "id" from all local created objects, not done yet
-                # also, the put() function may not do pubsub, so change to existing manually
-                if hasattr(kv[1], 'id'):
-                    url = '/' + resource_name + '/' + getattr(kv[1], 'id')
-                    data = kv[1].prep_schema()
-                    self._unis.put(url, data)
-                    getattr(self, resource_name)['existing'][kv[0]] = kv[1]
+                if not isinstance(value, list):
+                    pushEntry(key, value)
                 else:
-                    url = '/' + resource_name
-                    data = kv[1].prep_schema()
-                    self._unis.post(url, data)
+                    for item in value:
+                        pushEntry(key, item)
                     
             except KeyError:
                 return
@@ -121,7 +135,8 @@ class UNISrt(object):
         '''
         subscribe a channel(resource) to UNIS, and listen for any new updates on that channel
         '''
-        name = resources_subscription[resource_name]
+        #name = resources_subscription[resource_name]
+        name = resource_name
         model = resources_classes[resource_name]
         url = self.unis_url.replace('http', 'ws', 1)
         url = url + '/subscribe/' + name
@@ -143,53 +158,3 @@ class UNISrt(object):
         # use unis instance as a temporary solution
         ret = self._unis.get('/data/' + query)
         return ret
-    
-"""            
-    def subscribeRuntime(self, resource_name):
-        '''
-        subscribe a channel(resource) to UNIS, and listen for any new updates on that channel
-        '''
-        def subscriber(name, model, conn):
-            url = self.unis_url.replace('http', 'ws', 1)
-            url = url + '/subscribe/' + name
-            ws = create_connection(url)
-            data = ws.recv()
-            while data:
-                model(json.loads(data), self, False)
-                data = ws.recv()
-            ws.close()
-        
-        channel_str = resources_subscription[resource_name]
-        channel_obj = resources_classes[resource_name]
-        parent_conn, child_conn = Pipe()
-        s = Process(target = subscriber, args = (channel_str, channel_obj, child_conn, ))
-        s.start()
-
-
-    def syncRuntime(self, resources=[domain, node, port, service, path, measurement, metadata]):
-        '''
-        synchronize the data with UNIS db:
-        "local new born" objects will be uploaded to UNIS first
-        then UNIS will be downloaded to local
-        
-        Note that, it is not an atomic operation, and there are various ways causing
-        local-remote inconsistency; also, it assume UNIS does not remove records from
-        its DB
-        '''
-        for element in resources:
-            if element is metadata:
-                plural = element.__name__
-            else:
-                plural = element.__name__ + 's'
-                
-            self._uploadRuntime(plural)
-        for element in resources:
-            if element is metadata:
-                plural = element.__name__
-            else:
-                plural = element.__name__ + 's'
-                
-            self.updateRuntime(self._unis.get(plural + '?ts=gt=' + str(self.timestamp)), element, False)
-            
-        self.timestamp = int(time.time() * 10e5)
-"""

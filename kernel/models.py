@@ -29,8 +29,15 @@ class NetworkResource(object):
     def renew_local(self, res_inst_key):
         res_name = self.__class__.__name__ + 's'
         res_obj = getattr(self.unisrt, res_name)
-        res_obj['new'][res_inst_key] = self
-        del res_obj['existing'][res_inst_key]
+        
+        if not isinstance(res_obj['existing'][res_inst_key], list):
+            res_obj['new'][res_inst_key] = self
+            del res_obj['existing'][res_inst_key]
+        else:
+            if res_inst_key not in res_obj['new']:
+                res_obj['new'][res_inst_key] = list()
+            res_obj['new'][res_inst_key].append(self)
+            res_obj['existing'][res_inst_key].remove(self)
         
     def prep_schema(self):
         '''
@@ -48,6 +55,8 @@ class node(NetworkResource):
             self.domain = data['domain']
         else:
             self.domain = domain
+        if 'deviceType' in data:
+            self.deviceType = data['deviceType']
         try:
             self.id = data['id']
             self.name = data['name']
@@ -61,7 +70,7 @@ class node(NetworkResource):
                 return
         
         # currently, node-port model from router config is still differ from UNIS schema
-        # this build step distinguish them according to localnew flag
+        # this building step distinguish them according to localnew flag
         if 'ports' in data and localnew:
             for k, v in data['ports'].iteritems():
                 v['name'] = k
@@ -285,13 +294,21 @@ class measurement(NetworkResource):
         
         # need to consider the key some more: a service should be allowed to run multiple measurement on a same eventType
         unisrt.measurements[self.localnew and 'new' or 'existing']['%'.join([self.service, '+'.join(self.eventTypes)])] = self
-        #unisrt.measurements[self.localnew and 'new' or 'existing'][data['id']] = self
-        pass
         
         
     def prep_schema(self):
+        self.data["eventTypes"] = self.eventTypes
+        self.data["scheduled_times"] = self.scheduled_times
+        self.data["configuration"]["status"] = self.status
+        self.data["configuration"]["collection_schedule"] = self.collection_schedule
+        self.data['configuration']['src'] = self.src
+        self.data['configuration']['dst'] = self.dst
+        if hasattr(self, 'regex'):
+            self.data['configuration']['regex'] = self.regex
+        self.data["configuration"]["command"] = self.command
+        
         return self.data
-    
+        
 class metadata(NetworkResource):
     '''
     metadata can refer to information like measurement data etc.
@@ -317,8 +334,23 @@ class path(NetworkResource):
         # should convert each hop to the corresponding object
         str_hops = map(lambda x: x['href'], data['hops'])
         self.hops = map(lambda x: unisrt.nodes['existing'][x], str_hops)
+        self.status = data['status']
         
-        unisrt.paths[self.localnew and 'new' or 'existing']['%'.join([data['src'], data['dst']])] = self
+        if 'healthiness' in data:
+            self.healthiness = data['healthiness']
+        if 'performance' in data:
+            self.performance = data['performance']
+        
+        if '%'.join([data['src'], data['dst']]) not in unisrt.paths[self.localnew and 'new' or 'existing']:
+            unisrt.paths[self.localnew and 'new' or 'existing']['%'.join([data['src'], data['dst']])] = list()
+        
+        unisrt.paths[self.localnew and 'new' or 'existing']['%'.join([data['src'], data['dst']])].append(self)
+        
+    def prep_schema(self):
+        self.data['status'] = self.status
+        self.data['performance'] = self.performance
+        self.data['healthiness'] = self.healthiness
+        return self.data
 
 class domain(NetworkResource):
     '''
