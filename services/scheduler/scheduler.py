@@ -1,34 +1,26 @@
 #!/usr/bin/env python
-'''
-Created on Sep 27, 2013
-
-@author: mzhang
-'''
+import re
 import pytz
-import datetime, dateutil.parser
+import datetime, calendar, dateutil.parser
 
+import services.scheduler.schedalgorithms.adaptive as adaptive
+import services.scheduler.schedalgorithms.graphcoloring as coloring
 from libnre.utils import *
-from libnre.resourcemgmt import *
-
-import schedulers.adaptive
-import schedulers.graphcoloring as coloring
+from services.pathmagnifier.pathmagnifier import *
 
 BANDWIDTH_EVENTTYPE = "ps:tools:blipp:linux:net:iperf:bandwidth"
 BANDWIDTH_TYPE = "iperf"
 
-class Helm(object):
+logger = settings.get_logger('scheduler')
+
+class Scheduler(object):
     '''
-    Helm is essentially a scheduler.
-    It schedules all the newly posted raw measurements
-    It uses UNISrt (UNIS runtime API).
+    It schedules all the newly posted raw measurements (on demand)
+    the contention resource is LINK, may expand it in future
     '''
-    
-    def __init__(self, unisrt):
-        #with open(settings.HELMCONF) as f:
-        #    self.conf = json.loads(f.read())
-        
+    def __init__(self, unisrt, config_file=None):
         self.unisrt = unisrt
-        self._lastmtime = 0
+        unisrt.scheduler = self
         
     def _conflicting_measurements(self, resource_list, now):
         ret = []
@@ -74,7 +66,7 @@ class Helm(object):
         # get the conflicting time from conflicts
         conflicting_time = self._conflicting_time(conflicts)
         # build schedule, avoiding all conflicting time slots
-        return schedulers.adaptive.build_basic_schedule(now,
+        return adaptive.build_basic_schedule(now,
                         datetime.timedelta(seconds = every),
                         datetime.timedelta(seconds = duration),
                         num_to_schedule,
@@ -82,12 +74,11 @@ class Helm(object):
         
     def schedule(self, paths, schedule_params):
         '''
-        input: paths --- schedule them as conflict-free
-               schedule_params --- duration, repeat_num, frequency
+        paths: {pair: consumed resources --> only LINK objects for now}
+        schedule_params: duration, repeat_num, frequency
         '''
-        # Decision made: already-existing measurements won't be mapped to vertices, as:
-        # 1. you don't re-color them
-        # 2. not necessary, essentially you should compare time with the already-existing measurements
+        # TODO: on-demand scheduling is a MUST, if scheduler is a system service
+        
         ug, vprop_name = coloring.construct_graph(paths)
         
         vprop_order = [None] * ug.num_vertices()
@@ -105,73 +96,71 @@ class Helm(object):
         #graph_draw(ug, vertex_fill_color = vprop_color)
 
         now = datetime.datetime.utcnow()
-        now += datetime.timedelta(seconds = 300) # there will be certain time gap before blipp reads its schedule
+        now += datetime.timedelta(seconds = 300) # there will be certain time gap before BLiPP reads its schedule
         now = pytz.utc.localize(now)
         schedules = {}
         duration = schedule_params['duration']
         vlist = ug.vertices()
         for pair, path in paths.items():
-            # TODO: investigate the consistent order of the iterators
+            # TODO: need to make sure the order of the iterators remains consistent
             v = vlist.next()
             offset = duration * vprop_color[v]
             for repeat in range(schedule_params['num_tests']):
                 round_offset = repeat * schedule_params['every']
                 s = now + datetime.timedelta(seconds = offset) + datetime.timedelta(seconds = round_offset)
                 e = s + datetime.timedelta(seconds = duration)
-                schedules.setdefault(pair, []).append({"start": schedulers.adaptive.datetime_to_dtstring(s), "end": schedulers.adaptive.datetime_to_dtstring(e)})
+                
+                # TODO: unified solution to bulk scheduling and on demand scheduling
+                relative_start_ts = calendar.timegm(s.timetuple()) - self.unisrt.time_origin
+                relative_end_ts = calendar.timegm(e.timetuple()) - self.unisrt.time_origin
+                for link in path:
+                    if link.booking[relative_start_ts : relative_end_ts].allzeros():
+                        pass
+                    else:
+                        logger.warn("contention detected, shift to the next available time slot")
+                        
+                schedules.setdefault(pair, []).append({"start": adaptive.datetime_to_dtstring(s), "end": adaptive.datetime_to_dtstring(e)})
             
         return schedules
-    
+            
     def post_measurements(self, paths, schedules, schedule_params, test_flag=False):
         '''
         make and post
         '''
         for pair, path in paths.items():
-            measurement = build_measurement(self.unisrt, pair[0])
-            measurement["eventTypes"] = [BANDWIDTH_EVENTTYPE]
-            measurement["type"] = BANDWIDTH_TYPE
-            probe = {
-                "$schema": "http://unis.incntre.iu.edu/schema/tools/iperf",
-                "--client": pair[1] # dst name
-            }
-            self.unisrt.validate_add_defaults(probe)
-            measurement["configuration"] = probe
-            measurement["configuration"]["name"] = "iperf"
-            measurement["configuration"]["collection_size"] = 10000000
-            measurement["configuration"]["collection_ttl"] = 1500000
-            measurement["configuration"]["collection_schedule"] = "builtins.scheduled"
-            measurement["configuration"]["schedule_params"] = schedule_params
-            measurement["configuration"]["reporting_params"] = 1
-            measurement["configuration"]["resources"] = path
-            #measurement['configuration']['address'] = pair[1].ip
-            measurement['configuration']['source'] = pair[0]
-            measurement['configuration']['destination'] = pair[1]
-            measurement["scheduled_times"] = schedules[pair]
-        
-            self.unisrt.updateRuntime([measurement], 'measurements', True)
+            probe_service = pair[0].services['ps:tools:blipp']
+            p = re.compile(probe_service.selfRef + '%.*' + "ps:tools:blipp:linux:net:iperf:bandwidth" + '.*')
+            probe_meas_k = filter(lambda x: p.match(x), self.unisrt.measurements['existing'].keys())
+            probe_meas_k = probe_meas_k[0]
+            probe_meas = self.unisrt.measurements['existing'][probe_meas_k]
             
-        if test_flag:
-            self.unisrt.measurements['new'].clear()
-        else:
-            self.unisrt.uploadRuntime('measurements')
+            probe_meas.status = "ON"
+            probe_meas.scheduled_times = schedules[pair]
+            probe_meas.collection_schedule = "builtins.scheduled"
+            
+            probe_meas.src = pair[0].name
+            probe_meas.dst = pair[-1].name
+            
+            #probe_meas.probe_module = "json_probe"
+            #probe_meas.command = "/home/miaozhan/iperf3/bin/iperf3 -p 6001 --get-server-output -c dresci.crest.iu.edu"
+            probe_meas.probe_module = "cmd_line_probe"
+            probe_meas.command = "iperf -c " + " "
+            probe_meas.regex = ",(?P<bandwidth>\\d+)$"
+            
+            probe_meas.renew_local(probe_meas_k)
+            
+        self.unisrt.pushRuntime('measurements')
     
-def run(unisrt, args):
-    '''
-    all nre apps are required to have a run() function as the
-    driver of this application
-    '''
-    pass
-
-def main():
+if __name__ == '__main__':
     import kernel.unisrt
     unisrt = kernel.unisrt.UNISrt()
-    helm = Helm(unisrt)
+    scheduler = Scheduler(unisrt)
     
     with open("/home/mzhang/workspace/nre/apps/helm/helm.conf") as f:
         conf = json.loads(f.read())
     pairs = map(lambda x: map(lambda y: unisrt.nodes['existing'][y].name, x), conf['pairs'])
     
-    # TODO: getResourceLists take blipp service as input, whereas getGENIResourceLists takes nodes
+    # TODO: getResourceLists take BLiPP service as input, whereas getGENIResourceLists takes nodes
     # it is all caused by the decision about which way is better to query the path, and further caused
     # by the association between node objects and service objects. May need to make them bi-directional
     # Here is a snippet to convert node to service, might be useful later         
@@ -183,11 +172,8 @@ def main():
     #         blipps.extend([self.unisrt.services['existing'][service_index]])
     
     #paths = self._getResourceLists(blipps)
-    paths = getGENIResourceLists(helm.unisrt, pairs)
+    paths = getGENIResourceLists(scheduler.unisrt, pairs)
     
-    schedule_params = {'duration':10, 'num_tests':1, 'every':0}    
-    schedules = helm.schedule(paths, schedule_params)
-    helm.post_measurements(paths, schedules, schedule_params)
-    
-if __name__ == '__main__':
-    main()
+    schedule_params = {'duration':10, 'num_tests':10, 'every':3600}    
+    schedules = scheduler.schedule(paths, schedule_params)
+    scheduler.post_measurements(paths, schedules, schedule_params)

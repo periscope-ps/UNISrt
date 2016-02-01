@@ -6,7 +6,6 @@ import threading
 import pkgutil
 
 import kernel.unisrt
-import apps
 
 class NREShell(cmd.Cmd):
     
@@ -59,13 +58,34 @@ class NREShell(cmd.Cmd):
         except IOError as e:
             print e
             
-            
-            
-            
-            
-    
-    def do_resume(self, args):
+    def do_service(self, args):
+        '''
+        start a nre service
+        TODO: needs to differentiate from running an application
+        Usage: service <service name> [argument list]
+        '''
+        args = args.split(' ')
+        full_name = 'services.' + args[0] + '.' + args[0]
+        app = __import__(full_name, fromlist = ['run'])
         
+        # refer to the comments in __init__(), as the runtime environment is implemented
+        # as an object of shell, it has to be passed to applications explicitly
+        try:
+            threading.Thread(name=full_name, target=app.run, args=(self.unisrt, args[1], )).start()
+        except IOError as e:
+            print e
+    
+    def do_flange(self, args):
+        '''
+        it is the compiler, which takes in texts written in Flange and generates
+        nre programs like the ones in app/ directory
+        '''
+        pass
+            
+    def do_resume(self, args):
+        '''
+        temporary function to reverse the SC15 demo testbed
+        '''
         import subprocess
         from time import sleep
         subprocess.call(['apps/beacon/esnet_flows.py', '--ip=tb-of-ctrl-1.es.net', '--port=9090', 'del', '1hop'])

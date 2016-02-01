@@ -1,18 +1,11 @@
-'''
-Created on Feb 12, 2015
-
-@author: mzhang
-'''
-import utils
+import libnre.utils
 #from pytrie import StringTrie as trie
 
 flipflop = {'flip': 'flop', 'flop': 'flip'}
 
 def launchRuntime():
     '''
-    running logics in a network e.g. 'services' should be presented as functions
-    in this rt. Here, we start all the concurrent functions
-    Note: only 'services' are launched as functions at this moment        
+    virtual switch function   
     '''
     def switch(nm, prts, ft, pace):
         name = nm
@@ -76,9 +69,7 @@ def launchRuntime():
                 
 def launchRuntimeL2():
     '''
-    running logics in a network e.g. 'services' should be presented as functions
-    in this rt. Here, we start all the concurrent functions
-    Note: only 'services' are launched as functions at this moment        
+    virtual switch function
     '''
     def switch(nm, prts, ft, pace):
         name = nm

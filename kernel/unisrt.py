@@ -1,12 +1,8 @@
-'''
-Created on Oct 2, 2013
-
-@author: mzhang
-'''
+import threading
 import validictory
+from time import time
 from copy import deepcopy
 from websocket import create_connection
-import threading
 
 import unis_client
 import settings as nre_settings
@@ -55,13 +51,13 @@ class UNISrt(object):
             return None
         schema = self._schemas.get(data["$schema"])
         validictory.validate(data, schema)
-        utils.add_defaults(data, schema)
+        add_defaults(data, schema)
     
     def __init__(self):
         logger.info("starting UNIS Network Runtime Environment...")
         fconf = get_file_config(nre_settings.CONFIGFILE)
         self.conf = deepcopy(nre_settings.STANDALONE_DEFAULTS)
-        utils.merge_dicts(self.conf, fconf)
+        merge_dicts(self.conf, fconf)
         
         self.unis_url = str(self.conf['properties']['configurations']['unis_url'])
         self.ms_url = str(self.conf['properties']['configurations']['ms_url'])
@@ -69,6 +65,8 @@ class UNISrt(object):
         
         self._schemas = SchemaCache()
         self._resources = self.conf['resources']
+        
+        self.time_origin = int(time())
         
         # time skew can cause disasters. set to 0 to initialize
         # I now rely on well synchronized client and server clocks in pulling

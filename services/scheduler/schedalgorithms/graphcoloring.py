@@ -1,8 +1,3 @@
-'''
-Created on May 6, 2014
-
-@author: mzhang
-'''
 from graph_tool.all import Graph
 import sys
 

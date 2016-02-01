@@ -1,8 +1,3 @@
-'''
-Created on Sep 27, 2013
-
-@author: mzhang
-'''
 import re
 
 def build_basic_schedule(start, td_every, td_duration, num_to_schedule, conflicts):

@@ -1,15 +1,7 @@
-'''
-Created on Feb 12, 2015
-
-@author: mzhang
-'''
-import re, json
 import time
-from collections import defaultdict
 from copy import deepcopy
 
 from kernel import models
-from libnre.networkfunc import *
 from libnre.utils import *
 
 TRACEROUTE = "ps:tools:blipp:linux:net:traceroute:hopip"
@@ -53,130 +45,6 @@ def getResourceLists(unisrt, ends, obj_class, obj_layer='l3'):
             unisrt.ipports['existing'][ntwkrsrc].usecounter += 1
         else:
             print ntwkrsrc + " cannot be found in UNISrt"
-    
-    def makedict(self, remain):
-        ret = defaultdict(dict)
-        while True:
-            if len(remain) == 0:
-                break
-            line = remain.pop(0)
-            if "inactive:" in line:
-                if ";" in line:
-                    continue
-                elif "{" in line:
-                    self.closection(remain, 1)
-                continue
-            elif "}" in line:
-                # here put an extra syntax requirement, that } must
-                # be in a separate line
-                break
-            else:
-                line_sp = line.split()
-                if len(line_sp) == 1:
-                    key = line_sp[0].strip().rstrip(';')
-                    value = True
-                    ret[key] = value
-                elif line_sp[-1] == "{":
-                    if len(line_sp) == 2:
-                        key = line_sp[0].strip()
-                        value = self.makedict(remain)
-                        ret[key] = value
-                    else:
-                        assert len(line_sp) == 3
-                        key = line_sp[0].strip()
-                        value = self.makedict(remain)
-                        try:
-                            ret[key][line_sp[1].strip()] = value
-                        except TypeError:
-                            print key
-                            print line_sp[1].strip()
-                            print value
-                            exit
-                elif ";" in line_sp[-1]:
-                    if line_sp[0] == "description":
-                        # haven't come up with a good idea to deal with ""'s
-                        ret[line_sp[0]] = ' '.join(line_sp[1:])
-                    elif line_sp[0] == "vlan-tags":
-                        tags = {}
-                        if "outer" in line_sp:
-                            outer = line_sp[line_sp.index('outer') + 1]
-                            tags["outer"] = outer
-                        if "inner" in line_sp:
-                            inner = line_sp[line_sp.index('inner') + 1]
-                            tags["inner"] = inner
-                        ret[line_sp[0]] = tags                    
-                    elif len(line_sp) == 2:
-                        key = line_sp[0]
-                        value = line_sp[1].strip().rstrip(';')
-                        # an 'ip address' or an 'inet/inet6 family' is special,
-                        # as they may be a key or a value
-                        if key == "address" or key == "family":
-                            ret[key][value] = None
-                        else:
-                            ret[key] = value
-                    else:
-                        # there are still some keywords left unprocessed, see testconf
-                        print line
-        
-        return ret
-
-    def buildIPresolver():
-        '''
-        trying to consult the router config files (for the I2 case)
-        note that, for the case of ESnet, we can instead use its ipport info directly
-        '''
-        with open('/home/mzhang/workspace/UNISrt/samples/KEEL/configs', 'r') as f:
-            parentheses = 0
-            interfaces = []
-            for line in f:
-                assert parentheses >= 0
-                if parentheses or re.match( r'^domain_ion\.internet2\.edu_node_rtr\.', line):
-                    interfaces.append(line.rstrip('\n'))
-                    if "{" in line:
-                        parentheses += 1
-                    elif "}" in line:
-                        parentheses -= 1
-                else:
-                    continue
-                
-        tree = makedict(interfaces)
-
-        ip_resolver = {}
-        for node, ports in tree.iteritems():
-            for port, port_conf in ports.iteritems():
-                if "unit" not in port_conf:
-                    continue
-                for unit_conf in port_conf["unit"].itervalues():
-                    try:
-                        for ip in unit_conf["family"]["inet"]["address"].iterkeys():
-                            ip_resolver[ip[:-3]] = node
-                            # don't upload ipport at this moment (even though I don't do it, unisencoder+esnetrspec already done it)
-                            # these rules to compose UNIS refs are so artificial
-                            # don't use 'ip' list of ports, because they may not exist in the topo
-                            models.ipport({'address': {
-                                            'address': ip[:-3],
-                                            'type': 'ipv4'
-                                       },
-                                       'relations': {
-                                            'over': [{'href': unisrt.unis_url + '/ports/' + node + '_port_' + port.replace('/', '_')}]
-                                       },
-                                       'node': unisrt.unis_url + '/nodes/' + node
-                                       }, unisrt, False)
-                    except (KeyError, TypeError):
-                        continue
-                    
-        # Okay, now let's build ip_resolver for ESnet. Really should just use ipport dictionary...
-        tmp = {}
-        for k, v in unisrt.ipports['existing'].iteritems():
-            if k in ip_resolver:
-                continue
-            try:
-                tmp[k] = v.node.id
-            except:
-                tmp[k] = v.node
-        ip_resolver.update(tmp)
-        
-        return ip_resolver
     
     def vtraceroute(src, dst):
         '''
@@ -261,7 +129,7 @@ def getResourceLists(unisrt, ends, obj_class, obj_layer='l3'):
 
     # from here to the end, attempt to expend l3 to multi-layer
     multi_hops = hops
-    ip_resolver = buildIPresolver()
+    ip_resolver = unisrt.ipresolver # TODO: not done yet, but nre should have an ipport dict for ip-to-L2port query
 
     load = []
     temp = deepcopy(multi_hops)

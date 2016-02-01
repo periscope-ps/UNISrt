@@ -1,8 +1,3 @@
-'''
-Created on Mar 2, 2015
-
-@author: mzhang
-'''
 import calendar, time
 
 def complain(data):

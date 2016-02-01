@@ -1,10 +1,4 @@
-'''
-Created on Feb 9, 2014
-
-@author: mzhang
-'''
-from libnre import utils
-import re
+from bitarray import bitarray
 
 class NetworkResource(object):
     '''
@@ -78,8 +72,8 @@ class node(NetworkResource):
                 self.ports[v['name']] = port(v, unisrt, localnew, self)
         if 'ports' in data and not localnew:
             for v in data['ports']:
-                #self.ports.append(v['href'])
-                value = unisrt._unis.get(v['href'])
+                # return a list of a single element, use index 0
+                value = unisrt._unis.get(v['href'])[0]
                 if 'address' in value:
                     if not hasattr(self, 'ipports'): self.ipports = {}
                     self.ipports[value['selfRef']] = ipport(value, unisrt, localnew, self)
@@ -89,7 +83,7 @@ class node(NetworkResource):
                 
         if 'services' in data:
             for v in data['services']:
-                value = unisrt._unis.get(v['href'])
+                value = unisrt._unis.get(v['href'])[0]
                 if not hasattr(self, 'services'): self.services = {}
                 self.services[value['serviceType']] = service(value, unisrt, localnew, self)
                 
@@ -190,6 +184,9 @@ class link(NetworkResource):
             except:
                 self.endpoints = {data['endpoints']['source']['href']:data['endpoints']['sink']['href']}
                 
+        # this attribute marks the available time slots (in seconds) of the link object
+        # right now, scheduler only consider contentions on link objects within a calendar year
+        self.booking = bitarray(3600 * 24 * 365)
 
         unisrt.links[self.localnew and 'new' or 'existing'][self.endpoints.keys()[0]] = self
         
@@ -289,8 +286,9 @@ class measurement(NetworkResource):
         self.measurement_params = data['configuration']['schedule_params']
         self.every = data['configuration']['schedule_params']['every']
         self.num_tests = data['configuration']['schedule_params'].get('num_tests', 'inf')
-        self.src = data['configuration']['src']
-        self.dst = data['configuration']['dst']
+        if 'src' in data['configuration'] and 'dst' in data['configuration']:
+            self.src = data['configuration']['src']
+            self.dst = data['configuration']['dst']
         
         # need to consider the key some more: a service should be allowed to run multiple measurement on a same eventType
         unisrt.measurements[self.localnew and 'new' or 'existing']['%'.join([self.service, '+'.join(self.eventTypes)])] = self
@@ -370,13 +368,13 @@ class domain(NetworkResource):
             if 'nodes' in data:
                 for v in data['nodes']:
                     if 'href' in v:
-                        self.nodes.append(node(unisrt._unis.get(v['href']), unisrt, localnew))
+                        self.nodes.append(node(unisrt._unis.get(v['href'])[0], unisrt, localnew))
                     else:
                         self.nodes.append(node(v, unisrt, localnew, self))
 
             if 'links' in data:
                 for v in data['links']:
-                    self.links.append(link(unisrt._unis.get(v['href']), unisrt, localnew))
+                    self.links.append(link(unisrt._unis.get(v['href'])[0], unisrt, localnew))
             
             unisrt.domains[self.localnew and 'new' or 'existing'][data['id']] = self
 

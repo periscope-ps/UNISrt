@@ -1,8 +1,3 @@
-'''
-Created on Apr 7, 2014
-
-@author: mzhang
-'''
 import json
 import time, dateutil.parser
 from UNISrt import UNISrt

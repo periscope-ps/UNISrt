@@ -1,8 +1,3 @@
-'''
-Created on Oct 30, 2015
-
-@author: mzhang
-'''
 import time
 
 def complain(data):
