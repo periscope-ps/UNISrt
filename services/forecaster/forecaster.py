@@ -1,10 +1,13 @@
 #!/usr/bin/env python
+import re
 from time import sleep, time
+from netaddr import IPNetwork, IPAddress
 
 from kernel.models import measurement
 from libnre.utils import *
 
 BANDWIDTH = "ps:tools:blipp:linux:net:iperf:bandwidth"
+BLIPPSERVICE = 'ps:tools:blipp'
 
 logger = settings.get_logger('forecaster')
 
@@ -12,24 +15,44 @@ class Forecaster(object):
     '''
     '''
     
-    def __init__(self, unisrt, targets=None):
+    def __init__(self, unisrt):
         '''
-        targets: list of ends that need forecasts, None indicates all known end hosts
-        note that, it does bandwidth forecasts only at this moment, so only iperf measurements are used
+        targets: list of measurements been launched/tracked, None indicates all known end hosts
+        note that, it only does *bandwidth* forecasts at this moment, so only iperf measurements are used
         '''
         self.unisrt = unisrt
-        self.targets = dict()
-        
-        if targets != None:
-            self.follow(targets)
-        else:
-            # TODO: should grab all known end hosts and pair them
-            self.follow([])
+        self.targets = list()
             
-    def follow(self, targets):
+    def follow(self, targets=None):
         '''
         keeps an eye on the given pairs
         '''
+        if not targets:
+            # no targets means all targets, get all services on this domain
+            # TODO: implies all services provide some predict-able measurements -- true for now
+            p = re.compile("urn:.*\+idms-ig-ill\+.*") # the slice that we are interested in
+            slice_services = filter(lambda x: p.match(x.node.urn), self.unisrt.services['existing'].values())
+    
+            # same slice name may contain historical objects with same names, try to use the last set of objects...
+            '''
+            from cluster import HierarchicalClustering
+            data = {n.data['ts']: n for n in slice_services}
+            hc = HierarchicalClustering(data.keys(), lambda x,y: abs(x-y))
+            clsts = hc.getlevel(100000000)
+            big_value = 0
+            big_index = 0
+            for i, cl in enumerate(clsts):
+                if cl[0] > big_value:
+                    big_value = cl[0]
+                    big_index = i
+            tss = clsts[big_index]
+            services = filter(lambda n: n.data['ts'] in tss, slice_services)
+            '''
+            
+            # filter measurements on their services and extend targets
+            self.targets.extend(filter(lambda m: m.service in slice_services, self.unisrt.measurements['existing'].values()))
+            
+        '''                        
         for pair in targets:
             iperf_probe = filter(lambda m: m.src == pair[0].name and\
                                            m.dst == pair[1].name and\
@@ -55,25 +78,25 @@ class Forecaster(object):
             self.targets[pair] = iperf_probe
             
         self.unisrt.pushRuntime('measurements')
+        '''
         
-    def forecast(self, pair, tolerance, fa='services.forecaster.forecalgorithm.slidingwnd', future=None):
+    def forecast(self, meas_obj, tolerance, fa='services.forecaster.forecalgorithms.slidingwnd', future=None):
         '''
         poll probe results from certain measurement, and apply statistical tool
         (user defined forecast algorithm) to predict the requested value
         
-        pair: requested source and destination for performance forecasting
+        meas_obj: requested measurement for performance forecasting
         tolerance: how long you want to wait until the forecasted value is generated
         fa: the chosen forecast algorithm
         future: a moment in future, default None indicates the "every" attribute of the measurement raw data
         '''
         # deliberately let the caller obey the rule of follow-and-then-forecast
-        if pair not in self.targets:
+        if meas_obj not in self.targets:
             return None
         
-        meas_obj = self.targets[pair]
         start = time()
         while '%'.join([meas_obj.selfRef, BANDWIDTH]) not in self.unisrt.metadata['existing'] and time() - start < tolerance:
-            logger.info("The measurement between {src} and {dst} has not run yet".format(src = pair[0], dst = pair[1]))
+            logger.info("The measurement has not run yet")
             logger.info("waiting for {sec} more seconds...".format(max(0, start + tolerance - time())))
             sleep(5)
         
@@ -84,6 +107,12 @@ class Forecaster(object):
         fa_module = __import__(fa, fromlist = [fa])
         meta_obj = self.unisrt.metadata['existing']['%'.join([meas_obj.selfRef, BANDWIDTH])]
         return fa_module.calc(self.unisrt, meas_obj, meta_obj, future, remain)
+
+def run(unisrt, kwargs):
+    forecaster = Forecaster(unisrt)
+    setattr(unisrt, 'forecaster', forecaster)
+    targets = kwargs.get('targets', None)
+    forecaster.follow(targets)
     
 if __name__ == '__main__':
     import kernel.unisrt

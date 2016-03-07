@@ -62,6 +62,23 @@ def merge_dicts(base, overriding):
         else:
             base[k] = v
 
+def get_most_recent(resources):
+    '''
+    same id different records -- shouldn't be needed, as nre only keeps the latest
+    '''
+    res_dict = {}
+    for res in resources:
+        if res.id in res_dict:
+            if res.data['ts'] > res_dict[res.id].data['ts']:
+                res_dict[res.id] = res
+        else:
+            res_dict[res.id] = res
+
+    res = []
+    for key in res_dict:
+        res.append(res_dict[key])
+    return res
+
 def build_measurement(unisrt, service):
     '''
     form a bare bone measurement data structure
@@ -71,8 +88,10 @@ def build_measurement(unisrt, service):
     measurement['$schema'] = "http://unis.crest.iu.edu/schema/20151104/measurement#"
     measurement['service'] = service
     measurement['selfRef'] = unisrt.unis_url + "/measurements/" + muuid
-    measurement['id'] = muuid
+    #measurement['id'] = muuid
     measurement['configuration']['status'] = "ON"
     measurement['configuration']['ms_url'] = unisrt.ms_url
     return measurement
 
+def issamesubnet(addrx, addry, mask):
+    return True

@@ -18,9 +18,9 @@ def calc(unisrt, meas_obj, meta_obj, future, tolerance):
         return 0
     else:
         count = 0
-        addup = 0
+        addup = 0.0
         for value in data:
             count += 1
-            addup += value['value']
+            addup += float(value['value'])
             
         return addup / count
