@@ -1,4 +1,4 @@
-from graph_tool.all import Graph
+from graph_tool.all import Vertex, Graph
 import sys
 
 def coloring(graph, vprop_order, vprop_color):
@@ -71,22 +71,28 @@ def smallest_last_vertex_ordering(graph, vprop_order, vprop_degree, vprop_marker
             
         current_order -= 1
         
-def construct_graph(paths):
+def construct_graph(tasks):
     '''
     input: a dictionary whose keys are src-dst pairs (a.k.a measurement events), values are required resource
+    output: the intersection graph
     '''
-    ug = Graph(directed = False)    
-    vlist = list(ug.add_vertex(len(paths)))# orders in vertex_index, iterator, list() and vertices()
+    ug = Graph(directed = False)
+    # orders kept in vertex_index, iterator, list() and vertices()
+    add_vertex_result = ug.add_vertex(len(tasks))
+    if isinstance(add_vertex_result, Vertex):
+        vlist = list([add_vertex_result])
+    else:
+        vlist = list(add_vertex_result)
     
-    vprop_name = ug.new_vertex_property('string')
+    vprop_name = ug.new_vertex_property('object')
     
     # O(n^2)
     # let xth vertex represent the xth measurement pair
-    pairs = paths.keys()
-    for i, p in enumerate(pairs):
+    meas = tasks.keys()
+    for i, p in enumerate(meas):
         vprop_name[vlist[i]] = p
-        for j, q in enumerate(pairs[i + 1 :], start = i + 1):
-            if set(paths[p]) & set(paths[q]):
+        for j, q in enumerate(meas[i + 1 :], start = i + 1):
+            if set(tasks[p]) & set(tasks[q]):
                 ug.add_edge(vlist[i], vlist[j])
             
     return ug, vprop_name

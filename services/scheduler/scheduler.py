@@ -1,15 +1,13 @@
 #!/usr/bin/env python
 import re
 import pytz
-import datetime, calendar, dateutil.parser
+import datetime, dateutil.parser
 
 import services.scheduler.schedalgorithms.adaptive as adaptive
 import services.scheduler.schedalgorithms.graphcoloring as coloring
-from libnre.utils import *
 from services.pathmagnifier.pathmagnifier import *
-
-BANDWIDTH_EVENTTYPE = "ps:tools:blipp:linux:net:iperf:bandwidth"
-BANDWIDTH_TYPE = "iperf"
+from libnre.utils import *
+from kernel.models import measurement
 
 logger = settings.get_logger('scheduler')
 
@@ -20,7 +18,6 @@ class Scheduler(object):
     '''
     def __init__(self, unisrt, config_file=None):
         self.unisrt = unisrt
-        unisrt.scheduler = self
         
     def _conflicting_measurements(self, resource_list, now):
         ret = []
@@ -72,15 +69,43 @@ class Scheduler(object):
                         num_to_schedule,
                         conflicting_time)
         
-    def schedule(self, paths, schedule_params):
+    def schedule(self, measurements, schedule_params):
         '''
-        paths: {pair: consumed resources --> only LINK objects for now}
+        measurements: list of measurement objects to be scheduled
         schedule_params: duration, repeat_num, frequency
         '''
-        # TODO: on-demand scheduling is a MUST, if scheduler is a system service
+        def add_measuring_task(meas, task_set):
+            # recursive, cascading add interfered measurements
+            task_set[meas] = self.unisrt.paths['existing'][(meas.src, meas.dst)]['main'].get_bottom()
+            
+            for res in self.unisrt.paths['existing'][(meas.src, meas.dst)]['main'].get_bottom():
+                for scheduled_meas in res.stressed_measurements:
+                    if scheduled_meas not in task_set.keys():
+                        add_measuring_task(scheduled_meas, task_set)
+                        
         
-        ug, vprop_name = coloring.construct_graph(paths)
+        new_tasks = {}
+        for meas in measurements:
+            add_measuring_task(meas, new_tasks)
         
+        '''
+        for meas in measurements:
+            new_tasks[meas] = self.unisrt.paths['existing'][(meas.src, meas.dst)]['main'].get_bottom()
+            
+            for res in self.unisrt.paths['existing'][(meas.src, meas.dst)]['main'].get_bottom():
+                for scheduled_meas in res.stressed_measurements:
+                    new_tasks[scheduled_meas] = self.unisrt.paths['existing'][(scheduled_meas.src, scheduled_meas.dst)]['main'].get_bottom()
+        '''
+        
+        # register measurements back to their resources
+        for meas, resources in new_tasks.iteritems():
+            for res in resources:
+                res.stressed_measurements.add(meas)
+                
+        # construct the intersection graph of this run
+        ug, vprop_name = coloring.construct_graph(new_tasks)
+        
+        # start the coloring algorithm
         vprop_order = [None] * ug.num_vertices()
         vprop_degree = ug.degree_property_map('total')
         vprop_marked = ug.new_vertex_property('int')
@@ -90,18 +115,21 @@ class Scheduler(object):
         vprop_color = ug.new_vertex_property('int')
         coloring.coloring(ug, vprop_order, vprop_color)
         
-        #for i, v in enumerate(vprop_order):
-        #    print 'order: ' + str(i) + ' name: ' + vprop_name[v] + ' color: ' + str(vprop_color[v]) + ' degree: ' + str(v.out_degree())
-        #from graph_tool.draw import graph_draw
-        #graph_draw(ug, vertex_fill_color = vprop_color)
-
+        '''
+        for i, v in enumerate(vprop_order):
+            print 'order: ' + str(i) + ' name: ' + vprop_name[v] + ' color: ' + str(vprop_color[v]) + ' degree: ' + str(v.out_degree())
+        from graph_tool.draw import graph_draw
+        graph_draw(ug, vertex_fill_color = vprop_color)
+        '''
+        
+        # map back to time domain
         now = datetime.datetime.utcnow()
-        now += datetime.timedelta(seconds = 300) # there will be certain time gap before BLiPP reads its schedule
+        now += datetime.timedelta(seconds = 600) # TODO: there will be certain time gap before BLiPP reads its schedule
         now = pytz.utc.localize(now)
         schedules = {}
         duration = schedule_params['duration']
         vlist = ug.vertices()
-        for pair, path in paths.items():
+        for meas, path in new_tasks.items():
             # TODO: need to make sure the order of the iterators remains consistent
             v = vlist.next()
             offset = duration * vprop_color[v]
@@ -109,20 +137,17 @@ class Scheduler(object):
                 round_offset = repeat * schedule_params['every']
                 s = now + datetime.timedelta(seconds = offset) + datetime.timedelta(seconds = round_offset)
                 e = s + datetime.timedelta(seconds = duration)
-                
-                # TODO: unified solution to bulk scheduling and on demand scheduling
-                relative_start_ts = calendar.timegm(s.timetuple()) - self.unisrt.time_origin
-                relative_end_ts = calendar.timegm(e.timetuple()) - self.unisrt.time_origin
-                for link in path:
-                    if link.booking[relative_start_ts : relative_end_ts].allzeros():
-                        pass
-                    else:
-                        logger.warn("contention detected, shift to the next available time slot")
-                        
-                schedules.setdefault(pair, []).append({"start": adaptive.datetime_to_dtstring(s), "end": adaptive.datetime_to_dtstring(e)})
+                schedules.setdefault(meas.id, []).append({"start": adaptive.datetime_to_dtstring(s), "end": adaptive.datetime_to_dtstring(e)})
+        
+        # assign schedules and create measurement objects
+        for meas in measurements:
+            meas.scheduled_times = schedules[meas.id]
+        
+        # push changes to UNIS: new measurements, modified old measurements and ports
+        self.unisrt.pushRuntime('measurements')
             
-        return schedules
-            
+        return [m.id for m in measurements]
+        
     def post_measurements(self, paths, schedules, schedule_params, test_flag=False):
         '''
         make and post
@@ -150,6 +175,310 @@ class Scheduler(object):
             probe_meas.renew_local(probe_meas_k)
             
         self.unisrt.pushRuntime('measurements')
+
+def run(unisrt, kwargs):
+    scheduler = Scheduler(unisrt)
+    setattr(unisrt, 'scheduler', scheduler)
+    
+    '''
+    scheduler.schedule(*prep_test(1, unisrt))
+    scheduler.schedule(*prep_test(2, unisrt))
+    scheduler.schedule(*prep_test(3, unisrt))
+    scheduler.schedule(*prep_test(4, unisrt))
+    '''
+    
+def prep_test(tmp, unisrt):
+        from kernel.models import port, measurement, path
+        test_port1 = {
+            "$schema": "http://unis.crest.iu.edu/schema/20151104/port#",
+            "capacity": -42,
+            "name": "eth1:1",
+            "selfRef": "http://dev.crest.iu.edu:8889/ports/test_port1",
+            "urn": "urn:ogf:network:domain=pcvm1-1.instageni.illinois.edu:node=ibp-105-1.idms-ig-ill.ch-geni-net.instageni.illinois.edu:port=eth1:1",
+            "id": "test_port1",
+            "nodeRef": "urn:ogf:network:domain=pcvm1-1.instageni.illinois.edu:node=ibp-105-1.idms-ig-ill.ch-geni-net.instageni.illinois.edu",
+            "properties": {
+                "ipv4": {
+                    "type": "ipv4",
+                    "address": "10.10.1.1"
+                }
+            }
+        }
+        test_port2 = {
+            "$schema": "http://unis.crest.iu.edu/schema/20151104/port#",
+            "capacity": -42,
+            "name": "eth1:1",
+            "selfRef": "http://dev.crest.iu.edu:8889/ports/test_port2",
+            "urn": "urn:ogf:network:domain=pcvm1-1.instageni.illinois.edu:node=ibp-105-1.idms-ig-ill.ch-geni-net.instageni.illinois.edu:port=eth1:1",
+            "id": "test_port2",
+            "nodeRef": "urn:ogf:network:domain=pcvm1-1.instageni.illinois.edu:node=ibp-105-1.idms-ig-ill.ch-geni-net.instageni.illinois.edu",
+            "properties": {
+                "ipv4": {
+                    "type": "ipv4",
+                    "address": "10.10.1.2"
+                }
+            }
+        }
+        test_port3 = {
+            "$schema": "http://unis.crest.iu.edu/schema/20151104/port#",
+            "capacity": -42,
+            "name": "eth1:1",
+            "selfRef": "http://dev.crest.iu.edu:8889/ports/test_port3",
+            "urn": "urn:ogf:network:domain=pcvm1-1.instageni.illinois.edu:node=ibp-105-1.idms-ig-ill.ch-geni-net.instageni.illinois.edu:port=eth1:1",
+            "id": "test_port3",
+            "nodeRef": "urn:ogf:network:domain=pcvm1-1.instageni.illinois.edu:node=ibp-105-1.idms-ig-ill.ch-geni-net.instageni.illinois.edu",
+            "properties": {
+                "ipv4": {
+                    "type": "ipv4",
+                    "address": "10.10.2.1"
+                }
+            }
+        }
+        test_port4 = {
+            "$schema": "http://unis.crest.iu.edu/schema/20151104/port#",
+            "capacity": -42,
+            "name": "eth1:1",
+            "selfRef": "http://dev.crest.iu.edu:8889/ports/test_port4",
+            "urn": "urn:ogf:network:domain=pcvm1-1.instageni.illinois.edu:node=ibp-105-1.idms-ig-ill.ch-geni-net.instageni.illinois.edu:port=eth1:1",
+            "id": "test_port4",
+            "nodeRef": "urn:ogf:network:domain=pcvm1-1.instageni.illinois.edu:node=ibp-105-1.idms-ig-ill.ch-geni-net.instageni.illinois.edu",
+            "properties": {
+                "ipv4": {
+                    "type": "ipv4",
+                    "address": "10.10.2.2"
+                }
+            }
+        }
+        test_port5 = {
+            "$schema": "http://unis.crest.iu.edu/schema/20151104/port#",
+            "capacity": -42,
+            "name": "eth1:1",
+            "selfRef": "http://dev.crest.iu.edu:8889/ports/test_port5",
+            "urn": "urn:ogf:network:domain=pcvm1-1.instageni.illinois.edu:node=ibp-105-1.idms-ig-ill.ch-geni-net.instageni.illinois.edu:port=eth1:1",
+            "id": "test_port5",
+            "nodeRef": "urn:ogf:network:domain=pcvm1-1.instageni.illinois.edu:node=ibp-105-1.idms-ig-ill.ch-geni-net.instageni.illinois.edu",
+            "properties": {
+                "ipv4": {
+                    "type": "ipv4",
+                    "address": "10.10.1.3"
+                }
+            }
+        }
+        test_port6 = {
+            "$schema": "http://unis.crest.iu.edu/schema/20151104/port#",
+            "capacity": -42,
+            "name": "eth1:1",
+            "selfRef": "http://dev.crest.iu.edu:8889/ports/test_port6",
+            "urn": "urn:ogf:network:domain=pcvm1-1.instageni.illinois.edu:node=ibp-105-1.idms-ig-ill.ch-geni-net.instageni.illinois.edu:port=eth1:1",
+            "id": "test_port6",
+            "nodeRef": "urn:ogf:network:domain=pcvm1-1.instageni.illinois.edu:node=ibp-105-1.idms-ig-ill.ch-geni-net.instageni.illinois.edu",
+            "properties": {
+                "ipv4": {
+                    "type": "ipv4",
+                    "address": "10.10.1.4"
+                }
+            }
+        }
+        
+        test_measurement1 = {
+            "$schema": "http://unis.crest.iu.edu/schema/20151104/measurement#",
+            "selfRef": "http://dev.crest.iu.edu:8889/measurements/test_measurement1v",
+            "service": "http://dev.crest.iu.edu:8889/services/56db9dc8e779895f5f68fddc",
+            "eventTypes": [
+                "ps:tools:blipp:linux:net:traceroute:hopip"
+            ],
+            "configuration": {
+                "status": "ON",
+                "regex": "^\\s*\\d+.*(?P<hopip>\\(.*\\))",
+                "collection_schedule": "builtins.simple",
+                "probe_module": "traceroute_probe",
+                "src": "10.10.1.1",
+                "use_ssl": False,
+                "dst": "10.10.1.2",
+                "reporting_params": 3,
+                "reporting_tolerance": 10,
+                "collection_ttl": 1500000,
+                "command": "traceroute 72.36.65.65",
+                "schedule_params": {
+                    "every": 120
+                },
+                "collection_size": 100000,
+                "ms_url": "http://dev.crest.iu.edu:8889",
+                "eventTypes": {
+                    "hopip": "ps:tools:blipp:linux:net:traceroute:hopip"
+                },
+                "unis_url": "http://dev.crest.iu.edu:8889",
+                "reporting tolerance": 10,
+                "name": "traceroute-72.36.65.65"
+            },
+            "id": "test_measurement1"
+        }
+        test_measurement2 = {
+            "$schema": "http://unis.crest.iu.edu/schema/20151104/measurement#",
+            "selfRef": "http://dev.crest.iu.edu:8889/measurements/test_measurement2v",
+            "service": "http://dev.crest.iu.edu:8889/services/56db9dc8e779895f5f68fddc",
+            "eventTypes": [
+                "ps:tools:blipp:linux:net:traceroute:hopip"
+            ],
+            "configuration": {
+                "status": "ON",
+                "regex": "^\\s*\\d+.*(?P<hopip>\\(.*\\))",
+                "collection_schedule": "builtins.simple",
+                "probe_module": "traceroute_probe",
+                "src": "10.10.2.1",
+                "use_ssl": False,
+                "dst": "10.10.2.2",
+                "reporting_params": 3,
+                "reporting_tolerance": 10,
+                "collection_ttl": 1500000,
+                "command": "traceroute 72.36.65.65",
+                "schedule_params": {
+                    "every": 120
+                },
+                "collection_size": 100000,
+                "ms_url": "http://dev.crest.iu.edu:8889",
+                "eventTypes": {
+                    "hopip": "ps:tools:blipp:linux:net:traceroute:hopip"
+                },
+                "unis_url": "http://dev.crest.iu.edu:8889",
+                "reporting tolerance": 10,
+                "name": "traceroute-72.36.65.65"
+            },
+            "id": "test_measurement2"
+        }
+        test_measurement3 = {
+            "$schema": "http://unis.crest.iu.edu/schema/20151104/measurement#",
+            "selfRef": "http://dev.crest.iu.edu:8889/measurements/test_measurement3v",
+            "service": "http://dev.crest.iu.edu:8889/services/56db9dc8e779895f5f68fddc",
+            "eventTypes": [
+                "ps:tools:blipp:linux:net:traceroute:hopip"
+            ],
+            "configuration": {
+                "status": "ON",
+                "regex": "^\\s*\\d+.*(?P<hopip>\\(.*\\))",
+                "collection_schedule": "builtins.simple",
+                "probe_module": "traceroute_probe",
+                "src": "10.10.1.3",
+                "use_ssl": False,
+                "dst": "10.10.1.2",
+                "reporting_params": 3,
+                "reporting_tolerance": 10,
+                "collection_ttl": 1500000,
+                "command": "traceroute 72.36.65.65",
+                "schedule_params": {
+                    "every": 120
+                },
+                "collection_size": 100000,
+                "ms_url": "http://dev.crest.iu.edu:8889",
+                "eventTypes": {
+                    "hopip": "ps:tools:blipp:linux:net:traceroute:hopip"
+                },
+                "unis_url": "http://dev.crest.iu.edu:8889",
+                "reporting tolerance": 10,
+                "name": "traceroute-72.36.65.65"
+            },
+            "id": "test_measurement3"
+        }
+        test_measurement4 = {
+            "$schema": "http://unis.crest.iu.edu/schema/20151104/measurement#",
+            "selfRef": "http://dev.crest.iu.edu:8889/measurements/test_measurement4v",
+            "service": "http://dev.crest.iu.edu:8889/services/56db9dc8e779895f5f68fddc",
+            "eventTypes": [
+                "ps:tools:blipp:linux:net:traceroute:hopip"
+            ],
+            "configuration": {
+                "status": "ON",
+                "regex": "^\\s*\\d+.*(?P<hopip>\\(.*\\))",
+                "collection_schedule": "builtins.simple",
+                "probe_module": "traceroute_probe",
+                "src": "10.10.1.4",
+                "use_ssl": False,
+                "dst": "10.10.1.1",
+                "reporting_params": 3,
+                "reporting_tolerance": 10,
+                "collection_ttl": 1500000,
+                "command": "traceroute 72.36.65.65",
+                "schedule_params": {
+                    "every": 120
+                },
+                "collection_size": 100000,
+                "ms_url": "http://dev.crest.iu.edu:8889",
+                "eventTypes": {
+                    "hopip": "ps:tools:blipp:linux:net:traceroute:hopip"
+                },
+                "unis_url": "http://dev.crest.iu.edu:8889",
+                "reporting tolerance": 10,
+                "name": "traceroute-72.36.65.65"
+            },
+            "id": "test_measurement4"
+        }
+
+        test_path1 = {
+            "directed": True,
+            "src": "10.10.1.1",
+            "selfRef": "http://dev.crest.iu.edu:8889/paths/test_port1",
+            "$schema": "http://unis.crest.iu.edu/schema/20151104/path#",
+            "dst": "10.10.1.2",
+            "healthiness": "good",
+            "status": "ON",
+            "performance": "unknown",
+            "id": "56e0af42e779895f5f9ca088"
+        }
+        test_path2 = {
+            "directed": True,
+            "src": "10.10.2.1",
+            "selfRef": "http://dev.crest.iu.edu:8889/paths/test_port1",
+            "$schema": "http://unis.crest.iu.edu/schema/20151104/path#",
+            "dst": "10.10.2.2",
+            "healthiness": "good",
+            "status": "ON",
+            "performance": "unknown",
+            "id": "56e0af42e779895f5f9ca088"
+        }
+        test_path3 = {
+            "directed": True,
+            "src": "10.10.1.3",
+            "selfRef": "http://dev.crest.iu.edu:8889/paths/test_port1",
+            "$schema": "http://unis.crest.iu.edu/schema/20151104/path#",
+            "dst": "10.10.1.2",
+            "healthiness": "good",
+            "status": "ON",
+            "performance": "unknown",
+            "id": "56e0af42e779895f5f9ca088"
+        }
+        test_path4 = {
+            "directed": True,
+            "src": "10.10.1.4",
+            "selfRef": "http://dev.crest.iu.edu:8889/paths/test_port1",
+            "$schema": "http://unis.crest.iu.edu/schema/20151104/path#",
+            "dst": "10.10.1.1",
+            "healthiness": "good",
+            "status": "ON",
+            "performance": "unknown",
+            "id": "56e0af42e779895f5f9ca088"
+        }
+        if tmp == 1:
+            port(test_port1, unisrt, False)
+            port(test_port2, unisrt, False)
+            port(test_port3, unisrt, False)
+            port(test_port4, unisrt, False)
+            port(test_port5, unisrt, False)
+            port(test_port6, unisrt, False)
+            
+            path(test_path1, unisrt, False)
+            path(test_path2, unisrt, False)
+            path(test_path3, unisrt, False)
+            path(test_path4, unisrt, False)
+            
+            measurements = [measurement(test_measurement1, unisrt, True)]
+        elif tmp == 2:
+            measurements = [measurement(test_measurement2, unisrt, True)]
+        elif tmp == 3:
+            measurements = [measurement(test_measurement3, unisrt, True)]
+        elif tmp == 4:
+            measurements = [measurement(test_measurement4, unisrt, True)]
+    
+        return [measurements, {'every': 120, 'duration': 10, 'num_tests': 1}]
     
 if __name__ == '__main__':
     import kernel.unisrt

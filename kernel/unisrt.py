@@ -95,10 +95,10 @@ class UNISrt(object):
         this function upload specified resource to UNIS
         '''
         def pushEntry(k, entry):
-            # TODO: use attribute "id" to indicate an object downloaded from UNIS
+            # TODO: use attribute "ts" to indicate an object downloaded from UNIS
             # for this sort of objects, only update their values.
             # this requires to remove "id" from all local created objects, not done yet
-            if hasattr(entry, 'id'):
+            if hasattr(entry, 'ts'):
                 url = '/' + resource_name + '/' + getattr(entry, 'id')
                 data = entry.prep_schema()
                 self._unis.put(url, data)
@@ -143,7 +143,7 @@ class UNISrt(object):
             data = ws.recv()
         ws.close()
 
-    def poke_remote(self, query):
+    def poke_data(self, query):
         '''
         try to address this issue:
         - ms stores lots of data, and may be separated from unis
@@ -151,6 +151,12 @@ class UNISrt(object):
         - however, sometimes they may be needed. e.g. HELM schedules traceroute measurement, and needs the
           results to schedule following iperf tests
         '''
-        # use unis instance as a temporary solution
-        ret = self._unis.get('/data/' + query)
-        return ret
+        return self._unis.get('/data/' + query)
+    
+    def post_data(self, data):
+        '''
+        same as poke_data, the other way around
+        '''
+        #headers = self._def_headers("data")
+        print data
+        return self._unis.pc.do_req('post', '/data', data)#, headers)

@@ -1,7 +1,4 @@
-from bitarray import bitarray
 from abc import ABCMeta, abstractmethod
-from mercurial.util import dst
-from Cython.Compiler.MemoryView import src_conforms_to_dst
 
 class Crossing(object):
     '''
@@ -128,7 +125,7 @@ class domain(NetworkResource):
             if 'nodes' in data:
                 for v in data['nodes']:
                     if 'href' in v:
-                        self.nodes.append(node(unisrt._unis.get(v['href']), unisrt, localnew))
+                        self.nodes.append(node(unisrt._unis.get(v['href']), unisrt, localnew, self))
                     else:
                         self.nodes.append(node(v, unisrt, localnew, self))
 
@@ -153,12 +150,15 @@ class node(NetworkResource, Node):
     '''
     a node in a network
     '''
-    def __init__(self, data, unisrt, localnew, domain='Unknown'):
+    def __init__(self, data, unisrt, localnew, domain=None):
         super(node, self).__init__(data, unisrt, localnew)
-        if 'domain' in data:
+        if domain:
+            self.domain = domain
+        elif 'domain' in data:
             self.domain = data['domain']
         else:
-            self.domain = domain
+            self.domain = 'Unknow'
+            
         if 'deviceType' in data:
             self.deviceType = data['deviceType']
         else:
@@ -268,6 +268,8 @@ class port(NetworkResource, AttachPoint):
             self.id = data['id']
         else:
             self.id = self.node.id + '_port_' + self.name
+            
+        self.stressed_measurements = set()
         
         '''
         vlan, protocol families etc. are complex, hang them for this
@@ -358,10 +360,6 @@ class link(NetworkResource, Connection):
             ap0 = self.unisrt.ports['existing'][self.endpoints.keys()[0]]
             ap1 = self.unisrt.ports['existing'][self.endpoints.values()[0]]
             self.setup(ap0, ap1, 2)
-                
-        # this attribute marks the available time slots (in seconds) of the link object
-        # right now, scheduler only consider contentions on link objects within a calendar year
-        self.booking = bitarray(3600 * 24 * 365)
 
         unisrt.links[self.localnew and 'new' or 'existing'][self.endpoints.keys()[0]] = self
 
@@ -432,6 +430,7 @@ class measurement(NetworkResource):
     def __init__(self, data, unisrt, localnew):
         super(measurement, self).__init__(data, unisrt, localnew)
         if 'ts' in data: self.ts = data['ts']
+        self.id = data['id']
         self.probe = data['configuration']
         self.service = unisrt.services['existing'][data['service']]
         self.selfRef = data.get('selfRef')
@@ -451,9 +450,12 @@ class measurement(NetworkResource):
             self.src = data['configuration']['src']
             self.dst = data['configuration']['dst']
         
-        # need to consider the key some more: a service should be allowed to run multiple measurement of a same eventType
-        unisrt.measurements[self.localnew and 'new' or 'existing']['%'.join([self.service.selfRef, '+'.join(self.eventTypes)])] = self
-        #unisrt.measurements[self.localnew and 'new' or 'existing'][self.selfRef] = self
+        if self.id in unisrt.measurements[self.localnew and 'new' or 'existing'] and\
+            hasattr(unisrt.measurements[self.localnew and 'new' or 'existing'][self.id], 'metadata'):
+            # keep attribute metadata across instances
+            self.metadata = unisrt.measurements[self.localnew and 'new' or 'existing'][self.id].metadata
+        unisrt.measurements[self.localnew and 'new' or 'existing'][self.id] = self
+        #unisrt.measurements[self.localnew and 'new' or 'existing']['%'.join([self.service.selfRef, '+'.join(self.eventTypes)])] = self
         
     def updateReference(self):
         pass
@@ -478,11 +480,23 @@ class metadata(NetworkResource):
     '''
     def __init__(self, data, unisrt, localnew):
         super(metadata, self).__init__(data, unisrt, localnew)
-        self.measurement = data['parameters']['measurement']['href']
+        if 'forecasted' in data:
+            self.isforecasted = self.data['forecasted']
+        else:
+            self.data['forecasted'] = False
+            self.isforecasted = self.data['forecasted']
+        self.measurement = filter(lambda m: m.selfRef == data['parameters']['measurement']['href'], unisrt.measurements['existing'].values())[0]
         self.eventType = data['eventType']
         self.id = data['id']
         
-        unisrt.metadata[self.localnew and 'new' or 'existing']['%'.join([self.measurement, self.eventType])] = self
+        if not hasattr(self.measurement, 'metadata'):
+            setattr(self.measurement, 'metadata', {})
+            
+        if not self.eventType in self.measurement.metadata:
+            self.measurement.metadata[self.eventType] = {'historical': None, 'forecasted': None}
+            
+        self.measurement.metadata[self.eventType][self.isforecasted and 'forecasted' or 'historical'] = self
+        unisrt.metadata[self.localnew and 'new' or 'existing']['%'.join([self.measurement.id, self.eventType])] = self
         
     def updateReference(self):
         pass
@@ -490,30 +504,99 @@ class metadata(NetworkResource):
     def prep_schema(self):
         return self.data
     
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
 class path(NetworkResource):
     '''
-    path objects tell the hops between two ends
-    '''
-    def __init__(self, data, unisrt, localnew):
+    path objects tell the situation between two ends
+    '''    
+    def __init__(self, data, unisrt, localnew, ismain=True):
         super(path, self).__init__(data, unisrt, localnew)
+
+        # all corresponding ports (L2), ipports (L3) or ends (L4)
+        self._ports = []
         
-        # should convert each hop to the corresponding object
-        str_hops = map(lambda x: x['href'], data['hops'])
-        self.hops = map(lambda x: unisrt.nodes['existing'][x], str_hops)
+        if 'hops' in data:
+            str_hops = map(lambda x: x['href'], data['hops'])
+            self._hops = []#map(lambda x: unisrt.nodes['existing'][x], str_hops)
+        else:
+            self._hops = []
+        
+        try:
+            # bottom line, we should be able to fill fill end-to-end info
+            # TODO: added two paths just for testing
+            self._ends = [filter(lambda p: ('ipv4' in p.data['properties'] and p.data['properties']['ipv4']['address'] == data['src']),\
+                                 unisrt.ports['existing'].values())[0],\
+                             filter(lambda p: ('ipv4' in p.data['properties'] and p.data['properties']['ipv4']['address'] == data['dst']),\
+                                    unisrt.ports['existing'].values())[0]]
+        except IndexError:
+            self._ends = []
+            
         self.status = data['status']
         
         if 'healthiness' in data:
             self.healthiness = data['healthiness']
         if 'performance' in data:
             self.performance = data['performance']
+            
+            
+            
         
-        if '%'.join([data['src'], data['dst']]) not in unisrt.paths[self.localnew and 'new' or 'existing']:
-            unisrt.paths[self.localnew and 'new' or 'existing']['%'.join([data['src'], data['dst']])] = list()
+        if (data['src'], data['dst']) not in unisrt.paths[localnew and 'new' or 'existing']:
+            unisrt.paths[localnew and 'new' or 'existing'][(data['src'], data['dst'])] = {'main': None, 'backup': None}
+            
+        unisrt.paths[localnew and 'new' or 'existing'][(data['src'], data['dst'])][ismain and 'main' or 'backup'] = self
         
-        unisrt.paths[self.localnew and 'new' or 'existing']['%'.join([data['src'], data['dst']])].append(self)
         
+        
+        
+        
+        
+        
+        
+    @property
+    def ends(self):
+        return self._ends
+    
+    @ends.setter
+    def ends(self, values):
+        if not isinstance(values, list):
+            raise TypeError("It should be a list")
+        for value in values:
+            if not isinstance(value, port):
+                raise TypeError("Elements in values should be ports")
+        self._ends = values
+            
     def updateReference(self):
         pass
+    
+    def get_bottom(self):
+        '''
+        return as much detail information as possible of the path 
+        '''
+        # TODO: need to complete the other getter, setter's
+        return self._ports or self._hops or self.ends
     
     def prep_schema(self):
         self.data['status'] = self.status

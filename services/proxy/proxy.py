@@ -6,8 +6,12 @@ difference(s) between this restful interface and the unis' is that this interfac
 for function invocations not object retrievals. 
 """
 import json, re
+import cgi
+import settings
 from BaseHTTPServer import HTTPServer
 from BaseHTTPServer import BaseHTTPRequestHandler
+
+logger = settings.get_logger('proxy')
 
 class MyRequestHandler (BaseHTTPRequestHandler) :
     
@@ -23,8 +27,6 @@ class MyRequestHandler (BaseHTTPRequestHandler) :
     
     def do_GET(self):
         '''
-        this proxy only serves Joseph now, so here is what we do per his requests:
-        
         /domain-id
         {
         nodes: [<name>, ...],
@@ -50,9 +52,10 @@ class MyRequestHandler (BaseHTTPRequestHandler) :
                     
                     ret = {'nodes': [], 'ports': [], 'measurements': []}
                     for node in the_domain.nodes:
-                        ret['nodes'].append(node.name)
+                        ret['nodes'].append({'domain': the_domain.id, 'name': node.name})
                         for port in node.ports.values():
-                            ret['ports'].append({'id': port.id, 'node': node.name})
+                            if 'properties' in port.data and 'ipv4' in port.data['properties'] and 'address' in port.data['properties']['ipv4']:
+                                ret['ports'].append({'id': port.id, 'node': node.name, 'ipv4': port.data['properties']['ipv4']['address']})
                             
                     for measurement in self.server.unisrt.measurements['existing'].values():
                         if hasattr(measurement, 'src'):
@@ -73,27 +76,53 @@ class MyRequestHandler (BaseHTTPRequestHandler) :
             
     def do_POST(self):
         '''
-        post PIT measurements
-        /domain/forecast/{specs}
+        post atomic PIT measurement objects:
+        {
+            domain: <domain-id>,
+            node: <node-id>,
+            port: <port-id>,
+            address: <IPv4 address>
+        }
+        '''
+        if not hasattr(self.server.unisrt, 'forecaster'):
+            logger.warn("NRE service forecaster needs to start first")
+            return
         
-        if None != re.search('/api/v1/addrecord/*', self.path):
+        if re.search('/fullmesh', self.path) != None:
+            # expects [<atom object>...]
             ctype, pdict = cgi.parse_header(self.headers.getheader('content-type'))
-            if ctype == 'application/json':
+            if ctype == 'application/perfsonar+json':
                 length = int(self.headers.getheader('content-length'))
                 data = cgi.parse_qs(self.rfile.read(length), keep_blank_values=1)
-                recordID = self.path.split('/')[-1]
-                LocalData.records[recordID] = data
-                print "record %s is added successfully" % recordID
+                data = json.loads(data.keys()[0]) # TODO: how this is parsed?
+                
+                # full mesh: pair up and submit the task batch to service forecaster
+                targets = []
+                for i in data:
+                    for j in data:
+                        if i['port'] == j['port']:
+                            # assume port-id is globally unique
+                            continue
+                        targets.append({'src-domain': i['domain'], 'src-node': i['node'],\
+                                        'src-addr': i['address'], 'dst-addr': j['address']})
+                        
+                new_measurement_ids = self.server.unisrt.forecaster.follow(targets, ['iperf'],\
+                    scheduler="builtins.scheduled", schedule_params={'every': 120, 'duration': 10, 'num_tests': 3})
+                for meas_id in new_measurement_ids:
+                    self.server.unisrt.forecaster.forecast(meas_id, persistent=True)
             else:
                 data = {}
  
             self.send_response(200)
             self.end_headers()
+        elif re.search('/specified', self.path) != None:
+            # expects [[<atom object>, <atom object>]...]
+            pass
         else:
             self.send_response(403)
             self.send_header('Content-Type', 'application/json')
             self.end_headers()
-        '''
+        
         return
         
 class NREServer(HTTPServer):

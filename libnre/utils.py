@@ -88,10 +88,81 @@ def build_measurement(unisrt, service):
     measurement['$schema'] = "http://unis.crest.iu.edu/schema/20151104/measurement#"
     measurement['service'] = service
     measurement['selfRef'] = unisrt.unis_url + "/measurements/" + muuid
-    #measurement['id'] = muuid
+    measurement['id'] = muuid
     measurement['configuration']['status'] = "ON"
     measurement['configuration']['ms_url'] = unisrt.ms_url
     return measurement
 
-def issamesubnet(addrx, addry, mask):
-    return True
+def build_metadata(unisrt, meas_obj, eventType, isforecasted=False):
+    '''
+    form a bare bone metadata (maybe a bare bone structure is enough?)
+    '''
+    metadata = {
+        "$schema": 'http://unis.crest.iu.edu/schema/20151104/metadata#',
+        "id": uuid.uuid1().hex,
+        "subject": {
+            "href": meas_obj.selfRef,
+            "rel": "full"
+        },
+        "eventType": eventType,
+        "parameters": {
+            "datumSchema": settings.SCHEMAS["datum"],
+            "measurement": {
+                "href": meas_obj.selfRef,
+                "rel": "full"
+            }
+        },
+        "forecasted": isforecasted
+    }
+    return metadata
+
+def get_eventtype_related(eventtype, subject):
+    to_eventtype_l = {
+        'ping': ["ps:tools:blipp:linux:net:ping:ttl", "ps:tools:blipp:linux:net:ping:rtt"],
+        'iperf': ["ps:tools:blipp:linux:net:iperf:bandwidth"],
+        'traceroute': ["ps:tools:blipp:linux:net:traceroute:hopip"]
+    }
+    
+    to_eventtype_d = {
+        'ping': {
+            "ttl": "ps:tools:blipp:linux:net:ping:ttl",
+            "rtt": "ps:tools:blipp:linux:net:ping:rtt"
+        },
+        'iperf': {
+            "bandwidth": "ps:tools:blipp:linux:net:iperf:bandwidth"
+        },
+        'traceroute': {
+            "hopip": "ps:tools:blipp:linux:net:traceroute:hopip"
+        }
+    }
+    
+    to_probe_module = {
+        'ping': "cmd_line_probe",
+        'iperf': "cmd_line_probe",
+        'traceroute': "traceroute_probe"
+    }
+    
+    to_command = {
+        'ping': "ping -c 1 %s",
+        'iperf': "iperf -c %s",
+        'traceroute': "traceroute %s"
+    }
+    
+    to_regex = {
+        'ping': "ttl=(?P<ttl>\\d+).*time=(?P<rtt>\\d+\\.*\\d*) ",
+        'iperf': "(?P<bandwidth>\\d*\\.?\\d* [M,G]bits\\/sec)",
+        'traceroute': "^\\s*\\d+.*(?P<hopip>\\(.*\\))"
+    }
+    
+    if subject == 'eventtype_l':
+        return to_eventtype_l[eventtype]
+    elif subject == 'eventtype_d':
+        return to_eventtype_d[eventtype]
+    elif subject == 'probe_module':
+        return to_probe_module[eventtype]
+    elif subject == 'command':
+        return to_command[eventtype]
+    elif subject == 'regex':
+        return to_regex[eventtype]
+    else:
+        return None
