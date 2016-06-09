@@ -181,3 +181,13 @@ def getGENIResourceLists(unisrt, pairs):
         paths[key] = hops
         
     return paths
+
+def run(unisrt, kwargs):
+    forecaster = Forecaster(unisrt)
+    setattr(unisrt, 'forecaster', forecaster)
+    
+if __name__ == '__main__':
+    import kernel.unisrt
+    unisrt = kernel.unisrt.UNISrt()
+    forecaster = Forecaster(unisrt, 'args')
+    setattr(unisrt, 'forecaster', forecaster)

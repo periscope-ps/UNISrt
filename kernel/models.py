@@ -74,8 +74,9 @@ class NetworkResource(object):
         '''
         pass
     
-    def __init__(self, data, unisrt, localnew):
+    def __init__(self, data, unisrt, currentclient, localnew):
         self.unisrt = unisrt
+        self.currentclient = currentclient
         self.localnew = localnew
         try:
             self.id = data['id']
@@ -112,8 +113,8 @@ class domain(NetworkResource):
     '''
     a domain in a network
     '''
-    def __init__(self, data, unisrt, localnew):
-        super(domain, self).__init__(data, unisrt, localnew)
+    def __init__(self, data, unisrt, currentclient, localnew):
+        super(domain, self).__init__(data, unisrt, currentclient, localnew)
         try:
             self.name = data['id']
         except KeyError:
@@ -125,14 +126,14 @@ class domain(NetworkResource):
             if 'nodes' in data:
                 for v in data['nodes']:
                     if 'href' in v:
-                        self.nodes.append(node(unisrt._unis.get(v['href']), unisrt, localnew, self))
+                        self.nodes.append(node(unisrt._unis.get(v['href']), unisrt, currentclient, localnew, self))
                     else:
-                        self.nodes.append(node(v, unisrt, localnew, self))
+                        self.nodes.append(node(v, unisrt, currentclient, localnew, self))
 
             # TODO: instead of being built separately, link objects should be built with nodes, just like port objects
             if 'links' in data:
                 for v in data['links']:
-                    self.links.append(link(unisrt._unis.get(v['href']), unisrt, localnew))
+                    self.links.append(link(unisrt._unis.get(v['href']), unisrt, currentclient, localnew))
             
             unisrt.domains[self.localnew and 'new' or 'existing'][data['id']] = self
             
@@ -150,8 +151,8 @@ class node(NetworkResource, Node):
     '''
     a node in a network
     '''
-    def __init__(self, data, unisrt, localnew, domain=None):
-        super(node, self).__init__(data, unisrt, localnew)
+    def __init__(self, data, unisrt, currentclient, localnew, domain=None):
+        super(node, self).__init__(data, unisrt, currentclient, localnew)
         if domain:
             self.domain = domain
         elif 'domain' in data:
@@ -185,7 +186,11 @@ class node(NetworkResource, Node):
                 self.ports[v['name']] = port(v, unisrt, localnew, self)
         if 'ports' in data and not localnew:
             for v in data['ports']:
-                value = unisrt._unis.get(v['href'])
+                value = currentclient.get(v['href'])
+                
+                if not value:
+                    # port href encoded in node object GET nothing
+                    continue
                 
                 # TODO: all kinds of ports should be indexed by selfRef in their layers in the node AP property
                 p = port(value, unisrt, localnew, self)
@@ -255,8 +260,8 @@ class port(NetworkResource, AttachPoint):
     '''
     a layer 2 port
     '''
-    def __init__(self, data, unisrt, localnew, node=None, capacity=1e3, queue=None):
-        super(port, self).__init__(data, unisrt, localnew)
+    def __init__(self, data, unisrt, currentclient, localnew, node=None, capacity=1e3, queue=None):
+        super(port, self).__init__(data, unisrt, currentclient, localnew)
         self.node = node
         self.capacity = capacity
         self.queue = {'flip': [], 'flop': []}
@@ -310,8 +315,8 @@ class ipport(NetworkResource, AttachPoint):
     '''
     a layer 3 addressable port
     '''
-    def __init__(self, data, unisrt, localnew, node=None):
-        super(ipport, self).__init__(data, unisrt, localnew)
+    def __init__(self, data, unisrt, currentclient, localnew, node=None):
+        super(ipport, self).__init__(data, unisrt, currentclient, localnew)
         if node:
             self.node = node
             self.port = data['selfRef']
@@ -335,8 +340,8 @@ class ipport(NetworkResource, AttachPoint):
         return ret
 
 class link(NetworkResource, Connection):
-    def __init__(self, data, unisrt, localnew):
-        super(link, self).__init__(data, unisrt, localnew)
+    def __init__(self, data, unisrt, currentclient, localnew):
+        super(link, self).__init__(data, unisrt, currentclient, localnew)
         self.urn = data['urn']
         self.id = data['id']
         if 'name' in data:
@@ -370,8 +375,8 @@ class service(NetworkResource):
     '''
     a service running in a network
     '''
-    def __init__(self, data, unisrt, localnew, node=None):
-        super(service, self).__init__(data, unisrt, localnew)
+    def __init__(self, data, unisrt, currentclient, localnew, node=None):
+        super(service, self).__init__(data, unisrt, currentclient, localnew)
         self.id = data['id']
         #self.name = data['name']
         self.serviceType = data['serviceType']
@@ -395,7 +400,7 @@ class service(NetworkResource):
             try:
                 self.node = unisrt.nodes['existing'][data['runningOn']['href']]
             except KeyError, e:
-                print "node %s hasn't been found in rt" % str(e)
+                print "node %s hasn't been found in rt for this service" % str(e)
         if hasattr(self, 'node'):
             if hasattr(self.node, 'services'):
                 self.node.services[data['serviceType']] = self
@@ -427,12 +432,17 @@ class measurement(NetworkResource):
     '''
     a network measurement event
     '''
-    def __init__(self, data, unisrt, localnew):
-        super(measurement, self).__init__(data, unisrt, localnew)
+    def __init__(self, data, unisrt, currentclient, localnew):
+        super(measurement, self).__init__(data, unisrt, currentclient, localnew)
         if 'ts' in data: self.ts = data['ts']
         self.id = data['id']
         self.probe = data['configuration']
-        self.service = unisrt.services['existing'][data['service']]
+        
+        try:
+            self.service = unisrt.services['existing'][data['service']]
+        except KeyError as e:
+            self.service = None
+        
         self.selfRef = data.get('selfRef')
         self.eventTypes = data.get('eventTypes')
         
@@ -454,6 +464,7 @@ class measurement(NetworkResource):
             hasattr(unisrt.measurements[self.localnew and 'new' or 'existing'][self.id], 'metadata'):
             # keep attribute metadata across instances
             self.metadata = unisrt.measurements[self.localnew and 'new' or 'existing'][self.id].metadata
+        
         unisrt.measurements[self.localnew and 'new' or 'existing'][self.id] = self
         #unisrt.measurements[self.localnew and 'new' or 'existing']['%'.join([self.service.selfRef, '+'.join(self.eventTypes)])] = self
         
@@ -466,8 +477,8 @@ class measurement(NetworkResource):
             self.data['scheduled_times'] = self.scheduled_times
         self.data['configuration']['status'] = getattr(self, 'status', 'ON')
         self.data['configuration']['collection_schedule'] = getattr(self, 'collection_schedule')
-        self.data['configuration']['src'] = self.src
-        self.data['configuration']['dst'] = self.dst
+        self.data['configuration']['src'] = getattr(self, 'src', None)
+        self.data['configuration']['dst'] = getattr(self, 'dst', None)
         if hasattr(self, 'regex'):
             self.data['configuration']['regex'] = self.regex
         self.data['configuration']['command'] = getattr(self, 'command')
@@ -478,8 +489,8 @@ class metadata(NetworkResource):
     '''
     metadata can refer to information like measurement data etc.
     '''
-    def __init__(self, data, unisrt, localnew):
-        super(metadata, self).__init__(data, unisrt, localnew)
+    def __init__(self, data, unisrt, currentclient, localnew):
+        super(metadata, self).__init__(data, unisrt, currentclient, localnew)
         if 'forecasted' in data:
             self.isforecasted = self.data['forecasted']
         else:
@@ -531,8 +542,8 @@ class path(NetworkResource):
     '''
     path objects tell the situation between two ends
     '''    
-    def __init__(self, data, unisrt, localnew, ismain=True):
-        super(path, self).__init__(data, unisrt, localnew)
+    def __init__(self, data, unisrt, currentclient, localnew, ismain=True):
+        super(path, self).__init__(data, unisrt, currentclient, localnew)
 
         # all corresponding ports (L2), ipports (L3) or ends (L4)
         self._ports = []

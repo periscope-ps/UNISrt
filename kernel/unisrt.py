@@ -57,6 +57,8 @@ class UNISrt(object):
         self._schemas = SchemaCache()
         self._resources = self.conf['resources']
         
+        self._subunisclient = {}
+        
         for resource in self._resources:
             setattr(self, resource, {'new': {}, 'existing': {}})
         
@@ -64,8 +66,7 @@ class UNISrt(object):
         for resource in self._resources:
             # only pullRuntime once at the beginning, as pubsub will only update
             # them later when resources are modified on the server
-            self.pullRuntime(self._unis.get(resource), resource, False)
-            threading.Thread(name=resource, target=self.subscribeRuntime, args=(resource,)).start()
+            self.pullRuntime(self, self._unis, self._unis.get(resource), resource, False)
         
         # construct the graph representation of the network, of which this NRE is in charge
         self.g = Graph()
@@ -78,18 +79,44 @@ class UNISrt(object):
                 self.g.add_edge(self.nodebook[link.src.node.selfRef],\
                                 self.nodebook[link.dst.node.selfRef], add_missing=False)
         
-    def pullRuntime(self, data, resource_name, localnew):
+    def pullRuntime(self, mainrt, currentclient, data, resource_name, localnew):
         '''
         this function should convert the input data into Python runtime objects
         '''
         model = resources_classes[resource_name]
         
-        # sorting: in unisrt res dictionaries, a newer record of same index will be saved
-        if data and isinstance(data, list):
+        print resource_name
+        if data and 'redirect' in data and 'instances' in data:
+            if len(data['instances']) == 0:
+                return
+            
+            for instance_url in data['instances']:
+                if instance_url == 'https://dlt.crest.iu.edu:9000':
+                    # TODO: needs SSL, not figured out yet, pretend it does not exist for now
+                    continue
+                
+                if instance_url not in self._subunisclient:
+                    conf_tmp = deepcopy(self.conf)
+                    conf_tmp['properties']['configurations']['unis_url'] = instance_url
+                    conf_tmp['properties']['configurations']['ms_url'] = instance_url # assume ms is the same as unis
+                    self._subunisclient[instance_url] = unis_client.UNISInstance(conf_tmp)
+                
+                unis_tmp = self._subunisclient[instance_url]
+                
+                self.pullRuntime(mainrt, unis_tmp, unis_tmp.get(resource_name), resource_name, False)
+                    
+        elif data and isinstance(data, list):
+            # sorting: in unisrt res dictionaries, a newer record of same index will be saved
             data.sort(key=lambda x: x.get('ts', 0), reverse=False)
             for v in data:
-                model(v, self, localnew)
-
+                model(v, mainrt, currentclient, localnew)
+                
+            threading.Thread(name=resource_name + '@' + currentclient.config['unis_url'],\
+                             target=self.subscribeRuntime, args=(resource_name, self._unis,)).start()
+            
+                
+                
+        
     def pushRuntime(self, resource_name):
         '''
         this function upload specified resource to UNIS
@@ -101,7 +128,16 @@ class UNISrt(object):
             if hasattr(entry, 'ts'):
                 url = '/' + resource_name + '/' + getattr(entry, 'id')
                 data = entry.prep_schema()
+                
+                
+                
+                
+                
                 self._unis.put(url, data)
+                
+                
+                
+                
                 
                 # the put() function may not do pubsub, so change to existing manually
 #                if k in getattr(self, resource_name)['existing'] and isinstance(getattr(self, resource_name)['existing'][k], list):
@@ -112,7 +148,22 @@ class UNISrt(object):
             else:
                 url = '/' + resource_name
                 data = entry.prep_schema()
+                
+                
+                
+                
+                
                 ret = self._unis.post(url, data)
+                '''
+                TODO: OSiRIS special
+                groups = data['service'].split('/')
+                tmp = '/'.join(groups[:3])
+                su = self._subunisclient[tmp]
+                ret = su.post(url, data)
+                a = ret
+                '''
+                
+                
                 
         while True:
             try:
@@ -127,19 +178,25 @@ class UNISrt(object):
             except KeyError:
                 return
     
-    def subscribeRuntime(self, resource_name):
+    def subscribeRuntime(self, resource_name, currentclient):
         '''
         subscribe a channel(resource) to UNIS, and listen for any new updates on that channel
+        TODO: don't know how to subscribe in hierarchical unis. to whom it should subscribe?
         '''
         #name = resources_subscription[resource_name]
         name = resource_name
         model = resources_classes[resource_name]
-        url = self.unis_url.replace('http', 'ws', 1)
+        
+        #url = self.unis_url.replace('http', 'ws', 1)
+        unis_url = currentclient.config['unis_url']
+        url = unis_url.replace('http', 'ws', 1)
         url = url + '/subscribe/' + name
+        
         ws = create_connection(url)
+        
         data = ws.recv()
         while data:
-            model(json.loads(data), self, False)
+            model(json.loads(data), self, currentclient, False)
             data = ws.recv()
         ws.close()
 

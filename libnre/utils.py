@@ -120,7 +120,8 @@ def get_eventtype_related(eventtype, subject):
     to_eventtype_l = {
         'ping': ["ps:tools:blipp:linux:net:ping:ttl", "ps:tools:blipp:linux:net:ping:rtt"],
         'iperf': ["ps:tools:blipp:linux:net:iperf:bandwidth"],
-        'traceroute': ["ps:tools:blipp:linux:net:traceroute:hopip"]
+        'traceroute': ["ps:tools:blipp:linux:net:traceroute:hopip"],
+        'owping': ["ps:tools:blipp:linux:net:owamp:owping"]
     }
     
     to_eventtype_d = {
@@ -133,25 +134,31 @@ def get_eventtype_related(eventtype, subject):
         },
         'traceroute': {
             "hopip": "ps:tools:blipp:linux:net:traceroute:hopip"
+        },
+        'owping': {
+            "owping": "ps:tools:blipp:linux:net:owamp:owping"
         }
     }
     
     to_probe_module = {
         'ping': "cmd_line_probe",
         'iperf': "cmd_line_probe",
-        'traceroute': "traceroute_probe"
+        'traceroute': "traceroute_probe",
+        'owping': "cmd_line_probe"
     }
     
     to_command = {
         'ping': "ping -c 1 %s",
         'iperf': "iperf -c %s",
-        'traceroute': "traceroute %s"
+        'traceroute': "traceroute %s",
+        'owping': "owping %s"
     }
     
     to_regex = {
         'ping': "ttl=(?P<ttl>\\d+).*time=(?P<rtt>\\d+\\.*\\d*) ",
         'iperf': "(?P<bandwidth>\\d*\\.?\\d* [M,G]bits\\/sec)",
-        'traceroute': "^\\s*\\d+.*(?P<hopip>\\(.*\\))"
+        'traceroute': "^\\s*\\d+.*(?P<hopip>\\(.*\\))",
+        'owping': "one-way delay min/median/max = [0-9]+([,.][0-9]+)?/(?P<owping>.*)/[0-9]+([,.][0-9]+)?\\ ms,"
     }
     
     if subject == 'eventtype_l':

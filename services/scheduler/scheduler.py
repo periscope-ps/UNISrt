@@ -75,14 +75,28 @@ class Scheduler(object):
         schedule_params: duration, repeat_num, frequency
         '''
         def add_measuring_task(meas, task_set):
+            try:
+                task_set[meas] = self.unisrt.paths['existing'][(meas.src, meas.dst)]['main'].get_bottom()
+                #task_set[meas] = [meas.src, meas.dst]
+                
+                
+            except KeyError:
+                # paths shall return L2 ports at its best understanding, e.g. all ports along link layers,
+                # or ports along the network layer or at least the two end ports at the transport layer, however,
+                # if the paths object has not been constructed by the pathfinder service, this exception has to
+                # make up some on the fly
+                task_set[meas] = [filter(lambda p: ('ipv4' in p.data['properties'] and p.data['properties']['ipv4']['address'] == meas.src),\
+                                 self.unisrt.ports['existing'].values())[0],\
+                             filter(lambda p: ('ipv4' in p.data['properties'] and p.data['properties']['ipv4']['address'] == meas.dst),\
+                                    self.unisrt.ports['existing'].values())[0]]
+                
             # recursive, cascading add interfered measurements
-            task_set[meas] = self.unisrt.paths['existing'][(meas.src, meas.dst)]['main'].get_bottom()
-            
-            for res in self.unisrt.paths['existing'][(meas.src, meas.dst)]['main'].get_bottom():
+            ''' TODO: commented for Friday OSiRIS!!! It is all because no port information was uploaded by blipp yet
+            for res in task_set[meas]:#self.unisrt.paths['existing'][(meas.src, meas.dst)]['main'].get_bottom():
                 for scheduled_meas in res.stressed_measurements:
                     if scheduled_meas not in task_set.keys():
                         add_measuring_task(scheduled_meas, task_set)
-                        
+            '''
         
         new_tasks = {}
         for meas in measurements:
@@ -95,13 +109,13 @@ class Scheduler(object):
             for res in self.unisrt.paths['existing'][(meas.src, meas.dst)]['main'].get_bottom():
                 for scheduled_meas in res.stressed_measurements:
                     new_tasks[scheduled_meas] = self.unisrt.paths['existing'][(scheduled_meas.src, scheduled_meas.dst)]['main'].get_bottom()
-        '''
+        
         
         # register measurements back to their resources
         for meas, resources in new_tasks.iteritems():
             for res in resources:
                 res.stressed_measurements.add(meas)
-                
+        '''        
         # construct the intersection graph of this run
         ug, vprop_name = coloring.construct_graph(new_tasks)
         

@@ -59,7 +59,8 @@ class Forecaster(object):
         else:
             new_measurements = []
             for task in targets:
-                src_node = filter(lambda n: n.id == task['src-node'], self.unisrt.domains['existing'][task['src-domain']].nodes)[0]
+                #src_node = filter(lambda n: n.id == task['src-node'], self.unisrt.domains['existing'][task['src-domain']].nodes)[0]
+                src_node = self.unisrt.nodes['existing'][task['src-node']]
                 src_blipp = src_node.services['ps:tools:blipp']
                 for followed_event in followed_events:
                     meas = build_measurement(self.unisrt, src_blipp.selfRef)
@@ -69,8 +70,8 @@ class Forecaster(object):
                             "ms_url": self.unisrt.ms_url,
                             "collection_schedule": scheduler,
                             "schedule_params": schedule_params,
-                            "reporting_params": 3,
-                            "reporting tolerance": 10,
+                            "reporting_params": 1,
+                            "reporting_tolerance": 10,
                             "collection_size":100000,
                             "collection_ttl":1500000,
                             "unis_url": self.unisrt.unis_url,
@@ -94,11 +95,24 @@ class Forecaster(object):
                         measurement(meas, self.unisrt, True)
                     '''
                     # measurements are not pushed until scheduled
-                    new_measurements.append(measurement(meas, self.unisrt, True))
+                    new_measurements.append(measurement(meas, self.unisrt, None, True))
                 
             self.targets.extend([m.id for m in new_measurements])
             return self.unisrt.scheduler.schedule(new_measurements, schedule_params)
-        
+    
+    def unfollow(self, del_meas):
+        for dm in del_meas:
+            if dm not in self.unisrt.measurements['existing']:
+                return False
+        for dm in del_meas:
+            tmp = self.unisrt.measurements['existing'][dm]
+            setattr(tmp, 'status', 'OFF')
+            tmp.renew_local(dm)
+            
+        self.unisrt.pushRuntime('measurements')
+            
+        return True
+    
     def forecast(self, meas_id, tolerance=60, fa='services.forecaster.forecalgorithms.slidingwnd', future=None, persistent=False):
         '''
         poll probe results from certain measurement, and apply statistical tool
@@ -186,6 +200,7 @@ class Forecaster(object):
                 data = build_metadata(self.unisrt, meas_obj, eventType, isforecasted=True)
                 metadata(data, self.unisrt, localnew=True)
             
+            # TODO: ignore for today, Friday!!!!!!
             self.unisrt.pushRuntime('metadata')
             
             for eventType in meas_obj.eventTypes:
