@@ -230,9 +230,6 @@ class node(NetworkResource, Node):
         '''
         use urn to ensure theoretical unique matching
         '''
-        
-        
-        
         # TODO: why not use dict and index nodes inside domains?
         for domain in self.unisrt.domains['existing'].values():
             for node in domain.nodes:
@@ -240,10 +237,7 @@ class node(NetworkResource, Node):
                     domain.nodes.remove(node)
                     domain.nodes.append(self)
                     return
-                
-                
-                
-        
+
     def prep_schema(self):
         ret = {}
         ret['id'] = self.id
@@ -555,8 +549,7 @@ class path(NetworkResource):
             self._hops = []
         
         try:
-            # bottom line, we should be able to fill fill end-to-end info
-            # TODO: added two paths just for testing
+            # bottom line, we should be able to fill the end-to-end info
             self._ends = [filter(lambda p: ('ipv4' in p.data['properties'] and p.data['properties']['ipv4']['address'] == data['src']),\
                                  unisrt.ports['existing'].values())[0],\
                              filter(lambda p: ('ipv4' in p.data['properties'] and p.data['properties']['ipv4']['address'] == data['dst']),\
@@ -574,10 +567,14 @@ class path(NetworkResource):
             
             
         
+        
+        
+        
         if (data['src'], data['dst']) not in unisrt.paths[localnew and 'new' or 'existing']:
             unisrt.paths[localnew and 'new' or 'existing'][(data['src'], data['dst'])] = {'main': None, 'backup': None}
             
         unisrt.paths[localnew and 'new' or 'existing'][(data['src'], data['dst'])][ismain and 'main' or 'backup'] = self
+        
         
         
         

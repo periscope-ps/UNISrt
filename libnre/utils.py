@@ -87,10 +87,10 @@ def build_measurement(unisrt, service):
     muuid = uuid.uuid1().hex
     measurement['$schema'] = "http://unis.crest.iu.edu/schema/20151104/measurement#"
     measurement['service'] = service
-    measurement['selfRef'] = unisrt.unis_url + "/measurements/" + muuid
+    measurement['selfRef'] = unisrt.config['unis_url'] + "/measurements/" + muuid
     measurement['id'] = muuid
     measurement['configuration']['status'] = "ON"
-    measurement['configuration']['ms_url'] = unisrt.ms_url
+    measurement['configuration']['ms_url'] = unisrt.config['ms_url']
     return measurement
 
 def build_metadata(unisrt, meas_obj, eventType, isforecasted=False):
@@ -120,6 +120,7 @@ def get_eventtype_related(eventtype, subject):
     to_eventtype_l = {
         'ping': ["ps:tools:blipp:linux:net:ping:ttl", "ps:tools:blipp:linux:net:ping:rtt"],
         'iperf': ["ps:tools:blipp:linux:net:iperf:bandwidth"],
+        'iperf3': ["ps:tools:blipp:linux:net:iperf3:bandwidth", "ps:tools:blipp:linux:net:iperf3:retransmit"],
         'traceroute': ["ps:tools:blipp:linux:net:traceroute:hopip"],
         'owping': ["ps:tools:blipp:linux:net:owamp:owping"]
     }
@@ -132,6 +133,10 @@ def get_eventtype_related(eventtype, subject):
         'iperf': {
             "bandwidth": "ps:tools:blipp:linux:net:iperf:bandwidth"
         },
+        'iperf3': {
+            "bandwidth": "ps:tools:blipp:linux:net:iperf3:bandwidth",
+            "retransmit": "ps:tools:blipp:linux:net:iperf3:retransmit"
+        },
         'traceroute': {
             "hopip": "ps:tools:blipp:linux:net:traceroute:hopip"
         },
@@ -143,6 +148,7 @@ def get_eventtype_related(eventtype, subject):
     to_probe_module = {
         'ping': "cmd_line_probe",
         'iperf': "cmd_line_probe",
+        'iperf3': "cmd_line_probe",
         'traceroute': "traceroute_probe",
         'owping': "cmd_line_probe"
     }
@@ -150,15 +156,17 @@ def get_eventtype_related(eventtype, subject):
     to_command = {
         'ping': "ping -c 1 %s",
         'iperf': "iperf -c %s",
+        'iperf3': "iperf3 -c %s",
         'traceroute': "traceroute %s",
         'owping': "owping %s"
     }
     
     to_regex = {
         'ping': "ttl=(?P<ttl>\\d+).*time=(?P<rtt>\\d+\\.*\\d*) ",
-        'iperf': "(?P<bandwidth>\\d*\\.?\\d* [M,G]bits\\/sec)",
+        'iperf': "(?P<bandwidth>\\d*\\.?\\d* [MG]bits\\/sec)",
+        'iperf3': "(?P<bandwidth>[0-9]+(.[0-9]+)?) [GMK]bits/sec\\s+(?P<retransmit>\\d+)\\s+sender\\n",
         'traceroute': "^\\s*\\d+.*(?P<hopip>\\(.*\\))",
-        'owping': "one-way delay min/median/max = [0-9]+([,.][0-9]+)?/(?P<owping>.*)/[0-9]+([,.][0-9]+)?\\ ms,"
+        'owping': "= [0-9]+(.[0-9]+)?/(?P<owping>[0-9]+(.[0-9]+)?)/[0-9]+(.[0-9]+)? ms, \\(.+\\)\\n"
     }
     
     if subject == 'eventtype_l':

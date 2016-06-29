@@ -22,22 +22,22 @@ class Forecaster(object):
         self.unisrt = unisrt
         self.targets = list()
             
-    def follow(self, targets, followed_events, scheduler="builtins.scheduled", schedule_params={}):
+    def follow(self, targets):
         '''
         Keeps an eye on the given targets, a.k.a. to launch measurement tasks on targets
         '''
-        if scheduler == "builtins.scheduled" and not getattr(self.unisrt, 'scheduler', None):
+        all_sched = []
+        map(lambda x: all_sched.extend(map(lambda y: y['scheduler'], x['events'])), targets)
+        if "builtins.scheduled" in all_sched and not getattr(self.unisrt, 'scheduler', None):
             logger.warn("NRE service scheduler needs to start first. Not following...")
             return []
         
         if not targets:
-            # no targets means all targets, obtain all measurements already in this domain
-            # TODO: implies all services provide some predict-able measurements -- true for now
+            '''
             p = re.compile("urn:.*\+idms-ig-ill\+.*") # the slice that we are interested in
             slice_services = filter(lambda x: p.match(x.node.urn), self.unisrt.services['existing'].values())
-    
-            '''
-            same slice name may contain historical objects with same names, try to use the last set of objects...
+            
+            # in GENI, same slice name may contain historical objects with same names, try to use the last set of objects...
             from cluster import HierarchicalClustering
             data = {n.data['ts']: n for n in slice_services}
             hc = HierarchicalClustering(data.keys(), lambda x,y: abs(x-y))
@@ -50,55 +50,63 @@ class Forecaster(object):
                     big_index = i
             tss = clsts[big_index]
             services = filter(lambda n: n.data['ts'] in tss, slice_services)
-            '''
             
             # filter measurements on their services and extend targets
             self.targets.extend(filter(lambda m: m.service in slice_services, self.unisrt.measurements['existing'].values()))
             return self.targets
-            
+            '''
         else:
-            new_measurements = []
+            passive_measurements = []
+            active_measurements = []
             for task in targets:
+                if task['unis_instance'] == self.unisrt.unis_url:
+                    uc = self.unisrt._unis
+                else:
+                    uc = self.unisrt._subunisclient[task['unis_instance']]
+                    
                 #src_node = filter(lambda n: n.id == task['src-node'], self.unisrt.domains['existing'][task['src-domain']].nodes)[0]
-                src_node = self.unisrt.nodes['existing'][task['src-node']]
+                src_node = self.unisrt.nodes['existing'][uc.config['unis_url'] + '/nodes/' + task['src-node']]
                 src_blipp = src_node.services['ps:tools:blipp']
-                for followed_event in followed_events:
-                    meas = build_measurement(self.unisrt, src_blipp.selfRef)
+                for followed_event in task['events']:
+                    meas = build_measurement(uc, src_blipp.selfRef)
                     meas.update({
-                        "eventTypes": get_eventtype_related(followed_event, 'eventtype_l'),
+                        "eventTypes": get_eventtype_related(followed_event['type'], 'eventtype_l'),
                         "configuration": {
-                            "ms_url": self.unisrt.ms_url,
-                            "collection_schedule": scheduler,
-                            "schedule_params": schedule_params,
+                            "ms_url": uc.config['ms_url'],
+                            "collection_schedule": followed_event['scheduler'],
+                            "schedule_params": followed_event['schedule_params'],
                             "reporting_params": 1,
                             "reporting_tolerance": 10,
                             "collection_size":100000,
                             "collection_ttl":1500000,
-                            "unis_url": self.unisrt.unis_url,
+                            "unis_url": uc.config['unis_url'],
                             "use_ssl": False,
-                            "name": followed_event + "-" + task['dst-addr'],
+                            "name": followed_event['type'] + "-" + task['dst-addr'],
                             "src": task['src-addr'],
                             "dst": task['dst-addr'],
-                            "probe_module": get_eventtype_related(followed_event, 'probe_module'),
-                            "command": get_eventtype_related(followed_event, 'command') % task['dst-addr'],
-                            "regex": get_eventtype_related(followed_event, 'regex'),
-                            "eventTypes": get_eventtype_related(followed_event, 'eventtype_d')
+                            "probe_module": get_eventtype_related(followed_event['type'], 'probe_module'),
+                            "command": get_eventtype_related(followed_event['type'], 'command') % task['dst-addr'],
+                            "regex": get_eventtype_related(followed_event['type'], 'regex'),
+                            "eventTypes": get_eventtype_related(followed_event['type'], 'eventtype_d')
                         }
                     })
-                    '''
-                    TODO: should check to prevent duplicated measurements, ignored for now
-                    if len(filter(lambda m: m.src == pair[0].name and\
-                                           m.dst == pair[1].name and\
-                                           BANDWIDTH in m.eventTypes, self.unisrt.measurements['existing'].values())) > 1:
-                        logger.warn("The same event type {et} between source-destination pair {src} and {dst} is found in multiple measurement instances. Which to use?".format(et = BANDWIDTH, src = pair[0].name, dst = pair[1].name))
-                    else:
-                        measurement(meas, self.unisrt, True)
-                    '''
                     # measurements are not pushed until scheduled
-                    new_measurements.append(measurement(meas, self.unisrt, None, True))
+                    if followed_event['scheduler'] == "builtins.scheduled":
+                        active_measurements.append(measurement(meas, self.unisrt, None, True))
+                    else:
+                        passive_measurements.append(measurement(meas, self.unisrt, None, True))
+            
+            self.targets.extend([m.id for m in passive_measurements])
+            self.targets.extend([m.id for m in active_measurements])
+            
+            if active_measurements:
+                # TODO: technical difficulty, how to fit measurement tasks with different length? I have
+                # to forge a unified "schedule_params" for all active measurement tasks now.
+                schedule_params = {"every": 7200, "duration": 30, "num_tests": 20}
+                self.unisrt.scheduler.schedule(active_measurements, schedule_params)
                 
-            self.targets.extend([m.id for m in new_measurements])
-            return self.unisrt.scheduler.schedule(new_measurements, schedule_params)
+            self.unisrt.pushRuntime('measurements')
+            return True
     
     def unfollow(self, del_meas):
         for dm in del_meas:
@@ -200,7 +208,6 @@ class Forecaster(object):
                 data = build_metadata(self.unisrt, meas_obj, eventType, isforecasted=True)
                 metadata(data, self.unisrt, localnew=True)
             
-            # TODO: ignore for today, Friday!!!!!!
             self.unisrt.pushRuntime('metadata')
             
             for eventType in meas_obj.eventTypes:

@@ -91,9 +91,8 @@ class UNISrt(object):
                 return
             
             for instance_url in data['instances']:
-                if instance_url == 'https://dlt.crest.iu.edu:9000':
-                    # TODO: needs SSL, not figured out yet, pretend it does not exist for now
-                    continue
+                # TODO: needs SSL, not figured out yet, pretend it does not exist for now
+                if instance_url == 'https://dlt.crest.iu.edu:9000': continue
                 
                 if instance_url not in self._subunisclient:
                     conf_tmp = deepcopy(self.conf)
@@ -113,57 +112,28 @@ class UNISrt(object):
                 
             threading.Thread(name=resource_name + '@' + currentclient.config['unis_url'],\
                              target=self.subscribeRuntime, args=(resource_name, self._unis,)).start()
-            
-                
-                
         
     def pushRuntime(self, resource_name):
         '''
         this function upload specified resource to UNIS
         '''
         def pushEntry(k, entry):
-            # TODO: use attribute "ts" to indicate an object downloaded from UNIS
-            # for this sort of objects, only update their values.
-            # this requires to remove "id" from all local created objects, not done yet
+            data = entry.prep_schema()
+            groups = data['selfRef'].split('/')
+            unis_str = '/'.join(groups[:3])
+            if unis_str in self._subunisclient:
+                uc = self._subunisclient[unis_str]
+            else:
+                uc = self._unis
+            
+            # use attribute "ts" to indicate an object downloaded from UNIS, and
+            # only UPDATE the values of this kind of objects.
             if hasattr(entry, 'ts'):
                 url = '/' + resource_name + '/' + getattr(entry, 'id')
-                data = entry.prep_schema()
-                
-                
-                
-                
-                
-                self._unis.put(url, data)
-                
-                
-                
-                
-                
-                # the put() function may not do pubsub, so change to existing manually
-#                if k in getattr(self, resource_name)['existing'] and isinstance(getattr(self, resource_name)['existing'][k], list):
-#                    getattr(self, resource_name)['existing'][k].append(entry)
-#                else:
-#                    getattr(self, resource_name)['existing'][k] = entry
-                
+                uc.put(url, data)
             else:
                 url = '/' + resource_name
-                data = entry.prep_schema()
-                
-                
-                
-                
-                
-                ret = self._unis.post(url, data)
-                '''
-                TODO: OSiRIS special
-                groups = data['service'].split('/')
-                tmp = '/'.join(groups[:3])
-                su = self._subunisclient[tmp]
-                ret = su.post(url, data)
-                a = ret
-                '''
-                
-                
+                uc.post(url, data)
                 
         while True:
             try:
@@ -181,7 +151,6 @@ class UNISrt(object):
     def subscribeRuntime(self, resource_name, currentclient):
         '''
         subscribe a channel(resource) to UNIS, and listen for any new updates on that channel
-        TODO: don't know how to subscribe in hierarchical unis. to whom it should subscribe?
         '''
         #name = resources_subscription[resource_name]
         name = resource_name

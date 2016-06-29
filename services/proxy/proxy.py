@@ -40,6 +40,9 @@ class MyRequestHandler (BaseHTTPRequestHandler) :
             query = self.path.split('/')
             
             if query[1] == 'domains':
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
                 ret = self.server.unisrt.domains['existing'].keys()
                 json.dump(ret, self.wfile)
                 return
@@ -100,7 +103,7 @@ class MyRequestHandler (BaseHTTPRequestHandler) :
             if ctype == 'application/perfsonar+json':
                 length = int(self.headers.getheader('content-length'))
                 data = cgi.parse_qs(self.rfile.read(length), keep_blank_values=1)
-                data = json.loads(data.keys()[0]) # TODO: how this is parsed?
+                data = json.loads(data.keys()[0])
                 
                 # full mesh: pair up and submit the task batch to service forecaster
                 targets = []
@@ -133,7 +136,7 @@ class MyRequestHandler (BaseHTTPRequestHandler) :
             if ctype == 'application/perfsonar+json':
                 length = int(self.headers.getheader('content-length'))
                 data = cgi.parse_qs(self.rfile.read(length), keep_blank_values=1)
-                data = json.loads(data.keys()[0]) # TODO: how this is parsed?
+                data = json.loads(data.keys()[0])
                 
                 if 'delete' in data:
                     del_meas = data['delete']
@@ -142,19 +145,30 @@ class MyRequestHandler (BaseHTTPRequestHandler) :
                         self.send_response(400)
                         self.end_headers()
                         return
-                
+                    
                 if 'insert' in data:
                     targets = []
-                    for ends in data['insert']:
-                        targets.append({'src-domain': ends[0]['domain'], 'src-node': self.server.unisrt.unis_url+'/nodes/'+ends[0]['node'],\
-                                        'src-addr': ends[0]['address'], 'dst-addr': ends[1]['address']})
-                        targets.append({'src-domain': ends[1]['domain'], 'src-node': self.server.unisrt.unis_url+'/nodes/'+ends[1]['node'],\
-                                        'src-addr': ends[1]['address'], 'dst-addr': ends[0]['address']})
+                    for target in data['insert']:
+                        ends = target['endpoints']
+                        events = target['events']
+                        targets.append({'src-domain': ends[0]['domain'], 'src-node': ends[0]['node'],\
+                                        'src-addr': ends[0]['address'], 'dst-addr': ends[1]['address'],\
+                                        'unis_instance': ends[0]['unis_instance'], 'events': events})
+                        targets.append({'src-domain': ends[1]['domain'], 'src-node': ends[1]['node'],\
+                                        'src-addr': ends[1]['address'], 'dst-addr': ends[0]['address'],\
+                                        'unis_instance': ends[1]['unis_instance'], 'events': events})
                     
-                    if not self.server.unisrt.forecaster.follow(targets,\
-                                                                ['iperf', 'owping'],\
-                                                                scheduler="builtins.scheduled",\
-                                                                schedule_params={'every': 1800, 'duration': 30, 'num_tests': 1}):
+                    if not self.server.unisrt.forecaster.follow(targets):
+                    
+                    #if not self.server.unisrt.forecaster.follow(targets,\
+                    #                                            data['events'],\
+                    #                                            data['schedulers'],\
+                    #                                            data['schedule_params']):
+                        
+                    #if not self.server.unisrt.forecaster.follow(targets,\
+                    #                                            ['iperf', 'owping'],\
+                    #                                            scheduler="builtins.scheduled",\
+                    #                                            schedule_params={'every': 1800, 'duration': 30, 'num_tests': 1}):
                         data = {}
                         self.send_response(400)
                         self.end_headers()

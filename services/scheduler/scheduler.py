@@ -72,7 +72,7 @@ class Scheduler(object):
     def schedule(self, measurements, schedule_params):
         '''
         measurements: list of measurement objects to be scheduled
-        schedule_params: duration, repeat_num, frequency
+        schedule_params: every, duration, num_tests
         '''
         def add_measuring_task(meas, task_set):
             try:
@@ -91,31 +91,20 @@ class Scheduler(object):
                                     self.unisrt.ports['existing'].values())[0]]
                 
             # recursive, cascading add interfered measurements
-            ''' TODO: commented for Friday OSiRIS!!! It is all because no port information was uploaded by blipp yet
             for res in task_set[meas]:#self.unisrt.paths['existing'][(meas.src, meas.dst)]['main'].get_bottom():
                 for scheduled_meas in res.stressed_measurements:
                     if scheduled_meas not in task_set.keys():
                         add_measuring_task(scheduled_meas, task_set)
-            '''
         
         new_tasks = {}
         for meas in measurements:
             add_measuring_task(meas, new_tasks)
         
-        '''
-        for meas in measurements:
-            new_tasks[meas] = self.unisrt.paths['existing'][(meas.src, meas.dst)]['main'].get_bottom()
-            
-            for res in self.unisrt.paths['existing'][(meas.src, meas.dst)]['main'].get_bottom():
-                for scheduled_meas in res.stressed_measurements:
-                    new_tasks[scheduled_meas] = self.unisrt.paths['existing'][(scheduled_meas.src, scheduled_meas.dst)]['main'].get_bottom()
-        
-        
         # register measurements back to their resources
         for meas, resources in new_tasks.iteritems():
             for res in resources:
                 res.stressed_measurements.add(meas)
-        '''        
+        
         # construct the intersection graph of this run
         ug, vprop_name = coloring.construct_graph(new_tasks)
         
@@ -138,7 +127,7 @@ class Scheduler(object):
         
         # map back to time domain
         now = datetime.datetime.utcnow()
-        now += datetime.timedelta(seconds = 600) # TODO: there will be certain time gap before BLiPP reads its schedule
+        now += datetime.timedelta(seconds = 600) # estimated safety time gap before BLiPP reads its schedule
         now = pytz.utc.localize(now)
         schedules = {}
         duration = schedule_params['duration']
@@ -153,14 +142,9 @@ class Scheduler(object):
                 e = s + datetime.timedelta(seconds = duration)
                 schedules.setdefault(meas.id, []).append({"start": adaptive.datetime_to_dtstring(s), "end": adaptive.datetime_to_dtstring(e)})
         
-        # assign schedules and create measurement objects
+        # assign schedules
         for meas in measurements:
             meas.scheduled_times = schedules[meas.id]
-        
-        # push changes to UNIS: new measurements, modified old measurements and ports
-        self.unisrt.pushRuntime('measurements')
-            
-        return [m.id for m in measurements]
         
     def post_measurements(self, paths, schedules, schedule_params, test_flag=False):
         '''
@@ -493,30 +477,3 @@ def prep_test(tmp, unisrt):
             measurements = [measurement(test_measurement4, unisrt, True)]
     
         return [measurements, {'every': 120, 'duration': 10, 'num_tests': 1}]
-    
-if __name__ == '__main__':
-    import kernel.unisrt
-    unisrt = kernel.unisrt.UNISrt()
-    scheduler = Scheduler(unisrt)
-    
-    with open("/home/mzhang/workspace/nre/apps/helm/helm.conf") as f:
-        conf = json.loads(f.read())
-    pairs = map(lambda x: map(lambda y: unisrt.nodes['existing'][y].name, x), conf['pairs'])
-    
-    # TODO: getResourceLists take BLiPP service as input, whereas getGENIResourceLists takes nodes
-    # it is all caused by the decision about which way is better to query the path, and further caused
-    # by the association between node objects and service objects. May need to make them bi-directional
-    # Here is a snippet to convert node to service, might be useful later         
-    # for runningOn in nodes:
-    #     service_index = '.'.join([runningOn, 'blipp'])
-    #     if not service_index in self.unisrt.services['existing']:
-    #         print "node " + runningOn + " doesn't have blipp service running on"
-    #     else:
-    #         blipps.extend([self.unisrt.services['existing'][service_index]])
-    
-    #paths = self._getResourceLists(blipps)
-    paths = getGENIResourceLists(scheduler.unisrt, pairs)
-    
-    schedule_params = {'duration':10, 'num_tests':10, 'every':3600}    
-    schedules = scheduler.schedule(paths, schedule_params)
-    scheduler.post_measurements(paths, schedules, schedule_params)

@@ -304,8 +304,8 @@ class Faultlocator(object):
         while True:
             # step 1. use the forecasted value as the alarm threshold
             for index, pair in enumerate(self.pairs):
-                # TODO: the tolerance parameter actually blocks further execution of other
-                #       pairs, step 1 should be parallel in a bundle function forecast+investigate
+                # TODO: the tolerance parameter actually blocks further execution of other pairs, so
+                # this step (step 1) should be parallelized in a compound thread forecast+investigate
                 forecasted_value = self.unisrt.forecastor.forecast(pair, 60)
                 
                 # trigger: if the forecasted value is below the alarm threshold, ring the bell

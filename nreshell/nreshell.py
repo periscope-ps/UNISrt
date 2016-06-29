@@ -90,9 +90,8 @@ class NREShell(cmd.Cmd):
             
     def do_service(self, args):
         '''
-        start a nre service
-        TODO: needs to differentiate from running an application
         Usage: service <service name> [argument list]
+        start a nre service -- shouldn't be exactly the same as running an app
         '''
         args = args.split(',')
         args = map(lambda x: x.replace(' ', ''), args)
