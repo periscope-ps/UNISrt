@@ -1,10 +1,47 @@
 import time
 from copy import deepcopy
 
-from kernel import models
+from kernel.models import ipport, path
 from libnre.utils import *
 
 TRACEROUTE = "ps:tools:blipp:linux:net:traceroute:hopip"
+logger = settings.get_logger('pathmagnifier')
+
+class Pathmagnifier(object):
+    '''
+    '''
+    def __init__(self, unisrt):
+        '''
+        '''
+        self.unisrt = unisrt
+        self.maintain_hopip() # should be in a continuously running thread. just test one time for now
+        
+    def maintain_hopip(self):
+        '''
+        1. retrieve hopip event results
+        2. create node objects from step 1
+        3. create path objects from step 2
+        '''
+        def get_ipports(ip_strs):
+            if ip_strs not in self.unisrt.ipports:
+                # not been posted to unis yet, no selfRef, L2 port node info etc.
+                ipport({
+                        'address': {
+                                    'type': 'ipv4',
+                                    'address': ip_strs
+                                    }
+                        })
+            return self.unisrt.ipports[ip_strs]
+        
+        meta_traceroute = filter(lambda x: x.eventType == TRACEROUTE, self.unisrt.metadata['existing'])
+        for meta_obj in meta_traceroute:
+            hops_ip = unisrt.poke_remote(str(meta_obj.id))
+            ipports = map(get_ipports, hops_ip)
+            
+            path({
+                  'status': 'unknown',
+                  'hops': ipports
+                  })
 
 def getResourceLists(unisrt, ends, obj_class, obj_layer='l3'):
     '''
@@ -183,11 +220,11 @@ def getGENIResourceLists(unisrt, pairs):
     return paths
 
 def run(unisrt, kwargs):
-    forecaster = Forecaster(unisrt)
-    setattr(unisrt, 'forecaster', forecaster)
+    pathmagnifier = Pathmagnifier(unisrt)
+    setattr(unisrt, 'pathmagnifier', pathmagnifier)
     
 if __name__ == '__main__':
     import kernel.unisrt
     unisrt = kernel.unisrt.UNISrt()
-    forecaster = Forecaster(unisrt, 'args')
-    setattr(unisrt, 'forecaster', forecaster)
+    pathmagnifier = Pathmagnifier(unisrt, 'args')
+    setattr(unisrt, 'pathmagnifier', pathmagnifier)

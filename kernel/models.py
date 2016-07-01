@@ -485,14 +485,20 @@ class metadata(NetworkResource):
     '''
     def __init__(self, data, unisrt, currentclient, localnew):
         super(metadata, self).__init__(data, unisrt, currentclient, localnew)
+        self.eventType = data['eventType']
+        self.id = data['id']
+        
         if 'forecasted' in data:
             self.isforecasted = self.data['forecasted']
         else:
             self.data['forecasted'] = False
             self.isforecasted = self.data['forecasted']
-        self.measurement = filter(lambda m: m.selfRef == data['parameters']['measurement']['href'], unisrt.measurements['existing'].values())[0]
-        self.eventType = data['eventType']
-        self.id = data['id']
+        
+        try:
+            self.measurement = filter(lambda m: m.selfRef == data['parameters']['measurement']['href'], unisrt.measurements['existing'].values())[0]
+        except IndexError:
+            print "the measurement that this metadata refers to doesn't exist"
+            return
         
         if not hasattr(self.measurement, 'metadata'):
             setattr(self.measurement, 'metadata', {})
@@ -535,16 +541,27 @@ class metadata(NetworkResource):
 class path(NetworkResource):
     '''
     path objects tell the situation between two ends
+    So, a path should be a bunch of ports? links? or nodes?
+    - I lean towards to ports
     '''    
     def __init__(self, data, unisrt, currentclient, localnew, ismain=True):
+        '''
+        _port  L2 interface
+        _hop   L3 interface
+        _end   L4 interface
+        '''
         super(path, self).__init__(data, unisrt, currentclient, localnew)
-
-        # all corresponding ports (L2), ipports (L3) or ends (L4)
-        self._ports = []
+        self.status = data['status']
+        
+        if 'ports' in data:
+            self._ports = data['ports']
+        else:
+            self._ports = []
         
         if 'hops' in data:
-            str_hops = map(lambda x: x['href'], data['hops'])
-            self._hops = []#map(lambda x: unisrt.nodes['existing'][x], str_hops)
+            #str_hops = map(lambda x: x['href'], data['hops'])
+            #self._hops = map(lambda x: unisrt.nodes['existing'][x], str_hops)
+            self._hops = data['hops']
         else:
             self._hops = []
         
@@ -557,8 +574,6 @@ class path(NetworkResource):
         except IndexError:
             self._ends = []
             
-        self.status = data['status']
-        
         if 'healthiness' in data:
             self.healthiness = data['healthiness']
         if 'performance' in data:

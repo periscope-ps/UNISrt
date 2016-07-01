@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-import re
 import threading
 import datetime, dateutil, pytz
 from time import sleep, time
@@ -34,6 +33,7 @@ class Forecaster(object):
         
         if not targets:
             '''
+            import re
             p = re.compile("urn:.*\+idms-ig-ill\+.*") # the slice that we are interested in
             slice_services = filter(lambda x: p.match(x.node.urn), self.unisrt.services['existing'].values())
             

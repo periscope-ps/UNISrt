@@ -7,7 +7,6 @@ import services.scheduler.schedalgorithms.adaptive as adaptive
 import services.scheduler.schedalgorithms.graphcoloring as coloring
 from services.pathmagnifier.pathmagnifier import *
 from libnre.utils import *
-from kernel.models import measurement
 
 logger = settings.get_logger('scheduler')
 
@@ -16,7 +15,9 @@ class Scheduler(object):
     It schedules all the newly posted raw measurements (on demand)
     the contention resource is LINK, may expand it in future
     '''
-    def __init__(self, unisrt, config_file=None):
+    def __init__(self, unisrt):
+        '''
+        '''
         self.unisrt = unisrt
         
     def _conflicting_measurements(self, resource_list, now):
@@ -455,6 +456,7 @@ def prep_test(tmp, unisrt):
             "performance": "unknown",
             "id": "56e0af42e779895f5f9ca088"
         }
+        from kernel.models import measurement
         if tmp == 1:
             port(test_port1, unisrt, False)
             port(test_port2, unisrt, False)
