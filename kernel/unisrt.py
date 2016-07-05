@@ -35,14 +35,14 @@ class UNISrt(object):
     will maintain it consistent in a best-effort manner).
     '''
     
-    # should move following to methods to utils
+    # should move this methods to utils
     def validate_add_defaults(self, data):
         if "$schema" not in data:
             return None
         schema = self._schemas.get(data["$schema"])
         validictory.validate(data, schema)
         add_defaults(data, schema)
-    
+        
     def __init__(self):
         logger.info("starting UNIS Network Runtime Environment...")
         fconf = get_file_config(nre_settings.CONFIGFILE)

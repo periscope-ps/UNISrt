@@ -1,4 +1,5 @@
 import time
+import threading
 from copy import deepcopy
 
 from kernel.models import ipport, path
@@ -14,7 +15,7 @@ class Pathmagnifier(object):
         '''
         '''
         self.unisrt = unisrt
-        self.maintain_hopip() # should be in a continuously running thread. just test one time for now
+        threading.Thread(name='traceroute_maintainer', target=self.maintain_hopip, args=()).start()
         
     def maintain_hopip(self):
         '''
@@ -22,26 +23,46 @@ class Pathmagnifier(object):
         2. create node objects from step 1
         3. create path objects from step 2
         '''
-        def get_ipports(ip_strs):
-            if ip_strs not in self.unisrt.ipports:
-                # not been posted to unis yet, no selfRef, L2 port node info etc.
+        def get_ipport(ip_str, rt, uc):
+            if ip_str in self.unisrt.ipports['existing']:
+                return self.unisrt.ipports['existing'][ip_str]
+            else:
+                # not been posted to unis yet, still in ['new'], no selfRef, L2 port node info etc.
                 ipport({
                         'address': {
                                     'type': 'ipv4',
-                                    'address': ip_strs
+                                    'address': ip_str
                                     }
-                        })
-            return self.unisrt.ipports[ip_strs]
+                        },
+                       rt,
+                       uc,
+                       True)
+                return self.unisrt.ipports['new'][ip_str]
         
-        meta_traceroute = filter(lambda x: x.eventType == TRACEROUTE, self.unisrt.metadata['existing'])
-        for meta_obj in meta_traceroute:
-            hops_ip = unisrt.poke_remote(str(meta_obj.id))
-            ipports = map(get_ipports, hops_ip)
+        while True:
+            meta_traceroute = filter(lambda x: x.eventType == TRACEROUTE, self.unisrt.metadata['existing'].values())
+            for meta_obj in meta_traceroute:
+                hops_ips = meta_obj.currentclient.get('/data/' + str(meta_obj.id))[0] # TODO: should query the newest one record
+                ipports = [get_ipport(ip_s, self.unisrt, meta_obj.currentclient) for ip_s in hops_ips['value']]
             
-            path({
-                  'status': 'unknown',
-                  'hops': ipports
-                  })
+                path({
+                      'status': 'unknown',
+                      'src': meta_obj.measurement.src,
+                      'dst': meta_obj.measurement.dst,
+                      'hops': ipports
+                      },
+                     self.unisrt,
+                     meta_obj.currentclient,
+                     True)
+                
+                
+                if topo:
+                    map_to_lower_layer_from_topo_info()
+                else:
+                    make_guesses_from_bi_directions()
+                push_path_to_unis()
+            
+            time.sleep(600)
 
 def getResourceLists(unisrt, ends, obj_class, obj_layer='l3'):
     '''
