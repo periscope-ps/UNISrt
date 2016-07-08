@@ -320,6 +320,19 @@ class ipport(NetworkResource, AttachPoint):
             
         self.version = data['address']['type']
         self.address = data['address']['address']
+        
+        
+        
+        
+        
+        
+        self.port = \
+        filter(lambda p: ('ipv4' in p.data['properties'] and p.data['properties']['ipv4']['address'] == data['address']['address']), unisrt.ports['existing'].values())[0]
+        
+        
+        
+        
+        
             
         unisrt.ipports[self.localnew and 'new' or 'existing'][self.address] = self
         
@@ -362,6 +375,13 @@ class link(NetworkResource, Connection):
 
         unisrt.links[self.localnew and 'new' or 'existing'][self.endpoints.keys()[0]] = self
 
+    def updateReference(self):
+        pass
+    
+class iplink(NetworkResource, Connection):
+    def __init__(self, data, unisrt, currentclient, localnew):
+        super(link, self).__init__(data, unisrt, currentclient, localnew)
+    
     def updateReference(self):
         pass
     
@@ -546,12 +566,24 @@ class path(NetworkResource):
     '''    
     def __init__(self, data, unisrt, currentclient, localnew, ismain=True):
         '''
-        _port  L2 interface
-        _hop   L3 interface
-        _end   L4 interface
+        _ports  L2 interfaces
+        _hops   L3 interfaces
+        _ends   L4 interfaces
         '''
         super(path, self).__init__(data, unisrt, currentclient, localnew)
         self.status = data['status']
+        
+        
+        
+        
+        
+        if 'links' in data:
+            self.links = data['links']
+        
+        
+        
+        
+        
         
         if 'ports' in data:
             self._ports = data['ports']
@@ -579,12 +611,6 @@ class path(NetworkResource):
         if 'performance' in data:
             self.performance = data['performance']
             
-            
-            
-        
-        
-        
-        
         if (data['src'], data['dst']) not in unisrt.paths[localnew and 'new' or 'existing']:
             unisrt.paths[localnew and 'new' or 'existing'][(data['src'], data['dst'])] = {'main': None, 'backup': None}
             

@@ -8,6 +8,7 @@ import services.scheduler.schedalgorithms.graphcoloring as coloring
 from services.pathmagnifier.pathmagnifier import *
 from libnre.utils import *
 
+BANDWIDTH_EVENTTYPE = "ps:tools:blipp:linux:net:iperf3:bandwidth"
 logger = settings.get_logger('scheduler')
 
 class Scheduler(object):

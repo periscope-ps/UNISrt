@@ -2,7 +2,7 @@ import time
 import threading
 from copy import deepcopy
 
-from kernel.models import ipport, path
+from kernel.models import ipport, link, path
 from libnre.utils import *
 
 TRACEROUTE = "ps:tools:blipp:linux:net:traceroute:hopip"
@@ -15,52 +15,103 @@ class Pathmagnifier(object):
         '''
         '''
         self.unisrt = unisrt
-        threading.Thread(name='traceroute_maintainer', target=self.maintain_hopip, args=()).start()
+        threading.Thread(name='traceroute_maintainer', target=self.update_paths, args=()).start()
         
-    def maintain_hopip(self):
+    def update_paths(self):
         '''
-        1. retrieve hopip event results
-        2. create node objects from step 1
-        3. create path objects from step 2
+        1. retrieve hopip measurement results
+        2. map to/create interface objects
+        3. construct links and paths
         '''
         def get_ipport(ip_str, rt, uc):
+            '''
+            input: ip string
+            output: the L3 port object
+            creates corresponding objects if needed
+            '''
             if ip_str in self.unisrt.ipports['existing']:
                 return self.unisrt.ipports['existing'][ip_str]
             else:
                 # not been posted to unis yet, still in ['new'], no selfRef, L2 port node info etc.
-                ipport({
-                        'address': {
-                                    'type': 'ipv4',
-                                    'address': ip_str
-                                    }
-                        },
-                       rt,
-                       uc,
-                       True)
-                return self.unisrt.ipports['new'][ip_str]
+                l3 = ipport({
+                             'address': {
+                                         'type': 'ipv4',
+                                         'address': ip_str
+                                         }
+                             },
+                            rt,
+                            uc,
+                            True)
+                return l3
+            
+        def form_paths(a_to_z, z_to_a):
+            # the ideal case -- exactly match on two directions
+            outbound_path = []
+            inbound_path = []
+            for idx, val in enumerate(list(reversed(z_to_a[1:-1]))):
+                if hasattr(val, 'port') and hasattr(a_to_z[1:-1][idx], 'port'):
+                    outbound_link = link(val, a_to_z[1:-1][idx])
+                    inbound_link = link(a_to_z[1:-1][idx], val)
+                else:
+                    outbound_link = iplink(val, a_to_z[1:-1][idx])
+                    inbound_link = iplink(a_to_z[1:-1][idx], val)
+                    
+                outbound_path.append(outbound_link)
+                inbound_path.insert(0, inbound_link)
+                
+            return outbound_path, inbound_path
         
         while True:
             meta_traceroute = filter(lambda x: x.eventType == TRACEROUTE, self.unisrt.metadata['existing'].values())
-            for meta_obj in meta_traceroute:
-                hops_ips = meta_obj.currentclient.get('/data/' + str(meta_obj.id))[0] # TODO: should query the newest one record
-                ipports = [get_ipport(ip_s, self.unisrt, meta_obj.currentclient) for ip_s in hops_ips['value']]
+            paths_raw = {}
             
-                path({
-                      'status': 'unknown',
-                      'src': meta_obj.measurement.src,
-                      'dst': meta_obj.measurement.dst,
-                      'hops': ipports
-                      },
-                     self.unisrt,
-                     meta_obj.currentclient,
-                     True)
+            # loop 1: for each path, get all IPs extracted, mapped and created
+            for meta_obj in meta_traceroute:
+                # obtain IPs from each traceroute
+                hops_ips = meta_obj.currentclient.get('/data/' + str(meta_obj.id))[0] # TODO: should query the newest one record
                 
+                # IP string to interface objects
+                ipports = [get_ipport(ip_s, self.unisrt, meta_obj.currentclient) for ip_s in hops_ips['value']]
                 
-                if topo:
-                    map_to_lower_layer_from_topo_info()
-                else:
-                    make_guesses_from_bi_directions()
-                push_path_to_unis()
+                # construct raw paths
+                paths_raw[(meta_obj.measurement.src, meta_obj.measurement.dst)] = {
+                                                                                   'ipports': ipports,
+                                                                                   'uc': meta_obj.currentclient
+                                                                                   }
+                
+            # loop 2: for each path, synthesize links and paths from bi-directional traffics
+            # TODO: here is an assumption: always run traceroute between pairs of end hosts
+            temp = deepcopy(paths_raw)
+            for ends, value in paths_raw.iteritems():
+                if (ends[1], ends[0]) in temp:
+                    # use the sister traceroute result to match the ends of links
+                    paths = form_paths(paths_raw[(ends[0], ends[1])]['ipports'], paths_raw[(ends[1], ends[0])]['ipports'])
+                    
+                    path({
+                          'status': 'unknown',
+                          'links': paths[0],
+                          'src': ends[0],
+                          'dst': ends[1]
+                          },
+                         self.unisrt,
+                         value['uc'],
+                         True)
+                
+                    path({
+                          'status': 'unknown',
+                          'links': paths[1],
+                          'src': ends[1],
+                          'dst': ends[0]
+                          },
+                         self.unisrt,
+                         value['uc'],
+                         True)
+                
+                    temp.pop((ends[0], ends[1]))
+                    temp.pop((ends[1], ends[0]))
+                    
+            # update unis
+            self.unisrt.pushRuntime(['link', 'path'])
             
             time.sleep(600)
 
