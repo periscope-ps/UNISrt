@@ -61,10 +61,11 @@ class MyRequestHandler (BaseHTTPRequestHandler) :
                     
                     ret = {'nodes': [], 'ports': [], 'measurements': []}
                     for node in the_domain.nodes:
-                        ret['nodes'].append({'domain': the_domain.id, 'name': node.name})
+                        ret['nodes'].append({'domain': the_domain.id, 'name': node.id})
                         for port in node.ports.values():
                             if 'properties' in port.data and 'ipv4' in port.data['properties'] and 'address' in port.data['properties']['ipv4']:
-                                ret['ports'].append({'id': port.id, 'node': node.name, 'ipv4': port.data['properties']['ipv4']['address']})
+                                ret['ports'].append({'id': port.id, 'node': node.id, 'ipv4': port.data['properties']['ipv4']['address'],\
+                                                     'unis_instance': port.currentclient and port.currentclient.config['unis_url'] or self.server.unisrt.unis_url})
                             
                     for measurement in self.server.unisrt.measurements['existing'].values():
                         if hasattr(measurement, 'src') and self.get_intf_id(the_domain, measurement.src):
@@ -138,7 +139,7 @@ class MyRequestHandler (BaseHTTPRequestHandler) :
                 data = cgi.parse_qs(self.rfile.read(length), keep_blank_values=1)
                 data = json.loads(data.keys()[0])
                 
-                if 'delete' in data:
+                if 'delete' in data and data['delete']:
                     del_meas = data['delete']
                     if not self.server.unisrt.forecaster.unfollow(del_meas):
                         data = {}
@@ -146,16 +147,16 @@ class MyRequestHandler (BaseHTTPRequestHandler) :
                         self.end_headers()
                         return
                     
-                if 'insert' in data:
+                if 'insert' in data and data['insert']:
                     targets = []
                     for target in data['insert']:
                         ends = target['endpoints']
                         events = target['events']
                         targets.append({'src-domain': ends[0]['domain'], 'src-node': ends[0]['node'],\
-                                        'src-addr': ends[0]['address'], 'dst-addr': ends[1]['address'],\
+                                        'src-addr': ends[0]['ipv4'], 'dst-addr': ends[1]['ipv4'],\
                                         'unis_instance': ends[0]['unis_instance'], 'events': events})
                         targets.append({'src-domain': ends[1]['domain'], 'src-node': ends[1]['node'],\
-                                        'src-addr': ends[1]['address'], 'dst-addr': ends[0]['address'],\
+                                        'src-addr': ends[1]['ipv4'], 'dst-addr': ends[0]['ipv4'],\
                                         'unis_instance': ends[1]['unis_instance'], 'events': events})
                     
                     if not self.server.unisrt.forecaster.follow(targets):

@@ -326,8 +326,8 @@ class ipport(NetworkResource, AttachPoint):
         
         
         
-        self.port = \
-        filter(lambda p: ('ipv4' in p.data['properties'] and p.data['properties']['ipv4']['address'] == data['address']['address']), unisrt.ports['existing'].values())[0]
+        #self.port = \
+        #filter(lambda p: ('ipv4' in p.data['properties'] and p.data['properties']['ipv4']['address'] == data['address']['address']), unisrt.ports['existing'].values())[0]
         
         
         

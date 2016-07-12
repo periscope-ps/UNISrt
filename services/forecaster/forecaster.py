@@ -110,15 +110,13 @@ class Forecaster(object):
     
     def unfollow(self, del_meas):
         for dm in del_meas:
-            if dm not in self.unisrt.measurements['existing']:
-                return False
-        for dm in del_meas:
-            tmp = self.unisrt.measurements['existing'][dm]
-            setattr(tmp, 'status', 'OFF')
-            tmp.renew_local(dm)
-            
+            if dm in self.unisrt.measurements['existing']:
+                tmp = self.unisrt.measurements['existing'][dm]
+                setattr(tmp, 'status', 'OFF')
+                tmp.renew_local(dm)
+
         self.unisrt.pushRuntime('measurements')
-            
+
         return True
     
     def forecast(self, meas_id, tolerance=60, fa='services.forecaster.forecalgorithms.slidingwnd', future=None, persistent=False):
