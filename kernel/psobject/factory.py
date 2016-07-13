@@ -32,11 +32,6 @@ def setDeferred(obj, v):
 def isDeferred(obj):
     return obj.__dict__["_defer"]
 
-def setEmbedded(obj, v):
-    obj.__dict__["_embedded"] = v
-def isEmbedded(obj):
-    return obj.__dict__["_embedded"]
-
 def isVirtual(obj):
     return obj.__dict__["_virtual"]
 
