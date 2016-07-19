@@ -15,15 +15,17 @@ logger = settings.get_logger('proxy')
 
 class MyRequestHandler (BaseHTTPRequestHandler) :
     
-    def get_intf_id(self, domain, ipv4):
-        for node in domain.nodes:
-            for port in node.ports.values():
-                # cheated before models are improved
-                try:
-                    if port.data['properties']['ipv4']['address'] == ipv4:
-                        return port.id
-                except KeyError:
-                    continue
+    def get_intf_id(self, ipv4):
+        for domain in self.server.unisrt.domains['existing'].values():
+            for node in domain.nodes:
+                for port in node.ports.values():
+                    # cheated before models are improved
+                    try:
+                        if port.data['properties']['ipv4']['address'] == ipv4:
+                            return port.id
+                    except KeyError:
+                        continue
+        return None
     
     def do_GET(self):
         '''
@@ -47,6 +49,29 @@ class MyRequestHandler (BaseHTTPRequestHandler) :
                 json.dump(ret, self.wfile)
                 return
             
+            if query[1] == 'all':
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                
+                ret = {'nodes': [], 'ports': [], 'measurements': []}
+                for domain in self.server.unisrt.domains['existing'].values():
+                    for node in domain.nodes:
+                        ret['nodes'].append({'domain': domain.id, 'name': node.id})
+                        for port in node.ports.values():
+                            if 'properties' in port.data and 'ipv4' in port.data['properties'] and 'address' in port.data['properties']['ipv4']:
+                                ret['ports'].append({'id': port.id, 'node': node.id, 'ipv4': port.data['properties']['ipv4']['address'],\
+                                                     'unis_instance': port.currentclient and port.currentclient.config['unis_url'] or self.server.unisrt.unis_url})
+                            
+                    for measurement in self.server.unisrt.measurements['existing'].values():
+                        if hasattr(measurement, 'src') and self.get_intf_id(measurement.src):
+                            ret['measurements'].append({'src': self.get_intf_id(measurement.src),\
+                                'dest': self.get_intf_id(measurement.dst), 'measurement': measurement.id})
+                
+                json.dump(ret, self.wfile)
+                    
+                return
+            
             the_domain = filter(lambda x: re.match('.*_' + query[1] + '$', x.id), self.server.unisrt.domains['existing'].values())
             if not the_domain:
                 self.send_response(400, 'Bad Request: domain does not exist')
@@ -54,7 +79,7 @@ class MyRequestHandler (BaseHTTPRequestHandler) :
                 self.end_headers()
             elif len(the_domain) == 1:
                 the_domain = the_domain[0]
-                if not len(query) > 2 or (len(query) == 3 and query[-1] == ''): 
+                if not len(query) > 2 or (len(query) == 3 and query[-1] == ''):
                     self.send_response(200)
                     self.send_header('Content-Type', 'application/json')
                     self.end_headers()
@@ -83,7 +108,7 @@ class MyRequestHandler (BaseHTTPRequestHandler) :
             self.end_headers()
 
         return
-            
+    
     def do_POST(self):
         '''
         post atomic PIT measurement objects:

@@ -165,7 +165,7 @@ def get_eventtype_related(eventtype, subject):
         'ping': "ttl=(?P<ttl>\\d+).*time=(?P<rtt>\\d+\\.*\\d*) ",
         'iperf': "(?P<bandwidth>\\d*\\.?\\d* [MG]bits\\/sec)",
         'iperf3': "(?P<bandwidth>[0-9]+(.[0-9]+)?) [GMK]bits/sec\\s+(?P<retransmit>\\d+)\\s+sender\\n",
-        'traceroute': "^\\s*\\d+.*(?P<hopip>\\(.*\\))",
+        'traceroute': "(?:\\n\\s*(?P<hop>\\d+))?(?:\\s+\\*|\\s+[^( |\\n)]*\\s+(?P<hopip>\\(\\d+\\.\\d+\\.\\d+\\.\\d+\\)))",
         'owping': "= [0-9]+(.[0-9]+)?/(?P<owping>[0-9]+(.[0-9]+)?)/[0-9]+(.[0-9]+)? ms, \\(.+\\)\\n"
     }
     

@@ -390,6 +390,14 @@ class service(NetworkResource):
     a service running in a network
     '''
     def __init__(self, data, unisrt, currentclient, localnew, node=None):
+        
+        
+        
+        if 'data' in data:
+            data = data['data']
+        
+        
+        
         super(service, self).__init__(data, unisrt, currentclient, localnew)
         self.id = data['id']
         #self.name = data['name']
@@ -447,6 +455,14 @@ class measurement(NetworkResource):
     a network measurement event
     '''
     def __init__(self, data, unisrt, currentclient, localnew):
+        
+        
+        
+        if 'data' in data:
+            data = data['data']
+        
+        
+        
         super(measurement, self).__init__(data, unisrt, currentclient, localnew)
         if 'ts' in data: self.ts = data['ts']
         self.id = data['id']
@@ -504,6 +520,14 @@ class metadata(NetworkResource):
     metadata can refer to information like measurement data etc.
     '''
     def __init__(self, data, unisrt, currentclient, localnew):
+        
+        
+        
+        if 'data' in data:
+            data = data['data']
+        
+        
+        
         super(metadata, self).__init__(data, unisrt, currentclient, localnew)
         self.eventType = data['eventType']
         self.id = data['id']

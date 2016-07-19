@@ -4,6 +4,7 @@ from copy import deepcopy
 
 from kernel.models import ipport, link, path
 from libnre.utils import *
+from test.test_math import acc_check
 
 TRACEROUTE = "ps:tools:blipp:linux:net:traceroute:hopip"
 logger = settings.get_logger('pathmagnifier')
@@ -23,20 +24,22 @@ class Pathmagnifier(object):
         2. map to/create interface objects
         3. construct links and paths
         '''
-        def get_ipport(ip_str, rt, uc):
+        def get_ipport(hop, rt, uc):
             '''
-            input: ip string
-            output: the L3 port object
-            creates corresponding objects if needed
+            input: a list of ip string at this hop (step)
+            output: a list of L3 port object at this hop (step)
             '''
-            if ip_str in self.unisrt.ipports['existing']:
-                return self.unisrt.ipports['existing'][ip_str]
+            if type(hop) is list:
+                return [get_ipport(ip_str, self.unisrt, meta_obj.currentclient) for ip_str in hop]
+            
+            if hop in self.unisrt.ipports['existing']:
+                return self.unisrt.ipports['existing'][hop]
             else:
                 # not been posted to unis yet, still in ['new'], no selfRef, L2 port node info etc.
                 l3 = ipport({
                              'address': {
                                          'type': 'ipv4',
-                                         'address': ip_str
+                                         'address': hop
                                          }
                              },
                             rt,
@@ -45,10 +48,39 @@ class Pathmagnifier(object):
                 return l3
             
         def form_paths(a_to_z, z_to_a):
+            def ip_distance(x, y):
+                '''
+                gives the distance between dot-separated ipv4 values
+                x and y may be lists of ip values of a particular hop
+                '''
+                if type(x) is list:
+                    return min([ip_distance(x_, y) for x_ in x])
+                
+                if type(y) is list:
+                    return min([ip_distance(x, y_) for y_ in y])
+                
+                addr_x = x.split('.')
+                addr_y = y.split('.')
+                
+                acc = 0
+                for i, v in enumerate(addr_x):
+                    # 4 is a magic number here. this is just my approximation to evaluate how different two ip addresses are
+                    acc += abs(int(v) - int(addr_y[i])) * (4 - i)
+                
+                return acc
+            
             # the ideal case -- exactly match on two directions
-            outbound_path = []
-            inbound_path = []
-            for idx, val in enumerate(list(reversed(z_to_a[1:-1]))):
+            shorter_path = len(a_to_z) == min(len(a_to_z), len(z_to_a)) and a_to_z or z_to_a
+            longer_path = len(a_to_z) == min(len(a_to_z), len(z_to_a)) and z_to_a or a_to_z
+            for idx, val in enumerate(list(reversed(shorter_path[1:-1]))):
+                
+                
+                for hop in longer_path:
+                    ip_distance(val, hop)
+                        
+                
+                
+                
                 if hasattr(val, 'port') and hasattr(a_to_z[1:-1][idx], 'port'):
                     outbound_link = link(val, a_to_z[1:-1][idx])
                     inbound_link = link(a_to_z[1:-1][idx], val)
@@ -65,13 +97,13 @@ class Pathmagnifier(object):
             meta_traceroute = filter(lambda x: x.eventType == TRACEROUTE, self.unisrt.metadata['existing'].values())
             paths_raw = {}
             
-            # loop 1: for each path, get all IPs extracted, mapped and created
+            # loop 1: for each path, get all IPs extracted, mapped and their corresponding objects created
             for meta_obj in meta_traceroute:
                 # obtain IPs from each traceroute
-                hops_ips = meta_obj.currentclient.get('/data/' + str(meta_obj.id))[0] # TODO: should query the newest one record
+                hops = meta_obj.currentclient.get('/data/' + str(meta_obj.id))[0] # TODO: should query the newest one record
                 
                 # IP string to interface objects
-                ipports = [get_ipport(ip_s, self.unisrt, meta_obj.currentclient) for ip_s in hops_ips['value']]
+                ipports = [get_ipport(hop, self.unisrt, meta_obj.currentclient) for hop in hops['value']]
                 
                 # construct raw paths
                 paths_raw[(meta_obj.measurement.src, meta_obj.measurement.dst)] = {
@@ -80,10 +112,10 @@ class Pathmagnifier(object):
                                                                                    }
                 
             # loop 2: for each path, synthesize links and paths from bi-directional traffics
-            # TODO: here is an assumption: always run traceroute between pairs of end hosts
-            temp = deepcopy(paths_raw)
+            temp = paths_raw.keys()
             for ends, value in paths_raw.iteritems():
                 if (ends[1], ends[0]) in temp:
+                    # TODO: here is an assumption: always run traceroute between pairs of end hosts
                     # use the sister traceroute result to match the ends of links
                     paths = form_paths(paths_raw[(ends[0], ends[1])]['ipports'], paths_raw[(ends[1], ends[0])]['ipports'])
                     
