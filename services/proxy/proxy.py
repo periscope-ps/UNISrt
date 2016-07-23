@@ -64,9 +64,16 @@ class MyRequestHandler (BaseHTTPRequestHandler) :
                                                      'unis_instance': port.currentclient and port.currentclient.config['unis_url'] or self.server.unisrt.unis_url})
                             
                     for measurement in self.server.unisrt.measurements['existing'].values():
-                        if hasattr(measurement, 'src') and self.get_intf_id(measurement.src):
-                            ret['measurements'].append({'src': self.get_intf_id(measurement.src),\
-                                'dest': self.get_intf_id(measurement.dst), 'measurement': measurement.id})
+                        
+                        
+                        
+                        # temporary if to filter out OFF's
+                        if 'status' in measurement.data['configuration'] and measurement.data['configuration']['status'] == 'ON':
+                            if hasattr(measurement, 'src') and self.get_intf_id(measurement.src):
+                                ret['measurements'].append({'src': self.get_intf_id(measurement.src),\
+                                                            'dest': self.get_intf_id(measurement.dst), 'measurement': measurement.id})
+                                                                
+                                
                 
                 json.dump(ret, self.wfile)
                     
