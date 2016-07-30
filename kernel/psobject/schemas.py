@@ -6,14 +6,14 @@ def get(schema):
     if schema not in CACHE:
         try:
             tmpResponse = requests.get(schema)
-            CACHE[schema] = tmpResonse.json()
-            return CACHE[schema]
+            CACHE[schema] = tmpResponse.json()
         except Exception as exp:
             raise Exception("Failed to load remote schema - {s}".format(s = exp))
+    return CACHE[schema]
 
 def fromName(name):
     for schema in CACHE.keys():
-        re_str = 'http[s]?://(?P<host>[^:/]+)(?::(?P<port>[0-9]{1,4}))?/{s}$'.format(s = n)
+        re_str = 'http[s]?://(?P<host>[^:/]+)(?::(?P<port>[0-9]{1,4}))?/' + name + '$'
         exists = re.search(re_str, schema)
         if exists:
             return CACHE[schema]
@@ -21,7 +21,7 @@ def fromName(name):
 
 def getRef(name):
     for schema in CACHE.keys():
-        re_str = 'http[s]?://(?P<host>[^:/]+)(?::(?P<port>[0-9]{1,4}))?/{s}$'.format(s = n)
+        re_str = 'http[s]?://(?P<host>[^:/]+)(?::(?P<port>[0-9]{1,4}))?/' + name + '$'
         exists = re.search(re_str, schema)
         if exists:
             return schema

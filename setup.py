@@ -20,7 +20,7 @@ setup(
     name = "nre",
     version = version,
     py_modules=['nreshell', 'settings'],
-    packages = ["kernel", "libnre", "apps", "apps.helm", "apps.helm.schedulers", "apps.faultlocator", "apps.faultlocator.alarms"],
+    packages = ["kernel", "kernel.psobject", "kernel.web", "libnre", "apps", "apps.faultlocator", "apps.faultlocator.alarms"],
     package_data = {},
     author = "Miao Zhang",
     author_email="miaozhan@indiana.edu",
@@ -28,7 +28,6 @@ setup(
     
     install_requires=[
         "validictory>=validictory-0.8.1",
-        "netlogger",
         "pytz",
         "python-dateutil"
         #"graph-tool" -- apt-get install

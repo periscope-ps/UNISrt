@@ -173,8 +173,8 @@ class node(NetworkResource, Node):
             try:
                 self.id = data['id']
                 self.name = data['id']
-            except KeyError, e:
-                print "node %s hasn't been found in rt" % str(e)
+            except KeyError as e:
+                #print "node %s hasn't been found in rt" % str(e)
                 return
         
         # currently, node-port model from router config is still differ from UNIS schema
@@ -413,8 +413,8 @@ class service(NetworkResource):
         elif 'runningOn' in data:
             try:
                 self.node = unisrt.nodes['existing'][data['runningOn']['href']]
-            except KeyError, e:
-                print "node %s hasn't been found in rt for this service" % str(e)
+            except KeyError as e:
+                #print "node %s hasn't been found in rt for this service" % str(e)
         if hasattr(self, 'node'):
             if hasattr(self.node, 'services'):
                 self.node.services[data['serviceType']] = self
@@ -424,8 +424,8 @@ class service(NetworkResource):
         try:
             # this exception should be caused by some BLiPP service nodes are not included in I2 topo
             unisrt.services[self.localnew and 'new' or 'existing'][self.selfRef] = self
-        except AttributeError, e:
-            print "no attribute found"
+        except AttributeError as e:
+           # print "no attribute found"
             
     def updateReference(self):
         pass
@@ -517,7 +517,7 @@ class metadata(NetworkResource):
         try:
             self.measurement = filter(lambda m: m.selfRef == data['parameters']['measurement']['href'], unisrt.measurements['existing'].values())[0]
         except IndexError:
-            print "the measurement that this metadata refers to doesn't exist"
+            #print "the measurement that this metadata refers to doesn't exist"
             return
         
         if not hasattr(self.measurement, 'metadata'):

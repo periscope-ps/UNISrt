@@ -85,7 +85,7 @@ class UNISrt(object):
         '''
         model = resources_classes[resource_name]
         
-        print resource_name
+        #print resource_name
         if data and 'redirect' in data and 'instances' in data:
             if len(data['instances']) == 0:
                 return
@@ -184,5 +184,5 @@ class UNISrt(object):
         same as poke_data, the other way around
         '''
         #headers = self._def_headers("data")
-        print data
+        #print data
         return self._unis.pc.do_req('post', '/data', data)#, headers)
