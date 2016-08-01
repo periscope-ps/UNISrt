@@ -181,8 +181,7 @@ class UnisObject(metaclass = JSONObjectMeta):
     
     def validate(self):
         if self._schema:
-            resolver = jsonschema.RefResolver(self._schema["id"], self._schema, schemas.CACHE)
-            jsonschema.validate(self.to_JSON(), self._schema, resolver = resolver)
+            jsonschema.validate(self.to_JSON(), self._schema, resolver = self._resolver)
         else:
             raise AttributeError("No schema found for object")
 
@@ -193,7 +192,8 @@ def schemaMetaFactory(name, schema, parents = [JSONObjectMeta]):
     class SchemaMetaClass(*parents):
         def __init__(cls, name, bases, classDict):
             super(SchemaMetaClass, cls).__init__(name=name, bases=bases, classDict=classDict)
-            cls.__tmp_bases__ = bases
+            cls._schema = schema
+            cls._resolver = jsonschema.RefResolver(schema["id"], schema, schemas.CACHE)
             cls.__doc__ = schema.get("description", None)
         
         def __call__(meta, *args, **kwargs):

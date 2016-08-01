@@ -7,7 +7,6 @@ def newObject(src, runtime, defer_update=False, virtual=False):
     return UnisObject(src, runtime, defer_update, virtual)
 
 def validate(obj, schema):
-    obj._schema = schemas.get(schema)
     obj.validate()
 
 def remoteObject(obj):
