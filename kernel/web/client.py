@@ -24,7 +24,7 @@ class UnisClient(object):
         self._sockets = []
     
     def shutdown(self):
-        print("Removing sockets")
+        self.log.info("Removing sockets")
         for socket in self._sockets:
             socket.close()
         self._executor.shutdown()

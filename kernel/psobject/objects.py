@@ -18,18 +18,17 @@ class JSONObjectMeta(type):
             return self.__dict__[obj]
         def __delete__(self, obj):
             del self.__dict__[obj]
-    def __new__(meta, name, bases, props):
-        ty = super(JSONObjectMeta, meta).__new__(meta, name, bases, props)
+    def __init__(cls, name, bases, classDict):
+        super(JSONObjectMeta, cls).__init__(name, bases, classDict)
         def get_virt(self, n):
-            return ty.__meta__.__get__(self, ty).get(n, None)
+            return cls.__meta__.__get__(self).get(n, None)
         def set_virt(self, n, v):
-            ty.__meta__.__get__(self, ty)[n] = v
+            cls.__meta__.__get__(self)[n] = v
             return v
         
-        ty.__meta__ = JSONObjectMeta.AttrDict()
-        ty.get_virtual = get_virt
-        ty.set_virtual = set_virt
-        return ty
+        cls.__meta__ = JSONObjectMeta.AttrDict()
+        cls.get_virtual = get_virt
+        cls.set_virtual = set_virt
     
     def __call__(cls, *args, **kwargs):
         instance = super(JSONObjectMeta, cls).__call__()
@@ -81,7 +80,7 @@ class UnisList(metaclass = JSONObjectMeta):
         
 
 class UnisObject(metaclass = JSONObjectMeta):
-    def initialize(self, src, runtime, defer = False, local_only = True):
+    def initialize(self, src = {}, runtime = None, defer = False, local_only = True):
         self._runtime = runtime
         self._defer = defer
         self._dirty = self._pending = False
@@ -189,58 +188,55 @@ class UnisObject(metaclass = JSONObjectMeta):
 
 
 
-#def schemaMetaFacotry(name, schema):
-#    assert isinstance(schema, dict, "schema is not of type dict")
-#    class SchemaMetaClass(type):
-#        def __new__(meta, classname, bases, classDict):
-#            def make_property(name, default, doc):
-#                fget = lambda self: self.__dict__[name] or default
-#                fset = lambda self, v: self.__dict__[name] = v
-#                fdel = lambda self: self.__dict__.pop(name)
-#                return property(fget, fset, fdel, doc = doc)
-#            
-#            ty = super(SchemaMetaClass, meta).__new__(meta, classname, bases, classDict)
-#            
-#            ty.__meta__ = {}
-#            metadata = getattr(ty, '__meta__', {})
-#            metadata.update({ "schema": schema, "dirty": False, "virtual": True, "pending": False,
-#                              "resolver": jsonschema.RefResolver(schema["id"], schema, schemas.CACHE) })
-#            setattr(ty, "__meta__", metadata)
-#            setattr(ty, "__objects__", [])
-#            
-#            setattr(ty, "__doc__", schema.get("description", None))
-#            if schema.get("type", "object") == "object":
-#                for prop, value in schema.get("properties", {}).items():
-#                    if prop not in classDict:
-#                        setattr(ty, prop, make_property(prop, value.get("default", None), value.get("description", None)))
-#            
-#            return ty
-#    
-#    return SchemaMetaClass
-#
-#__classes__ = {}
-#def get_class(schema_uri, class_name = None):
-#    if schema_uri in __classes__:
-#        return __classes__[schema_uri]
-#    schema = schemas.get(schema_uri)
-#    class_name = class_name or str(schema.get("name", None))
-#    ### TODO ###
-#    # Make parent resolution work for all types of allof fields
-#    ############
-#    parent_uri = schema.get("allOf", [])
-#    parents = [UnisObject]
-#    for parent in parent_uri:
-#        if "$ref" in parent:
-#            re_str = "http[s]?://(?:[^:/]+)(?::[0-9]{1-4})?/(?:[^/]+/)*(?P<sname>[^/]+)#$"
-#            matches = re.compile(re_str).match(parent["$ref"])
-#            assert matches.group("sname"), "$ref in allof must be a full url"
-#            parents.append(get_class(parent["$ref"]))
-#        else:
-#            raise AttributeError("allof must be remote references")
-#    
-#    if not class_name:
-#        raise AttributeError("class_name is not defined by the provided schema or the client")
-#    
-#    meta = schemaMetaFactory("{n}Meta".format(n = class_name), schema)
-#    __classess__[schema_uri] = meta(class_name, tuple(parents), {})
-#    return __classess__[schema_uri]
+def schemaMetaFactory(name, schema, parents = [JSONObjectMeta]):
+    assert isinstance(schema, dict), "schema is not of type dict"
+    class SchemaMetaClass(*parents):
+        def __init__(cls, name, bases, classDict):
+            super(SchemaMetaClass, cls).__init__(name=name, bases=bases, classDict=classDict)
+            cls.__tmp_bases__ = bases
+            cls.__doc__ = schema.get("description", None)
+        
+        def __call__(meta, *args, **kwargs):
+            instance = super(SchemaMetaClass, meta).__call__(*args, **kwargs)
+            if schema.get("type", "object") == "object":
+                for k, v in schema.get("properties", {}).items():
+                    print("Setting: {k} -> {v}".format(k = k, v = v))
+                    instance.__dict__[k] = v.get("default", None)
+        
+            return instance
+            
+    return SchemaMetaClass
+
+__classes__ = {}
+def get_class(schema_uri, class_name = None):
+    if schema_uri in __classes__:
+        return __classes__[schema_uri]
+    schema = schemas.get(schema_uri)
+    class_name = class_name or str(schema.get("name", None))
+    ### TODO ###
+    # Make parent resolution work for all types of allof fields
+    ############
+    parent_uri = schema.get("allOf", [])
+    parent_metas = []
+    parents = []
+    if parent_uri:
+        for parent in parent_uri:
+            if "$ref" in parent:
+                re_str = "http[s]?://(?:[^:/]+)(?::[0-9]{1-4})?/(?:[^/]+/)*(?P<sname>[^/]+)#$"
+                matches = re.compile(re_str).match(parent["$ref"])
+                assert matches, "$ref in allof must be a full url"
+                cls = get_class(parent["$ref"])
+                parents.append(cls)
+                parent_metas.append(type(cls))
+            else:
+                raise AttributeError("allof must be remote references")
+    else:
+        parents = [UnisObject]
+        parent_metas = [JSONObjectMeta]
+    
+    if not class_name:
+        raise AttributeError("class_name is not defined by the provided schema or the client")
+    
+    meta = schemaMetaFactory("{n}Meta".format(n = class_name), schema, parent_metas)
+    __classes__[schema_uri] = meta(class_name, tuple(parents), {})
+    return __classes__[schema_uri]

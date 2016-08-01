@@ -60,7 +60,6 @@ class UnisCollection(list):
         if not self._subscribed:
             self._runtime._unis.subscribe(self.collection, self._callback)
     def _callback(self, v):
-        print("Message for you sir: {v}".format(v=v))
         v = json.loads(v)
         resource = UnisObject(v["data"], self._runtime, False, False)
         self[resource.id] = resource
