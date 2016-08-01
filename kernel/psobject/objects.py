@@ -200,7 +200,6 @@ def schemaMetaFactory(name, schema, parents = [JSONObjectMeta]):
             instance = super(SchemaMetaClass, meta).__call__(*args, **kwargs)
             if schema.get("type", "object") == "object":
                 for k, v in schema.get("properties", {}).items():
-                    print("Setting: {k} -> {v}".format(k = k, v = v))
                     instance.__dict__[k] = v.get("default", None)
         
             return instance
