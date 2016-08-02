@@ -20,7 +20,7 @@ setup(
     name = "nre",
     version = version,
     py_modules=['nreshell', 'settings'],
-    packages = ["kernel", "kernel.psobject", "kernel.web", "libnre", "apps", "apps.faultlocator", "apps.faultlocator.alarms"],
+    packages = ["kernel", "runtime", "runtime.models", "runtime.rest", "libnre", "apps", "apps.faultlocator", "apps.faultlocator.alarms"],
     package_data = {},
     author = "Miao Zhang",
     author_email="miaozhan@indiana.edu",

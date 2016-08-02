@@ -7,12 +7,14 @@ import websocket
 
 from concurrent.futures import ThreadPoolExecutor
 
-from ..psobject import schemas
-from settings import MIME, get_logger
+from runtime.settings import MIME, get_logger
+
+class UnisError(Exception):
+    pass
 
 class UnisClient(object):
     def __init__(self, url, **kwargs):
-        self.log = get_logger("unis")
+        self.log = get_logger("unis_client")
         re_str = 'http[s]?://(?P<host>[^:/]+)(?::(?P<port>[0-9]{1,4}))$'
         if not re.compile(re_str).match(url):
             raise ValueError("unis url is malformed")

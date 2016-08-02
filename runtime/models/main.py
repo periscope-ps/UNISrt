@@ -2,11 +2,9 @@ import json
 import re
 import sys
 
-from kernel.psobject import factory
-from kernel.psobject import schemas
-from kernel.psobject.objects import UnisObject
-from kernel.psobject.lists import UnisCollection
-from kernel.web import UnisClient, UnisError
+from runtime.models import schemaLoader
+from runtime.models.lists import UnisCollection
+from runtime.rest import UnisClient, UnisError
 
 # The ObjectLayer converts json objects from UNIS into python objects and stores
 # them in query-able collections.  Clients have access to find and update, but
@@ -16,17 +14,18 @@ from kernel.web import UnisClient, UnisError
 # objects update as needed when modified.
 class ObjectLayer(object):
     class iCollection(object):
-        def __init__(self, name, schema):
+        def __init__(self, name, schema, model):
             re_str = "http[s]?://(?:[^:/]+)(?::[0-9]{1-4})?/(?:[^/]+/)*(?P<sname>[^/]+)#$"
             matches = re.compile(re_str).match(schema)
             assert(matches.group("sname"))
             self.name = name
             self.sname = matches.group("sname")
-            self.schema = schema
+            self.uri = schema
+            self.model = model
             
     def __init__(self, url, **kwargs):
         self.__cache__ = {}
-        self.__schema__ = {}
+        self.__models__ = {}
         self._unis = UnisClient(url, **kwargs)
         for resource in self._unis.getResources():
             re_str = "{full}|{rel}".format(full = 'http[s]?://(?P<host>[^:/]+)(?::(?P<port>[0-9]{1,4}))?/(?P<col1>[a-zA-Z]+)$',
@@ -35,11 +34,10 @@ class ObjectLayer(object):
             collection = matches.group("col1") or matches.group("col2")
             
             schema = resource["targetschema"]["items"]["href"]
-            self.__schema__[collection] = self.iCollection(collection, schema)
-            schemas.get(schema)
+            model = schemaLoader.get_class(schema)
+            self.__models__[collection] = self.iCollection(collection, schema, model)
             if collection not in ["events", "data"]:
-                setattr(self, self.__schema__[collection].sname.title(), lambda c=collection: "This is a " + c + "...")
-                self.__cache__[collection] = UnisCollection(resource["href"], collection, schema, self)
+                self.__cache__[collection] = UnisCollection(resource["href"], collection, model, self)
     
     def __getattr__(self, n):
         if n in self.__cache__:
@@ -62,26 +60,48 @@ class ObjectLayer(object):
             if tmpUid not in self.__cache__[tmpCollection]:
                 tmpResource = self._unis.get(href)
                 if tmpResource:
-                    tmpObject = UnisObject(tmpResource, self, False, False)
+                    model = self.__models__[tmpCollection].model
+                    tmpObject = model(tmpResource, self, local_only=False)
                     self.__cache__[tmpCollection][tmpUid] = tmpObject
                 else:
                     raise UnisError("href does not reference resource in unis.")
             else:
                 tmpObject = self.__cache__[tmpCollection][tmpUid]
             
-            return factory.reference(tmpObject)
+            return tmpObject.reference()
         else:
             raise ValueError("href must be a direct uri to a unis resource.")
     
     def update(self, resource):
         resource.validate()
-        tmpResponse = self._unis.post(resource.selfRef, json.dumps(resource.to_JSON()))
+        if getattr(resource, "selfRef", None):
+            tmpResponse = self._unis.post(resource.selfRef, json.dumps(resource.to_JSON()))
+        else:
+            ref = None
+            for k, item_meta in self.__models__.items():
+                if isinstance(resource, item_meta.model):
+                    ref = "#/{c}".format(c = k)
+            if ref:
+                tmpResponse = self._unis.post(ref, json.dumps(resource.to_JSON()))
         if tmpResponse:
             resource._pending = False
     
+    def insert(self, resource):
+        if isinstance(resource, dict):
+            if "$schema" in resource:
+                item_meta = self.__models__[resource["$schema"]]
+                resource = item_meta.model(resource, self, local_only=False)
+                self.__cache__[item_meta.name][resource.id] = resource
+        else:
+            for k, item_meta in self.__models__.items():
+                if isinstance(resource, item_meta.model):
+                    self.__cache__[item_meta.name][resource.id] = resource
+                    return
+            raise ValueError("Resource type not found in ObjectLayer")
+        
     def about(self):
         return self.__schema__.values()
-
+        
     def shutdown(self):
         self._unis.shutdown()
     def __enter__(self):

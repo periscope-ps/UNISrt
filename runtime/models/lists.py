@@ -1,17 +1,14 @@
 import json
 import types
 
-from kernel.psobject import factory
-from kernel.psobject.objects import UnisObject
-
 class UnisCollection(list):
-    def __init__(self, href, collection, schema, runtime):
+    def __init__(self, href, collection, model, runtime):
         self.__cache__ = {}
         self._queries = []
         self._subscribed = False
         self._runtime = runtime
         self._href = href
-        self._schema = schema
+        self._model = model
         self.collection = collection
         self.subscribe()
         
@@ -61,7 +58,7 @@ class UnisCollection(list):
             self._runtime._unis.subscribe(self.collection, self._callback)
     def _callback(self, v):
         v = json.loads(v)
-        resource = UnisObject(v["data"], self._runtime, False, False)
+        resource = self._model(v["data"], self._runtime, False, False)
         self[resource.id] = resource
         
     def __len__(self):
@@ -70,21 +67,22 @@ class UnisCollection(list):
     def __getitem__(self, key):
         if key not in self.__cache__:
             self._runtime.find("#/{c}/{k}".format(c = self.collection, k = key))
-        return self.__cache__[key]
+        return self.__cache__[key].reference()
     
     def __setitem__(self, key, obj):
-        factory.validate(obj, self._schema)
-        if not factory.remoteObject(obj):
-            raise AttributeError("UnisObject must not be Virtual and must contain a valid schema")
+        if type(obj) != self._model:
+            raise TypeError("Resource not of correct type: got {t1}, expected {t2}".format(t1=self._model, t2=type(obj)))
+        obj._runtime = self._runtime
         if key in self.__cache__:
             tmpOld = self.__cache__[key]
             if tmpOld.ts < obj.ts:
                 for k,v in obj.__dict__.items():
                     tmpOld.__dict__[k] = v
         else:
-            self.collect_garbage()
-            obj.update()
-            self.__cache__[key] = obj
+            if obj.remoteObject():
+                self.collect_garbage()
+                obj.update()
+                self.__cache__[key] = obj
         
     def __delitem__(self, key):
         toremove = []
@@ -101,7 +99,7 @@ class UnisCollection(list):
         del self.__cache__[key]
     
     def __contains__(self, item):
-        if isinstance(item, UnisObject):
+        if isinstance(item, self._model):
             return item.id in self.__cache__
         else:
             return item in self.__cache__
@@ -136,12 +134,12 @@ class ul_iter(object):
                 self.ls._queries.append({"predicate": {}, "matches": self.matches})
             raise StopIteration()
             
-        result = UnisObject(self.local_cache.pop(0), self.ls._runtime, False, False)
+        result = self.ls._model(self.local_cache.pop(0), self.ls._runtime, local_only=False)
         self.index += 1
         if result.id in self.complete:
             return self.__next__()
         else:
             self.ls[result.id] = result
-            self.matches.append(factory.reference(result))
+            self.matches.append(result.reference())
             self.complete[result.id] = result.ts
-            return result
+            return result.reference()
