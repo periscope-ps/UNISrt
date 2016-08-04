@@ -123,7 +123,7 @@ class UnisList(metaclass = JSONObjectMeta):
     def __delitem__(self, key):
         self.items.__delitem(key)
     def __iter__(self):
-        return iter(self)
+        return iter(self.items)
     def __repr__(self):
         return self.items.__repr__()
     def __str__(self):
