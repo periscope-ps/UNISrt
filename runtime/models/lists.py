@@ -66,7 +66,7 @@ class UnisCollection(list):
         
     def __getitem__(self, key):
         if key not in self.__cache__:
-            self._runtime.find("#/{c}/{k}".format(c = self.collection, k = key))
+            self.__cache__[key] = self._runtime.find("#/{c}/{k}".format(c = self.collection, k = key))
         return self.__cache__[key].reference()
     
     def __setitem__(self, key, obj):
@@ -75,6 +75,7 @@ class UnisCollection(list):
         obj._runtime = self._runtime
         if key in self.__cache__:
             tmpOld = self.__cache__[key]
+            tmpOld.__dict__["selfRef"] = obj.selfRef
             if tmpOld.ts < obj.ts:
                 for k,v in obj.__dict__.items():
                     tmpOld.__dict__[k] = v
@@ -82,7 +83,7 @@ class UnisCollection(list):
             if obj.remoteObject():
                 self.collect_garbage()
                 obj.update()
-                self.__cache__[key] = obj
+            self.__cache__[key] = obj
         
     def __delitem__(self, key):
         toremove = []

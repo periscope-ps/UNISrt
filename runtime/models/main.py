@@ -62,18 +62,16 @@ class ObjectLayer(object):
                 if tmpResource:
                     model = self.__models__[tmpCollection].model
                     tmpObject = model(tmpResource, self, local_only=False)
-                    self.__cache__[tmpCollection][tmpUid] = tmpObject
                 else:
                     raise UnisError("href does not reference resource in unis.")
             else:
                 tmpObject = self.__cache__[tmpCollection][tmpUid]
             
-            return tmpObject.reference()
+            return tmpObject
         else:
             raise ValueError("href must be a direct uri to a unis resource.")
     
     def update(self, resource):
-        resource.validate()
         if getattr(resource, "selfRef", None):
             tmpResponse = self._unis.post(resource.selfRef, json.dumps(resource.to_JSON()))
         else:
@@ -86,17 +84,22 @@ class ObjectLayer(object):
         if tmpResponse:
             resource._pending = False
     
-    def insert(self, resource):
+    def insert(self, resource, uid=None):
         if isinstance(resource, dict):
             if "$schema" in resource:
-                item_meta = self.__models__[resource["$schema"]]
-                resource = item_meta.model(resource, self, local_only=False)
-                self.__cache__[item_meta.name][resource.id] = resource
+                for k, item_meta in self.__models__.items():
+                    if item_meta.uri == resource["$schema"]:
+                        resource = item_meta.model(resource, self, local_only=False)
+                        self.__cache__[item_meta.name][resource.id] = resource
+                        return self.__cache__[item_meta.name][resource.id]
         else:
             for k, item_meta in self.__models__.items():
                 if isinstance(resource, item_meta.model):
+                    resource.id = uid or resource.id
+                    if not resource.id:
+                        raise ValueError("Resource does not have a valid id attribute")
                     self.__cache__[item_meta.name][resource.id] = resource
-                    return
+                    return self.__cache__[item_meta.name][resource.id]
             raise ValueError("Resource type not found in ObjectLayer")
         
     def about(self):

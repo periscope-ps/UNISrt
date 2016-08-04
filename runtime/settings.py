@@ -71,7 +71,7 @@ MIME = {
 ##################################################################
 import logging
 
-DEBUG = False
+DEBUG = True
 TRACE = False
 
 LOGGER_NAMESPACE = "unisrt"

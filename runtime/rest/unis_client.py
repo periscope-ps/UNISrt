@@ -1,8 +1,6 @@
-import asyncio
 import json
 import re
 import requests
-import ssl
 import websocket
 
 from concurrent.futures import ThreadPoolExecutor
