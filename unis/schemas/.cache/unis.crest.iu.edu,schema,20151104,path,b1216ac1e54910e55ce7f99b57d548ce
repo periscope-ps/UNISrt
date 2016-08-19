@@ -1,0 +1,40 @@
+status: 200
+cache-control: no-cache
+etag: "328-5381ac3fe5362"
+last-modified: Thu, 21 Jul 2016 00:54:52 GMT
+access-control-allow-origin: *
+access-control-allow-headers: x-requested-with
+date: Thu, 18 Aug 2016 15:19:38 GMT
+access-control-allow-methods: POST, GET, PUT, DELETE, OPTION
+content-location: http://unis.crest.iu.edu/schema/20151104/path
+content-length: 808
+server: Apache/2.4.10 (Debian)
+accept-ranges: bytes
+
+{
+    "$schema": "http://json-schema.org/draft-04/hyper-schema#",
+    "id": "http://unis.crest.iu.edu/schema/20151104/path#",
+    "description": "A connected Path between two Network resources",
+    "name": "Path",
+    "type": "object",
+    "additionalProperties": true,
+    "allOf": [{
+        "$ref": "http://unis.crest.iu.edu/schema/20151104/networkresource#"
+    }],
+    "required": ["directed", "hops"],
+    "properties": {
+        "directed": {
+            "default": true,
+            "type": "boolean"
+        },
+        "hops": {
+            "description": "A series of connected networkresources that forms a single path",
+            "type": "array",
+            "minItems": 1,
+            "items": {
+                "$ref": "http://json-schema.org/draft-04/links#"
+	    }
+	    
+        }
+    }
+}

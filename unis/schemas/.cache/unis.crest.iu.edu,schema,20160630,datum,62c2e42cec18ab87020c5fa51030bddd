@@ -1,0 +1,28 @@
+status: 200
+content-location: http://unis.crest.iu.edu/schema/20160630/datum
+accept-ranges: bytes
+access-control-allow-headers: x-requested-with
+content-length: 416
+last-modified: Thu, 21 Jul 2016 00:54:52 GMT
+date: Tue, 02 Aug 2016 03:38:13 GMT
+access-control-allow-origin: *
+server: Apache/2.4.10 (Debian)
+cache-control: no-cache
+access-control-allow-methods: POST, GET, PUT, DELETE, OPTION
+etag: "1a0-5381ac4068126"
+
+{
+    "$schema": "http://json-schema.org/draft-04/hyper-schema#",
+    "id": "http://unis.crest.iu.edu/schema/20160630/datum#",
+    "description": "Single piece of measurement data",
+    "name": "Datum",
+    "type": "object",
+    "additionalProperties": true,
+    "required": ["ts"],
+    "properties": {
+        "ts": {
+            "type": "number",
+            "description": "64bit int timestamp"
+        }
+    }
+}

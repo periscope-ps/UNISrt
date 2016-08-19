@@ -1,0 +1,73 @@
+status: 200
+content-location: http://unis.crest.iu.edu/schema/20160630/metadata
+accept-ranges: bytes
+access-control-allow-headers: x-requested-with
+content-length: 1787
+last-modified: Thu, 21 Jul 2016 00:54:52 GMT
+date: Tue, 02 Aug 2016 03:38:13 GMT
+access-control-allow-origin: *
+server: Apache/2.4.10 (Debian)
+cache-control: no-cache
+access-control-allow-methods: POST, GET, PUT, DELETE, OPTION
+etag: "6fb-5381ac405a666"
+
+{
+    "$schema": "http://json-schema.org/draft-04/hyper-schema#",
+    "id": "http://unis.crest.iu.edu/schema/20160630/metadata#",
+    "description": "Metadata",
+    "name": "Metadata",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["id", "subject", "eventType"],
+    "properties": {
+        "$schema": {
+            "default": "http://unis.crest.iu.edu/schema/20160630/metadata#",
+            "format": "uri",
+            "type": "string"
+        },
+        "id": {
+            "description": "Metadata ID",
+            "minLength": 1,
+            "type": "string"
+        },
+        "selfRef": {
+            "description": "Self hyperlink reference for the metadata",
+            "type": "string",
+            "format": "uri"
+        },
+        "ts": {
+            "type": "integer",
+            "description": "64-bit Integer timestamp of the last update on this metadata"
+        },
+        "subject": { "$ref": "http://json-schema.org/draft-04/links#" },
+        "parameters": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+                "datumSchema": {
+                    "default": "http://unis.crest.iu.edu/schema/20160630/datum#",
+                    "type": "string",
+                    "format": "uri"
+                }
+            }
+        },
+        "eventType": {
+            "type": "string"
+        },
+	"measurement": {
+	    "description": "Hyperlink to the measurement or other data source that produced the data described by this metadata",
+	    "type": "string",
+	    "format": "uri"
+	}
+    },
+    "links": [
+        {
+            "rel": "describedby",
+            "href": "{$schema}"
+        },
+        {
+            "rel": "self",
+            "href": "selfRef"
+        }
+    ]
+}

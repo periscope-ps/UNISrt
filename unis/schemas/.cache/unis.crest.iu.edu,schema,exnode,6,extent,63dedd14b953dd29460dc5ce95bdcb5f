@@ -1,0 +1,54 @@
+status: 200
+content-location: http://unis.crest.iu.edu/schema/exnode/6/extent
+accept-ranges: bytes
+access-control-allow-headers: x-requested-with
+content-length: 1008
+last-modified: Thu, 21 Jul 2016 00:54:52 GMT
+date: Tue, 02 Aug 2016 03:38:13 GMT
+access-control-allow-origin: *
+server: Apache/2.4.10 (Debian)
+cache-control: no-cache
+access-control-allow-methods: POST, GET, PUT, DELETE, OPTION
+etag: "3f0-5381ac4017fe3"
+
+{
+  "$schema": "http://json-schema.org/draft-04/hyper-schema#",
+  "id": "http://unis.crest.iu.edu/schema/exnode/6/extent#",
+  "description": "An extent is some chunk of data, somewhere",
+  "name": "extent",
+  "type": "object",
+  "required": ["location", "size", "offset", "parent"],
+  "properties": {
+    "location": {
+      "description": "Where the extent resides as a URI",
+      "type": "string",
+      "format": "uri"
+    },
+    "size": {
+      "description": "The size of an extent",
+      "type": "integer"
+    },
+    "offset": {
+      "description": "Offset of this chunk in overall file",
+      "type": "integer"
+    },
+    "index": {
+      "description": "Relative index of an extent",
+      "type": "integer"
+    },
+    "parent": {
+      "description": "A pointer to a parent exnode, null if adrift",
+      "anyOf": [
+	{
+	  "$ref": "http://unis.crest.iu.edu/schema/exnode/6/exnode#"
+	},
+	{
+	  "$ref": "http://json-schema.org/draft-04/links#"
+        },
+	{
+	  "type": "null"
+	}
+      ]
+    }
+  }
+}

@@ -1,26 +1,24 @@
 import os
-import sys
+
+from unis.settings import UNISRT_ROOT
 
 ##################################################################
 # UNISrt Configuration
 ##################################################################
 CONFIGFILE = None
 
-STANDALONE_DEFAULTS = {
-    "properties": {
-        "configurations": {
-            "unis_url": "http://localhost:8888",
-            "ms_url": "http://localhost:8888",
-            "use_ssl": False,
-            "ssl_cert": "client.pem",
-            "ssl_key": "client.key",
-            "ssl_cafile": None
-            }
-        }
+DEFAULT_CONFIG = {
+    "unis": {
+        "url": "http://localhost:8888",
+        "use_ssl": False,
+        "cert": None,
+    },
+    "ms": {
+        "url": "http://localhost:8888",
+        "use_ssl": False,
+        "cert": None
+    }
 }
-
-UNISRT_ROOT = os.path.dirname(os.path.abspath(__file__)) + os.sep
-sys.path.append(os.path.dirname(os.path.dirname(UNISRT_ROOT)))
 
 ##################################################################
 # Schema definitions and locations
@@ -78,6 +76,9 @@ LOGGER_NAMESPACE = "unisrt"
 
 def config_logger():
     log = logging.getLogger(LOGGER_NAMESPACE)
+    if log.handlers:
+        return log
+        
     handler = logging.StreamHandler()
     handler.setFormatter(logging.Formatter("%(message)s"))
     log.addHandler(handler)

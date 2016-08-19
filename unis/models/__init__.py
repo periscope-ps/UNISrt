@@ -1,0 +1,8 @@
+import sys
+import weakref
+
+from unis.models.models import schemaLoader
+from unis.runtime import settings
+for name, schema in settings.SCHEMAS.items():
+    cls = schemaLoader.get_class(schema, name)
+    setattr(sys.modules[__name__], name, cls)

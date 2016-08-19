@@ -1,0 +1,51 @@
+status: 200
+content-location: http://unis.crest.iu.edu/schema/20160630/network
+accept-ranges: bytes
+access-control-allow-headers: x-requested-with
+content-length: 1088
+last-modified: Thu, 21 Jul 2016 00:54:52 GMT
+date: Tue, 02 Aug 2016 03:38:13 GMT
+access-control-allow-origin: *
+server: Apache/2.4.10 (Debian)
+cache-control: no-cache
+access-control-allow-methods: POST, GET, PUT, DELETE, OPTION
+etag: "440-5381ac406b006"
+
+{
+    "$schema": "http://json-schema.org/draft-04/hyper-schema#",
+    "id": "http://unis.crest.iu.edu/schema/20160630/network#",
+    "description": "Network",
+    "name": "Network",
+    "type": "object",
+    "allOf": [{
+        "$ref": "http://unis.crest.iu.edu/schema/20160630/node#"
+    }],
+    "properties": {
+        "nodes": {
+            "type": "array",
+            "items": {
+                "anyOf": [
+                    {
+                        "$ref": "http://unis.crest.iu.edu/schema/20160630/node#"
+                    },
+                    {
+                        "$ref": "http://json-schema.org/draft-04/links#"
+                    }
+                ]
+            }
+        },
+        "links": {
+            "type": "array",
+            "items": {
+                "anyOf": [
+                    {
+                        "$ref": "http://unis.crest.iu.edu/schema/20160630/link#"
+                    },
+                    {
+                        "$ref": "http://json-schema.org/draft-04/links#"
+                    }
+                ]
+            }
+        }
+    }
+}

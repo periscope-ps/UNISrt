@@ -1,0 +1,76 @@
+status: 200
+cache-control: no-cache
+etag: "600-5381ac3fe72a2"
+last-modified: Thu, 21 Jul 2016 00:54:52 GMT
+access-control-allow-origin: *
+access-control-allow-headers: x-requested-with
+date: Thu, 18 Aug 2016 15:19:38 GMT
+access-control-allow-methods: POST, GET, PUT, DELETE, OPTION
+content-location: http://unis.crest.iu.edu/schema/20151104/measurement
+content-length: 1536
+server: Apache/2.4.10 (Debian)
+accept-ranges: bytes
+
+{
+    "$schema": "http://json-schema.org/draft-04/hyper-schema#",
+    "id": "http://unis.crest.iu.edu/schema/20151104/measurement#",
+    "description": "A measurement object",
+    "name": "Measurement",
+    "type": "object",
+    "additionalProperties": true,
+    "allOf": [{
+        "$ref": "http://unis.crest.iu.edu/schema/20151104/networkresource#"
+    }],
+    "required": ["configuration", "eventTypes"],
+    "properties": {
+	"service": {
+	    "type": "string",
+	    "format": "uri",
+	    "description": "Service which will be taking this measurement"
+	},
+	"configuration": {
+	    "type": "object",
+	    "properties": {
+		"$schema": {
+		    "type": "string",
+		    "format": "uri"
+		}
+	    },
+	    "additionalProperties": true
+	},
+	"scheduled_times": { "$ref": "#/networkresource/lifetimes" },
+	"eventTypes": {
+	    "description": "A list of eventTypes which this measurement produces",
+	    "type": "array",
+	    "items": { "type": "string" }
+	},
+	"resources": {
+	    "description": "A list of resources that this measurement uses or affects",
+	    "type": "array",
+	    "items": {
+		"allOf": [
+		    {
+			"required": ["ref"],
+			"type": "object",
+			"properties": {
+			    "ref": {
+				"description": "Hyperlink reference to the resource",
+				"format": "uri",
+				"type": "string"
+			    },
+			    "usage": {
+				"type": "object",
+				"description": "How is this resource used",
+				"additionalProperties": {
+				    "type": "number",
+				    "minimum": 0,
+				    "maximum": 100
+				}
+			    }
+			}
+		    }
+		]
+	    }
+	}
+    }
+}

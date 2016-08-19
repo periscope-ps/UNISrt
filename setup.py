@@ -20,9 +20,9 @@ setup(
     name = "nre",
     version = version,
     py_modules=['nreshell', 'settings'],
-    packages = ["kernel", "runtime", "runtime.models", "runtime.rest", "libnre", "apps", "apps.faultlocator", "apps.faultlocator.alarms"],
-    package_data = {},
-    author = "Miao Zhang",
+    packages = ["unis", "unis.runtime", "unis.models", "unis.utils", "unis.rest", "unis.services"],
+    package_data = { 'unis': ['schemas/*']},
+    author = "Miao Zhang, Jeremy Musser",
     author_email="miaozhan@indiana.edu",
     license="http://www.apache.org/licenses/LICENSE-2.0",
     

@@ -1,0 +1,41 @@
+status: 200
+content-location: http://unis.crest.iu.edu/schema/20160630/manifest
+accept-ranges: bytes
+access-control-allow-headers: x-requested-with
+content-length: 793
+last-modified: Thu, 21 Jul 2016 00:54:52 GMT
+date: Tue, 02 Aug 2016 03:38:13 GMT
+access-control-allow-origin: *
+server: Apache/2.4.10 (Debian)
+cache-control: no-cache
+access-control-allow-methods: POST, GET, PUT, DELETE, OPTION
+etag: "319-5381ac406ee87"
+
+{
+    "$schema": "http://json-schema.org/draft-04/hyper-schema#",
+    "id": "http://unis.crest.iu.edu/schema/20160630/manifest#",
+    "description": "Collection summary object",
+    "name": "Manifest",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["id", "$collection", "$shard"],
+    "properties": {
+        "id": {
+            "description": "UNIS unique ID",
+            "minLength": 1,
+            "type": "string"
+        },
+	"$collection": {
+	    "description": "Collection name being summarized",
+	    "type": "string"
+	},
+	"$shard": {
+	    "description": "Indicates whether the manifest is complete or partial",
+	    "type": "boolean"
+	},
+	"properties": {
+	    "description": "Object containing the list of property values",
+	    "type": "object"
+	}
+    }
+}

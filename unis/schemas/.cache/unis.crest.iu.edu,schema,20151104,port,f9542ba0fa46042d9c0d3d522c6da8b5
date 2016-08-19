@@ -1,0 +1,56 @@
+status: 200
+cache-control: no-cache
+etag: "5a6-5381ac3fdf5a1"
+last-modified: Thu, 21 Jul 2016 00:54:52 GMT
+access-control-allow-origin: *
+access-control-allow-headers: x-requested-with
+date: Thu, 18 Aug 2016 15:19:38 GMT
+access-control-allow-methods: POST, GET, PUT, DELETE, OPTION
+content-location: http://unis.crest.iu.edu/schema/20151104/port
+content-length: 1446
+server: Apache/2.4.10 (Debian)
+accept-ranges: bytes
+
+{
+    "$schema": "http://json-schema.org/draft-04/hyper-schema#",
+    "id": "http://unis.crest.iu.edu/schema/20151104/port#",
+    "description": "An abstract port",
+    "name": "Port",
+    "type": "object",
+    "allOf": [{
+        "$ref": "http://unis.crest.iu.edu/schema/20151104/networkresource#"
+    }],
+    "properties": {
+        "address": {
+            "description": "A port can have only one address, if there is more then those to be considered virtual ports",
+            "name": "Address",
+            "type": "object",
+            "properties": {
+                "type": {
+                    "description": "The address type: ipv4, ipv6, mac, etc... . AH: Need to define the range of address types",
+                    "type": "string"
+                },
+                "address": {
+                    "description": "The address. AH: Need to define the validation based on address types",
+                    "type": "string"
+                }
+            }
+        },
+        "capacity": {
+            "description": "Ports capacity in bytes",
+            "type": "number"
+        },
+        "index": {
+            "description": "port's index",
+            "type": "string"
+        },
+        "type": {
+            "description": "port type",
+            "type": "string"
+        },
+        "rules": {
+            "description": "Forwarding rules. (AH) need to define a schema.",
+            "type": "array"
+        }
+    }
+}

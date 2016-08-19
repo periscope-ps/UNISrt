@@ -2,9 +2,9 @@ import json
 import re
 import sys
 
-from runtime.models import schemaLoader
-from runtime.models.lists import UnisCollection
-from runtime.rest import UnisClient, UnisError
+from unis.models import schemaLoader
+from unis.models.lists import UnisCollection
+from unis.rest import UnisClient, UnisError
 
 # The ObjectLayer converts json objects from UNIS into python objects and stores
 # them in query-able collections.  Clients have access to find and update, but
@@ -23,7 +23,8 @@ class ObjectLayer(object):
             self.uri = schema
             self.model = model
             
-    def __init__(self, url, **kwargs):
+    def __init__(self, url, runtime=None, **kwargs):
+        self.defer_update = False
         self.__cache__ = {}
         self.__models__ = {}
         self._unis = UnisClient(url, **kwargs)
@@ -38,6 +39,10 @@ class ObjectLayer(object):
             self.__models__[collection] = self.iCollection(collection, schema, model)
             if collection not in ["events", "data"]:
                 self.__cache__[collection] = UnisCollection(resource["href"], collection, model, self)
+        
+        if runtime:
+            self.__subscriber__ = runtime
+            self.defer_update = runtime.settings["defer_update"]
     
     def __getattr__(self, n):
         if n in self.__cache__:
@@ -62,12 +67,11 @@ class ObjectLayer(object):
                 if tmpResource:
                     model = self.__models__[tmpCollection].model
                     tmpObject = model(tmpResource, self, local_only=False)
+                    self.__cache__[tmpCollection][tmpUid] = tmpObject
                 else:
                     raise UnisError("href does not reference resource in unis.")
-            else:
-                tmpObject = self.__cache__[tmpCollection][tmpUid]
             
-            return tmpObject
+            return self.__cache__[tmpCollection][tmpUid]
         else:
             raise ValueError("href must be a direct uri to a unis resource.")
     
@@ -101,9 +105,16 @@ class ObjectLayer(object):
                     self.__cache__[item_meta.name][resource.id] = resource
                     return self.__cache__[item_meta.name][resource.id]
             raise ValueError("Resource type not found in ObjectLayer")
-        
+    
+    def subscribe(self, runtime):
+        self.__subscriber__ = runtime
+        self.defer_update = runtime.settings["defer_update"]
+    
+    def _publish(self, ty, resource):
+        if self.__subscriber__:
+            self.__subscriber__._publish(ty, resource)
     def about(self):
-        return self.__schema__.values()
+        return [v.uri for k,v in self.__models__.items()]
         
     def shutdown(self):
         self._unis.shutdown()

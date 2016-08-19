@@ -6,8 +6,9 @@ import time
 import re
 import weakref
 
-from runtime.settings import SCHEMAS, JSON_SCHEMA_SCHEMA, JSON_SCHEMA_HYPER, \
+from unis.runtime.settings import SCHEMAS, JSON_SCHEMA_SCHEMA, JSON_SCHEMA_HYPER, \
     JSON_SCHEMA_LINKS, JSON_SCHEMAS_ROOT, SCHEMAS_LOCAL, SCHEMA_CACHE_DIR
+from unis.utils.pubsub import Events
 
 # Define the default JSON Schemas that are defined in the JSON schema RFC
 JSON_SCHEMA        = json.loads(open(JSON_SCHEMAS_ROOT + "/schema").read())
@@ -168,9 +169,6 @@ class UnisObject(metaclass = JSONObjectMeta):
         # create a dictionary that conforms to the json 'link' schema.
         self.set_virtual("_lasttouched", datetime.datetime.utcnow())
         
-        ### TODO ###
-        # Ensure that only references are placed in link locations
-        ############
         if n in self.__dict__:
             if isinstance(v, list):
                 v = UnisList(self.get_virtual("_models").get(n, UnisObject), self, *v)
@@ -191,7 +189,7 @@ class UnisObject(metaclass = JSONObjectMeta):
                     self.update()
         else:
             self.set_virtual(n, v)
-        
+                    
     def isPending(self):
         return self._pending
     def modified(self):
