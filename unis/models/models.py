@@ -149,11 +149,10 @@ class UnisObject(metaclass = JSONObjectMeta):
                 self.set_virtual(k, v)
         
     def __getattribute__(self, n):
-        if n in ["get_virtual", "_schema", "_models"]:
+        if n == "get_virtual":
             return super(UnisObject, self).__getattribute__(n)
         
-        v = self.get_virtual(n)
-        if isinstance(v, type(None)):
+        try:
             v = super(UnisObject, self).__getattribute__(n)
             if n not in ["__dict__", "__meta__"]:
                 if isinstance(v, (list, dict)):
@@ -162,7 +161,9 @@ class UnisObject(metaclass = JSONObjectMeta):
                     if isinstance(v, dict):
                         v = self._resolve_dict(v)
                     super(UnisObject, self).__setattr__(n, v)
-        return v
+            return v
+        except:
+            return self.get_virtual(n)
     
     def __setattr__(self, n, v):
         # If the attribute is a UnisObject - i.e. it refers to a descrete resource in UNIS
@@ -183,7 +184,7 @@ class UnisObject(metaclass = JSONObjectMeta):
                         raise ValueError("{t1}.{n} expects {t2} - got {t3}".format(t1=type(self), n=n, t2=model, t3=type(v)))
                         
                     if not v._local:
-                        self._runtime.insert(v)
+                        self.get_virtual("_runtime").insert(v)
                         self.update()
                 else:
                     self.update()
@@ -215,12 +216,12 @@ class UnisObject(metaclass = JSONObjectMeta):
         if "$schema" in o:
             if self._local:
                 model = self._schemaLoader.get_class(o["$schema"])
-                return model(o, self._runtime)
+                return model(o, self.get_virtual("_runtime"))
             else:
-                return self._runtime.insert(o)
+                return self.get_virtual("_runtime").insert(o)
         elif "href" in o:
-            if self._runtime:
-                return self._runtime.find(o["href"])
+            if self.get_virtual("_runtime"):
+                return self.get_virtual("_runtime").find(o["href"])
             else:
                 return o
         else:
@@ -313,6 +314,7 @@ def schemaMetaFactory(name, schema, parents = [JSONObjectMeta], loader=None):
         
         def __call__(meta, *args, **kwargs):
             instance = super(SchemaMetaClass, meta).__call__(*args, **kwargs)
+            instance.__dict__["$schema"] = schema["id"]
             if schema.get("type", "object") == "object":
                 for k, v in schema.get("properties", {}).items():
                     if k not in instance.__dict__:
@@ -341,7 +343,7 @@ class SchemasLoader(object):
     __CACHE__ = {}
     __CLASSES_CACHE__ = {}
     __LOCATIONS__ = {}
-
+    
     def __init__(self, locations=None, cache=None, class_cache=None):
         assert isinstance(locations, (dict, type(None))), \
             "locations is not of type dict or None."
@@ -402,7 +404,7 @@ class SchemasHTTPLib2(SchemasLoader):
     def __init__(self, http, locations=None, cache=None, class_cache=None):
         super(SchemasHTTPLib2, self).__init__(locations, cache, class_cache)
         self._http = http
-     
+    
     def _load_schema(self, uri):
         resp, content = self._http.request(uri, "GET")
         self.__CACHE__[uri] = json.loads(content.decode())
