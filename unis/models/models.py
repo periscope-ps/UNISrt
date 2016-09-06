@@ -176,14 +176,14 @@ class UnisObject(metaclass = JSONObjectMeta):
         
         if n in self.__dict__:
             if isinstance(v, list):
-                v = UnisList(self.get_virtual("_models").get(n, UnisObject), self, *v)
+                v = UnisList(self._models.get(n, UnisObject), self, *v)
             if v == self.__dict__[n]:
                 return
             super(UnisObject, self).__setattr__(n, v)
             self.set_virtual("_dirty", True)
-            if not self.get_virtual("_local"):
+            if not self._local:
                 if isinstance(v, UnisObject):
-                    model = self.get_virtual("_models").get(n, type(v))
+                    model = self._models.get(n, type(v))
                     if model != type(v):
                         raise ValueError("{t1}.{n} expects {t2} - got {t3}".format(t1=type(self), n=n, t2=model, t3=type(v)))
                         
@@ -206,7 +206,7 @@ class UnisObject(metaclass = JSONObjectMeta):
     
     
     def _resolve_list(self, ls, n):
-        tmpResult = UnisList(self.get_virtual("_models").get(n, UnisObject), self)
+        tmpResult = UnisList(self._models.get(n, UnisObject), self)
         for i in ls:
             if isinstance(i, dict):
                 tmpResult.items.append(self._resolve_dict(i))

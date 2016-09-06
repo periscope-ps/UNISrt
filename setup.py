@@ -29,7 +29,9 @@ setup(
     install_requires=[
         "validictory>=validictory-0.8.1",
         "pytz",
-        "python-dateutil"
+        "python-dateutil",
+        "httplib2",
+        "websocket-client"
         #"graph-tool" -- apt-get install
     ],
     
