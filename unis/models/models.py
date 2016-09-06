@@ -1,3 +1,4 @@
+import copy
 import datetime
 import httplib2
 import json
@@ -6,7 +7,7 @@ import time
 import re
 import weakref
 
-from unis.runtime.settings import SCHEMAS, JSON_SCHEMA_SCHEMA, JSON_SCHEMA_HYPER, \
+from unis.models.settings import SCHEMAS, JSON_SCHEMA_SCHEMA, JSON_SCHEMA_HYPER, \
     JSON_SCHEMA_LINKS, JSON_SCHEMAS_ROOT, SCHEMAS_LOCAL, SCHEMA_CACHE_DIR
 from unis.utils.pubsub import Events
 
@@ -43,7 +44,11 @@ class JSONObjectMeta(type):
     def __init__(cls, name, bases, classDict):
         super(JSONObjectMeta, cls).__init__(name, bases, classDict)
         def get_virt(self, n):
-            return cls.__meta__.__get__(self).get(n, None)
+            v = cls.__meta__.__get__(self)
+            if n in v:
+                return v[n]
+            else:
+                raise AttributeError("No local or remote attribute '{n}'".format(n = n))
         def set_virt(self, n, v):
             cls.__meta__.__get__(self)[n] = v
             return v
@@ -139,31 +144,30 @@ class UnisObject(metaclass = JSONObjectMeta):
         self._dirty = False
         self._pending = False
         self._local = local_only
-        self._models = {}
-        self._schema = None
+        self._nocol = False
         
         for k, v in src.items():
             if set_attr:
                 self.__dict__[k] = v
             else:
                 self.set_virtual(k, v)
-        
+    
     def __getattribute__(self, n):
-        if n == "get_virtual":
+        if n in ["get_virtual", "__dict__"]:
             return super(UnisObject, self).__getattribute__(n)
-        
-        try:
+        else:
             v = super(UnisObject, self).__getattribute__(n)
-            if n not in ["__dict__", "__meta__"]:
-                if isinstance(v, (list, dict)):
-                    if isinstance(v, list):
-                        v = self._resolve_list(v, n)
-                    if isinstance(v, dict):
-                        v = self._resolve_dict(v)
-                    super(UnisObject, self).__setattr__(n, v)
+            if n in self.__dict__:
+                if isinstance(v, list):
+                    v = self._resolve_list(v, n)
+                elif isinstance(v, dict):
+                    v = self._resolve_dict(v)
+                self.__dict__[n] = v
             return v
-        except:
-            return self.get_virtual(n)
+    
+    def __getattr__(self, n):
+        return self.get_virtual(n)
+
     
     def __setattr__(self, n, v):
         # If the attribute is a UnisObject - i.e. it refers to a descrete resource in UNIS
@@ -309,30 +313,24 @@ def schemaMetaFactory(name, schema, parents = [JSONObjectMeta], loader=None):
             super(SchemaMetaClass, cls).__init__(name=name, bases=bases, classDict=classDict)
             cls._schema = schema
             cls._schemaLoader = loader
+            cls._models = {}
             cls._resolver = jsonschema.RefResolver(schema["id"], schema, loader.__CACHE__)
             cls.__doc__ = schema.get("description", None)
+            cls._template = copy.deepcopy(getattr(cls, "_template", {"$schema": schema["id"]}))
+            
+                # This is a good idea, but it requires a ton more work to function correctly with HyperSchema
+                #if v.get("type", None) == "array" and "items" in v and "$ref" in v["items"]:
+                #    cls._models[k] = loader.get_class(v["items"]["$ref"])
         
         def __call__(meta, *args, **kwargs):
+            # TODO:
+            #      Revisit how to move this to class __init__ instead of __call__
             instance = super(SchemaMetaClass, meta).__call__(*args, **kwargs)
-            instance.__dict__["$schema"] = schema["id"]
             if schema.get("type", "object") == "object":
                 for k, v in schema.get("properties", {}).items():
                     if k not in instance.__dict__:
-                        default = None
-                        if "type" in v:
-                            if v["type"] == "string":
-                                default = ""
-                            elif v["type"] == "boolean":
-                                default = False
-                            elif v["type"] == "integer" or v["type"] == "number":
-                                default = 0
-                            elif v["type"] == "object":
-                                default = {}
-                            elif v["type"] == "array":
-                                default = []
-                                
-                        instance.__dict__[k] = v.get("default", default)
-        
+                        defaults = { "string": "", "boolean": False, "intenger": 0, "number": 0, "object": {}, "array": [] }
+                        instance.__dict__[k] = v.get("default", defaults.get(v.get("type", "object"), None))
             return instance
             
     return SchemaMetaClass
