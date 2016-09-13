@@ -20,7 +20,7 @@ setup(
     name = "nre",
     version = version,
     py_modules=['nreshell', 'settings'],
-    packages = ["unis", "unis.runtime", "unis.models", "unis.utils", "unis.rest", "unis.services"],
+    packages = ["unis", "unis.runtime", "unis.models", "unis.utils", "unis.rest", "unis.services", "unis.test"],
     package_data = { 'unis': ['schemas/*']},
     author = "Miao Zhang, Jeremy Musser",
     author_email="miaozhan@indiana.edu",

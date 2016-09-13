@@ -24,7 +24,8 @@ RUN_INTEGRATION_TESTING = False
 UNIT_TEST_MODULES = [
     'unis.test.models.UnisObjectTest',
     'unis.test.models.NetworkResourceTest',
-    'unis.test.models.ExnodeTest',
+    'unis.test.models.CollectionTest',
+    'unis.test.runtime.OALTest'
 ]
 
 INTEGRATION_TEST_MODULES = []

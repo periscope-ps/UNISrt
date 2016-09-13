@@ -25,8 +25,8 @@ class ObjectLayer(object):
             
     def __init__(self, url, runtime=None, **kwargs):
         self.defer_update = False
-        self.__cache__ = {}
-        self.__models__ = {}
+        self._cache = {}
+        self._models = {}
         self._unis = UnisClient(url, **kwargs)
         for resource in self._unis.getResources():
             re_str = "{full}|{rel}".format(full = 'http[s]?://(?P<host>[^:/]+)(?::(?P<port>[0-9]{1,4}))?/(?P<col1>[a-zA-Z]+)$',
@@ -36,17 +36,17 @@ class ObjectLayer(object):
             
             schema = resource["targetschema"]["items"]["href"]
             model = schemaLoader.get_class(schema)
-            self.__models__[collection] = self.iCollection(collection, schema, model)
+            self._models[collection] = self.iCollection(collection, schema, model)
             if collection not in ["events", "data"]:
-                self.__cache__[collection] = UnisCollection(resource["href"], collection, model, self)
+                self._cache[collection] = UnisCollection(resource["href"], collection, model, self)
         
         if runtime:
-            self.__subscriber__ = runtime
+            self._subscriber = runtime
             self.defer_update = runtime.settings["defer_update"]
     
     def __getattr__(self, n):
-        if n in self.__cache__:
-            return self.__cache__[n]
+        if n in self._cache:
+            return self._cache[n]
         else:
             raise AttributeError("{n} not found in ObjectLayer".format(n = n))
     
@@ -59,62 +59,64 @@ class ObjectLayer(object):
         if matches:
             tmpCollection = matches.group("col1") or matches.group("col2")
             tmpUid = matches.group("uid1") or matches.group("uid2")
-            if tmpCollection not in self.__cache__:
+            if tmpCollection not in self._cache:
                 raise ValueError("unknown collection {c} in href".format(c = tmpCollection))
             
-            if tmpUid not in self.__cache__[tmpCollection]:
+            try:
+                return self._cache[tmpCollection].where({"id": tmpUid})[0]
+            except IndexError:
                 tmpResource = self._unis.get(href)
                 if tmpResource:
-                    model = self.__models__[tmpCollection].model
+                    model = self._models[tmpCollection].model
                     tmpObject = model(tmpResource, self, local_only=False)
-                    self.__cache__[tmpCollection][tmpUid] = tmpObject
+                    self._cache[tmpCollection].append(tmpObject)
+                    return tmpObject
                 else:
                     raise UnisError("href does not reference resource in unis.")
-            
-            return self.__cache__[tmpCollection][tmpUid]
         else:
             raise ValueError("href must be a direct uri to a unis resource.")
     
     def update(self, resource):
-        if getattr(resource, "selfRef", None):
-            tmpResponse = self._unis.post(resource.selfRef, json.dumps(resource.to_JSON()))
-        else:
-            ref = None
-            for k, item_meta in self.__models__.items():
-                if isinstance(resource, item_meta.model):
-                    ref = "#/{c}".format(c = k)
-            if ref:
-                tmpResponse = self._unis.post(ref, json.dumps(resource.to_JSON()))
-        if tmpResponse:
+        ref = getattr(resource, "selfRef", None) or "#/{c}".format(c = getattr(resource, "_collection", ""))
+        try:
+            tmpResponse = self._unis.post(ref, json.dumps(resource.to_JSON()))
+        except:
             resource._pending = False
+            raise
+        
+        self._cache[resource._collection].updateIndex(resource)
+        resource._pending = False
     
     def insert(self, resource, uid=None):
         if isinstance(resource, dict):
             if "$schema" in resource:
-                for k, item_meta in self.__models__.items():
+                for k, item_meta in self._models.items():
                     if item_meta.uri == resource["$schema"]:
                         resource = item_meta.model(resource, self, local_only=False)
-                        self.__cache__[item_meta.name][resource.id] = resource
-                        return self.__cache__[item_meta.name][resource.id]
+                        self._cache[item_meta.name].append(resource)
+                        return resource
+                raise ValueError("Unknown schema - {s}".format(s = resource["$schema"]))
+            else:
+                raise ValueError("No schema in dict, cannot continue")
         else:
-            for k, item_meta in self.__models__.items():
+            for k, item_meta in self._models.items():
                 if isinstance(resource, item_meta.model):
                     resource.id = uid or resource.id
                     if not resource.id:
                         raise ValueError("Resource does not have a valid id attribute")
-                    self.__cache__[item_meta.name][resource.id] = resource
-                    return self.__cache__[item_meta.name][resource.id]
+                    self._cache[item_meta.name].append(resource)
+                    return resource
             raise ValueError("Resource type not found in ObjectLayer")
     
     def subscribe(self, runtime):
-        self.__subscriber__ = runtime
+        self._subscriber = runtime
         self.defer_update = runtime.settings["defer_update"]
     
     def _publish(self, ty, resource):
-        if self.__subscriber__:
-            self.__subscriber__._publish(ty, resource)
+        if self._subscriber:
+            self._subscriber._publish(ty, resource)
     def about(self):
-        return [v.uri for k,v in self.__models__.items()]
+        return [v.uri for k,v in self._models.items()]
         
     def shutdown(self):
         self._unis.shutdown()

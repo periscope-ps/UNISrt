@@ -36,7 +36,7 @@ class Runtime(object):
     def __init__(self, url=None, defer_update=False):
         self.log = settings.get_logger()
         self.log.info("Starting Unis network Runtime Environment...")
-        self.__services__ = []
+        self._services = []
         self.settings["defer_update"] = defer_update
         self._oal = ObjectLayer(runtime=self, **self.settings["unis"])
         if url:
@@ -61,10 +61,10 @@ class Runtime(object):
     def addService(self, service):
         if not isinstance(service, RuntimeService):
             raise ValueError("Service must by of type RuntimeService")
-        self.__services__.append(service)
+        self._services.append(service)
     def _publish(self, ty, resource):
         if ty in Events:
-            for service in self.__services__:
+            for service in self._services:
                 func = getattr(service, ty)
                 func(service, resource)
                 

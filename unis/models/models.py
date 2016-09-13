@@ -21,12 +21,6 @@ CACHE = {
     JSON_SCHEMA_HYPER: HYPER_SCHEMA,
     JSON_SCHEMA_LINKS: HYPER_LINKS_SCHEMA,
 }
-    
-class HyperLinkNotFound(Exception):
-    pass
-
-class DeserializationException(Exception):
-    pass
 
 # For internal use only
 class JSONObjectMeta(type):
@@ -54,10 +48,10 @@ class JSONObjectMeta(type):
             return v
         
         cls.__meta__ = JSONObjectMeta.AttrDict()
+        cls._models = {}
         cls.get_virtual = get_virt
         cls.set_virtual = set_virt
         cls.remoteObject = lambda obj: isinstance(obj, UnisObject) and not obj._local
-        cls.reference = lambda obj: weakref.ref(obj)()
     
     def __call__(cls, *args, **kwargs):
         instance = super(JSONObjectMeta, cls).__call__()
@@ -127,7 +121,7 @@ class UnisList(metaclass = JSONObjectMeta):
             self._parent._dirty = True
             self._parent.update()
     def __delitem__(self, key):
-        self.items.__delitem(key)
+        self.items.__delitem__(key)
     def __iter__(self):
         return iter(self.items)
     def __repr__(self):
@@ -140,6 +134,7 @@ class UnisObject(metaclass = JSONObjectMeta):
         assert isinstance(src, dict), "{t} src must be of type dict".format(t = type(self))
         
         self._runtime = runtime
+        self._collection = None
         self._defer = defer
         self._dirty = False
         self._pending = False
@@ -170,8 +165,6 @@ class UnisObject(metaclass = JSONObjectMeta):
 
     
     def __setattr__(self, n, v):
-        # If the attribute is a UnisObject - i.e. it refers to a descrete resource in UNIS
-        # create a dictionary that conforms to the json 'link' schema.
         self.set_virtual("_lasttouched", datetime.datetime.utcnow())
         
         if n in self.__dict__:
@@ -188,13 +181,15 @@ class UnisObject(metaclass = JSONObjectMeta):
                         raise ValueError("{t1}.{n} expects {t2} - got {t3}".format(t1=type(self), n=n, t2=model, t3=type(v)))
                         
                     if not v._local:
-                        self.get_virtual("_runtime").insert(v)
+                        self._runtime.insert(v)
                         self.update()
                 else:
                     self.update()
+            else:
+                self.validate()
         else:
             self.set_virtual(n, v)
-                    
+    
     def isPending(self):
         return self._pending
     def modified(self):
@@ -220,12 +215,12 @@ class UnisObject(metaclass = JSONObjectMeta):
         if "$schema" in o:
             if self._local:
                 model = self._schemaLoader.get_class(o["$schema"])
-                return model(o, self.get_virtual("_runtime"))
+                return model(o, self._runtime)
             else:
-                return self.get_virtual("_runtime").insert(o)
+                return self._runtime.insert(o)
         elif "href" in o:
-            if self.get_virtual("_runtime"):
-                return self.get_virtual("_runtime").find(o["href"])
+            if self._runtime:
+                return self._runtime.find(o["href"])
             else:
                 return o
         else:
@@ -255,7 +250,8 @@ class UnisObject(metaclass = JSONObjectMeta):
     def commit(self, n=None):
         if not n:
             if self._local:
-                if self.get_virtual("_runtime"):
+                if self._runtime:
+                    self.__dict__["ts"] = int(time.time()) * 1000000
                     self._local = False
                     self._dirty = True
                     self.update()
@@ -279,8 +275,8 @@ class UnisObject(metaclass = JSONObjectMeta):
         else:
             update = False
             if force:
-                update = True
                 self.validate()
+                update = True
             elif (self._dirty and not self._pending):
                 self.validate()
                 if not self._defer:
@@ -291,7 +287,7 @@ class UnisObject(metaclass = JSONObjectMeta):
                 self._runtime.update(self)
     def flush(self):
         if self._dirty and not self._pending:
-            self.ts = int(time.time()) * 1000000
+            self.__dict__["ts"] = int(time.time()) * 1000000
             self._pending = True
             self._runtime.update(self)
     
@@ -314,9 +310,8 @@ def schemaMetaFactory(name, schema, parents = [JSONObjectMeta], loader=None):
             cls._schema = schema
             cls._schemaLoader = loader
             cls._models = {}
-            cls._resolver = jsonschema.RefResolver(schema["id"], schema, loader.__CACHE__)
+            cls._resolver = jsonschema.RefResolver(schema["id"], schema, loader._CACHE)
             cls.__doc__ = schema.get("description", None)
-            cls._template = copy.deepcopy(getattr(cls, "_template", {"$schema": schema["id"]}))
             
                 # This is a good idea, but it requires a ton more work to function correctly with HyperSchema
                 #if v.get("type", None) == "array" and "items" in v and "$ref" in v["items"]:
@@ -326,10 +321,11 @@ def schemaMetaFactory(name, schema, parents = [JSONObjectMeta], loader=None):
             # TODO:
             #      Revisit how to move this to class __init__ instead of __call__
             instance = super(SchemaMetaClass, meta).__call__(*args, **kwargs)
+            instance.__dict__["$schema"] = meta._schema["id"]
             if schema.get("type", "object") == "object":
                 for k, v in schema.get("properties", {}).items():
                     if k not in instance.__dict__:
-                        defaults = { "string": "", "boolean": False, "intenger": 0, "number": 0, "object": {}, "array": [] }
+                        defaults = { "string": "", "boolean": False, "integer": 0, "number": 0, "object": {}, "array": [] }
                         instance.__dict__[k] = v.get("default", defaults.get(v.get("type", "object"), None))
             return instance
             
@@ -338,9 +334,9 @@ def schemaMetaFactory(name, schema, parents = [JSONObjectMeta], loader=None):
 
 class SchemasLoader(object):
     """JSON Schema Loader"""
-    __CACHE__ = {}
-    __CLASSES_CACHE__ = {}
-    __LOCATIONS__ = {}
+    _CACHE = {}
+    _CLASSES_CACHE = {}
+    _LOCATIONS = {}
     
     def __init__(self, locations=None, cache=None, class_cache=None):
         assert isinstance(locations, (dict, type(None))), \
@@ -349,19 +345,19 @@ class SchemasLoader(object):
             "cache is not of type dict or None."
         assert isinstance(class_cache, (dict, type(None))), \
             "class_cache is not of type dict or None."
-        self.__LOCATIONS__ = locations or {}
-        self.__CACHE__ = cache or {}
-        self.__CLASSES_CACHE__ = class_cache or {}
+        self._LOCATIONS = locations or {}
+        self._CACHE = cache or {}
+        self._CLASSES_CACHE = class_cache or {}
     
     def get(self, uri):
-        if uri in self.__CACHE__:
-            return self.__CACHE__[uri]
-        location = self.__LOCATIONS__.get(uri, uri)
+        if uri in self._CACHE:
+            return self._CACHE[uri]
+        location = self._LOCATIONS.get(uri, uri)
         return self._load_schema(location)
         
     def get_class(self, schema_uri, class_name = None):
-        if schema_uri in self.__CLASSES_CACHE__:
-            return self.__CLASSES_CACHE__[schema_uri]
+        if schema_uri in self._CLASSES_CACHE:
+            return self._CLASSES_CACHE[schema_uri]
         
         schema = self.get(schema_uri)
         class_name = class_name or str(schema.get("name", None))
@@ -391,8 +387,8 @@ class SchemasLoader(object):
             raise AttributeError("class_name is not defined by the provided schema or the client")
             
         meta = schemaMetaFactory("{n}Meta".format(n = class_name), schema, parent_metas, self)
-        self.__CLASSES_CACHE__[schema_uri] = meta(class_name, tuple(parents), {})
-        return self.__CLASSES_CACHE__[schema_uri]
+        self._CLASSES_CACHE[schema_uri] = meta(class_name, tuple(parents), {})
+        return self._CLASSES_CACHE[schema_uri]
     
     def _load_schema(self, name):
          raise NotImplementedError("Schemas._load_schema is not implemented")
@@ -405,8 +401,8 @@ class SchemasHTTPLib2(SchemasLoader):
     
     def _load_schema(self, uri):
         resp, content = self._http.request(uri, "GET")
-        self.__CACHE__[uri] = json.loads(content.decode())
-        return self.__CACHE__[uri]
+        self._CACHE[uri] = json.loads(content.decode())
+        return self._CACHE[uri]
 
 """Load a locally stored copy of the schemas if requested."""
 if SCHEMAS_LOCAL:
