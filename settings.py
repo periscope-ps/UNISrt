@@ -4,19 +4,19 @@ HOSTNAME = socket.gethostname() ### this needs to get the fqdn for DOMAIN to be 
 CONFIGFILE = "/home/mzhang/workspace/nre/kernel/nre.conf"
 
 SCHEMAS = {
-    'networkresources': 'http://unis.crest.iu.edu/schema/20151104/networkresource#',
-    'nodes': 'http://unis.crest.iu.edu/schema/20151104/node#',
-    'domains': 'http://unis.crest.iu.edu/schema/20151104/domain#',
-    'ports': 'http://unis.crest.iu.edu/schema/20151104/port#',
-    'links': 'http://unis.crest.iu.edu/schema/20151104/link#',
-    'paths': 'http://unis.crest.iu.edu/schema/20151104/path#',
-    'networks': 'http://unis.crest.iu.edu/schema/20151104/network#',
-    'topologies': 'http://unis.crest.iu.edu/schema/20151104/topology#',
-    'services': 'http://unis.crest.iu.edu/schema/20151104/service#',
-    'blipp': 'http://unis.crest.iu.edu/schema/20151104/blipp#',
-    'metadata': 'http://unis.crest.iu.edu/schema/20151104/metadata#',
-    'datum': 'http://unis.crest.iu.edu/schema/20151104/datum#',
-    'data': 'http://unis.crest.iu.edu/schema/20151104/data#',
+    'networkresources': 'http://unis.crest.iu.edu/schema/20160630/networkresource#',
+    'nodes': 'http://unis.crest.iu.edu/schema/20160630/node#',
+    'domains': 'http://unis.crest.iu.edu/schema/20160630/domain#',
+    'ports': 'http://unis.crest.iu.edu/schema/20160630/port#',
+    'links': 'http://unis.crest.iu.edu/schema/20160630/link#',
+    'paths': 'http://unis.crest.iu.edu/schema/20160630/path#',
+    'networks': 'http://unis.crest.iu.edu/schema/20160630/network#',
+    'topologies': 'http://unis.crest.iu.edu/schema/20160630/topology#',
+    'services': 'http://unis.crest.iu.edu/schema/20160630/service#',
+    'blipp': 'http://unis.crest.iu.edu/schema/20160630/blipp#',
+    'metadata': 'http://unis.crest.iu.edu/schema/20160630/metadata#',
+    'datum': 'http://unis.crest.iu.edu/schema/20160630/datum#',
+    'data': 'http://unis.crest.iu.edu/schema/20160630/data#',
     'ipports': 'http://unis.crest.iu.edu/schema/ext/ipport/1/ipport#'
     }
 

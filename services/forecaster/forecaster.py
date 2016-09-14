@@ -102,7 +102,7 @@ class Forecaster(object):
             if active_measurements:
                 # TODO: technical difficulty, how to fit measurement tasks with different length? I have
                 # to forge a unified "schedule_params" for all active measurement tasks now.
-                schedule_params = {"every": 7200, "duration": 30, "num_tests": 20}
+                schedule_params = {"every": 3600, "duration": 30, "num_tests": 168}
                 self.unisrt.scheduler.schedule(active_measurements, schedule_params)
                 
             self.unisrt.pushRuntime('measurements')

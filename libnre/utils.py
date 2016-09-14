@@ -85,7 +85,7 @@ def build_measurement(unisrt, service):
     '''
     measurement = {"configuration": {}}
     muuid = uuid.uuid1().hex
-    measurement['$schema'] = "http://unis.crest.iu.edu/schema/20151104/measurement#"
+    measurement['$schema'] = "http://unis.crest.iu.edu/schema/20160630/measurement#"
     measurement['service'] = service
     measurement['selfRef'] = unisrt.config['unis_url'] + "/measurements/" + muuid
     measurement['id'] = muuid
@@ -98,7 +98,7 @@ def build_metadata(unisrt, meas_obj, eventType, isforecasted=False):
     form a bare bone metadata (maybe a bare bone structure is enough?)
     '''
     metadata = {
-        "$schema": 'http://unis.crest.iu.edu/schema/20151104/metadata#',
+        "$schema": 'http://unis.crest.iu.edu/schema/20160630/metadata#',
         "id": uuid.uuid1().hex,
         "subject": {
             "href": meas_obj.selfRef,

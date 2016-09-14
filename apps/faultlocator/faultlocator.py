@@ -162,7 +162,7 @@ class Faultlocator(object):
                     tmp = list(section)
                     data = {
                         "directed": True,
-                        "$schema": "http://unis.crest.iu.edu/schema/20151104/path#",
+                        "$schema": "http://unis.crest.iu.edu/schema/20160630/path#",
                         "src": tmp.pop(0).selfRef,
                         "hops": [],
                         "dst": tmp.pop(-1).selfRef,
