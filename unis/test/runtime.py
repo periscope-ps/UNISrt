@@ -94,18 +94,6 @@ class OALTest(unittest.TestCase):
     @patch.object(unis.runtime.oal.UnisClient, 'getResources', return_value = [{ "href": "#/nodes", "targetschema": { "items": { "href": SCHEMAS["Node"] } } }])
     @patch.object(unis.runtime.oal.UnisClient, 'post')
     @patch.object(unis.runtime.oal.UnisCollection, 'updateIndex')
-    def test_update_selfref(self, ui_mock, p_mock, gr_mock):
-        oal = ObjectLayer("http://localhost:8888")
-        n = Node({"id": "1", "v": 1, "selfRef": "http://localhost:8888/nodes/1"})
-        n._collection = "nodes"
-        oal.update(n)
-        
-        p_mock.assert_called_once_with("http://localhost:8888/nodes/1", json.dumps(n.to_JSON()))
-        ui_mock.assert_called_once_with(n)
-    
-    @patch.object(unis.runtime.oal.UnisClient, 'getResources', return_value = [{ "href": "#/nodes", "targetschema": { "items": { "href": SCHEMAS["Node"] } } }])
-    @patch.object(unis.runtime.oal.UnisClient, 'post')
-    @patch.object(unis.runtime.oal.UnisCollection, 'updateIndex')
     def test_update_ref(self, ui_mock, p_mock, gr_mock):
         oal = ObjectLayer("http://localhost:8888")
         n = Node({"id": "1", "v": 1})

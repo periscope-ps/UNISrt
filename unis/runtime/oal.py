@@ -77,7 +77,7 @@ class ObjectLayer(object):
             raise ValueError("href must be a direct uri to a unis resource.")
     
     def update(self, resource):
-        ref = getattr(resource, "selfRef", None) or "#/{c}".format(c = getattr(resource, "_collection", ""))
+        ref = "#/{c}".format(c = getattr(resource, "_collection", ""))
         try:
             tmpResponse = self._unis.post(ref, json.dumps(resource.to_JSON()))
         except:
