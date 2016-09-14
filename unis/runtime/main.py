@@ -38,9 +38,9 @@ class Runtime(object):
         self.log.info("Starting Unis network Runtime Environment...")
         self._services = []
         self.settings["defer_update"] = defer_update
-        self._oal = ObjectLayer(runtime=self, **self.settings["unis"])
         if url:
             self.settings["unis"]["url"] = url
+        self._oal = ObjectLayer(runtime=self, **self.settings["unis"])
         
     def __getattr__(self, n):
         if "_oal" in self.__dict__:

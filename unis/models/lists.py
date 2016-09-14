@@ -5,6 +5,38 @@ import bisect
 
 from unis.utils.pubsub import Events
 
+class DataCollection(object, subscribe=True):
+    def __init__(self, href):
+        self._cache = []
+        self._subscribe = subscribe
+        self._ready = False
+    def __repr__(self):
+        pass
+    def __len__(self):
+        pass
+    def __getitem__(self, key):
+        pass
+    def __setitem__(self, i, k):
+        raise RuntimeError("Cannot set values to a data collection")
+        
+    @property
+    def current(self):
+        return getattr(self, "_current", None)
+    @property
+    def min(self):
+        return getattr(self, "_min", None)
+    @property
+    def max(self):
+        return getattr(self, "_min", None)
+    @property
+    def mean(self):
+        return getattr(self, "_avg", None)
+    @property
+    def jitter(self):
+        return getattr(self, "_jitter", None)
+    
+    
+
 class UnisCollection(object):
     def __init__(self, href, collection, model, runtime):
         self._cache = []

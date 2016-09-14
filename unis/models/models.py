@@ -140,11 +140,13 @@ class UnisObject(metaclass = JSONObjectMeta):
         self._pending = False
         self._local = local_only
         self._nocol = False
+        self._override_virtual = False
         
         for k, v in src.items():
             if set_attr:
                 self.__dict__[k] = v
             else:
+                self._override_virtual = True
                 self.set_virtual(k, v)
     
     def __getattribute__(self, n):
@@ -325,8 +327,11 @@ def schemaMetaFactory(name, schema, parents = [JSONObjectMeta], loader=None):
             if schema.get("type", "object") == "object":
                 for k, v in schema.get("properties", {}).items():
                     if k not in instance.__dict__:
-                        defaults = { "string": "", "boolean": False, "integer": 0, "number": 0, "object": {}, "array": [] }
-                        instance.__dict__[k] = v.get("default", defaults.get(v.get("type", "object"), None))
+                        if instance._override_virtual and k in instance.__meta__:
+                            instance.__dict__[k] = instance.__meta__[k]
+                        else:
+                            defaults = { "string": "", "boolean": False, "integer": 0, "number": 0, "object": {}, "array": [] }
+                            instance.__dict__[k] = v.get("default", defaults.get(v.get("type", "object"), None))
             return instance
             
     return SchemaMetaClass
