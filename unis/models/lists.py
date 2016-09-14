@@ -5,8 +5,8 @@ import bisect
 
 from unis.utils.pubsub import Events
 
-class DataCollection(object, subscribe=True):
-    def __init__(self, href):
+class DataCollection(object):
+    def __init__(self, href, subscribe = True):
         self._cache = []
         self._subscribe = subscribe
         self._ready = False
