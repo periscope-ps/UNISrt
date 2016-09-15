@@ -39,7 +39,8 @@ class ObjectLayer(object):
             model = schemaLoader.get_class(schema)
             self._models[collection] = self.iCollection(collection, schema, model)
             if collection not in ["events", "data"]:
-                self._cache[collection] = UnisCollection(resource["href"], collection, model, self)
+                sync = runtime.settings["auto_sync"] if runtime else True
+                self._cache[collection] = UnisCollection(resource["href"], collection, model, self, sync)
         
         if runtime:
             self._subscriber = runtime

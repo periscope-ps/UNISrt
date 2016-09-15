@@ -33,11 +33,12 @@ class Runtime(object):
                         
         return self._settings
     
-    def __init__(self, url=None, defer_update=False):
+    def __init__(self, url=None, defer_update=False, auto_sync=True):
         self.log = settings.get_logger()
         self.log.info("Starting Unis network Runtime Environment...")
         self._services = []
         self.settings["defer_update"] = defer_update
+        self.settings["auto_sync"] = auto_sync
         if url:
             self.settings["unis"]["url"] = url
         self._oal = ObjectLayer(runtime=self, **self.settings["unis"])

@@ -38,14 +38,14 @@ class DataCollection(object):
     
 
 class UnisCollection(object):
-    def __init__(self, href, collection, model, runtime):
+    def __init__(self, href, collection, model, runtime, auto_sync=True):
         self._cache = []
         self._indices = { "id": []}
-        self._subscribed = False
         self._runtime = runtime
         self._href = href
         self._model = model
         self._rangeset = set()
+        self._do_sync = auto_sync
         self.collection = collection
     def __repr__(self):
         tmpOut = []
@@ -69,7 +69,7 @@ class UnisCollection(object):
                 tmpOld.__dict__[k] = v
             self._runtime._publish(Events.update, self._cache[i])
     def __iter__(self):
-        if self._subscribed:
+        if not self._do_sync:
             return iter(self._cache)
         return ul_iter(self)
     def _indexitem(self, k, ls, item, index):
@@ -142,7 +142,7 @@ class UnisCollection(object):
         elif isinstance(pred, dict):
             no_index = {}
             iterator = self
-            if self._subscribed and use_index:
+            if not self._do_sync and use_index:
                 sets = [self._rangeset]
                 for k, v in pred.items():
                     if not isinstance(v, dict):
@@ -182,10 +182,13 @@ class UnisCollection(object):
             resource = self._model(v["data"], self._runtime, True, self._runtime.defer_update, False)
             self.append(resource)
         
-        if not self._subscribed:
-            self._runtime._unis.subscribe(self.collection, _callback)
-            self._subscribed = True
-            
+        self._runtime._unis.subscribe(self.collection, _callback)
+        self.subscribe = lambda: None
+        
+    def sync(self):
+        self._do_sync = True
+        for i in ul_iter(self):
+            pass
 
 
 class ul_iter(object):
@@ -214,18 +217,20 @@ class ul_iter(object):
                 self.local_done = True
                 self.index = 0
         
-        # Could check for an empty local cache here, but results in an extra db hit at the end of the list
-        if self.index % self.PAGE_SIZE == 0:
-            self.local_cache = self.ls._runtime._unis.get(self.ls._href, limit = self.PAGE_SIZE, skip = self.index)
-        if not self.local_cache:
-            self.ls.subscribe()
-            raise StopIteration()
+        if self.ls._do_sync:
+            # Could check for an empty local cache here, but results in an extra db hit at the end of the list
+            if self.index % self.PAGE_SIZE == 0:
+                self.local_cache = self.ls._runtime._unis.get(self.ls._href, limit = self.PAGE_SIZE, skip = self.index)
+            if not self.local_cache:
+                self.ls._do_sync = False
+                self.ls.subscribe()
+                raise StopIteration()
         
-        result = self.ls._model(self.local_cache.pop(0), self.ls._runtime, defer=self.ls._runtime.defer_update, local_only=False)
-        self.index += 1
-        if result.id in self.complete:
-            return self.__next__()
-        else:
-            self.ls.append(result)
-            self.complete[result.id] = result
-            return result
+            result = self.ls._model(self.local_cache.pop(0), self.ls._runtime, defer=self.ls._runtime.defer_update, local_only=False)
+            self.index += 1
+            if result.id in self.complete:
+                return self.__next__()
+            else:
+                self.ls.append(result)
+                self.complete[result.id] = result
+                return result
