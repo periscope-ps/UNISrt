@@ -15,7 +15,7 @@ from unis.rest import UnisClient, UnisError
 class ObjectLayer(object):
     class iCollection(object):
         def __init__(self, name, schema, model):
-            re_str = "http[s]?://(?:[^:/]+)(?::[0-9]{1-4})?/(?:[^/]+/)*(?P<sname>[^/]+)#$"
+            re_str = "http[s]?://(?:[^:/]+)(?::[0-9]{1-5})?/(?:[^/]+/)*(?P<sname>[^/]+)#$"
             matches = re.compile(re_str).match(schema)
             assert(matches.group("sname"))
             self.name = name
@@ -27,9 +27,10 @@ class ObjectLayer(object):
         self.defer_update = False
         self._cache = {}
         self._models = {}
+        self._addr = url
         self._unis = UnisClient(url, **kwargs)
         for resource in self._unis.getResources():
-            re_str = "{full}|{rel}".format(full = 'http[s]?://(?P<host>[^:/]+)(?::(?P<port>[0-9]{1,4}))?/(?P<col1>[a-zA-Z]+)$',
+            re_str = "{full}|{rel}".format(full = 'http[s]?://(?P<host>[^:/]+)(?::(?P<port>[0-9]{1,5}))?/(?P<col1>[a-zA-Z]+)$',
                                            rel  = '#/(?P<col2>[a-zA-Z]+)$')
             matches = re.compile(re_str).match(resource["href"])
             collection = matches.group("col1") or matches.group("col2")
@@ -52,7 +53,7 @@ class ObjectLayer(object):
     
     # Returns weakref to cache object
     def find(self, href):
-        re_str = "{full}|{rel}".format(full = 'http[s]?://(?P<host>[^:/]+)(?::(?P<port>[0-9]{1,4}))?/(?P<col1>[a-zA-Z]+)/(?P<uid1>\S+)$',
+        re_str = "{full}|{rel}".format(full = 'http[s]?://(?P<host>[^:/]+)(?::(?P<port>[0-9]{1,5}))?/(?P<col1>[a-zA-Z]+)/(?P<uid1>\S+)$',
                                        rel  = '#/(?P<col2>[a-zA-Z]+)/(?P<uid2>[a-zA-Z0-9]+)$')
         matches = re.compile(re_str).match(href)
         
@@ -92,6 +93,9 @@ class ObjectLayer(object):
             if "$schema" in resource:
                 for k, item_meta in self._models.items():
                     if item_meta.uri == resource["$schema"]:
+                        resource["id"] = resource.get("id", uid)
+                        if not resource["id"]:
+                            raise ValueError("Resource does not have a valid id attribute")
                         resource = item_meta.model(resource, self, local_only=False)
                         self._cache[item_meta.name].append(resource)
                         return resource

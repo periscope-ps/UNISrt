@@ -48,7 +48,10 @@ class UnisCollection(object):
         self._rangeset = set()
         self.collection = collection
     def __repr__(self):
-        return self._cache.__repr__()
+        tmpOut = []
+        for item in self:
+            tmpOut.append(item)
+        return tmpOut.__repr__()
     def __len__(self):
         return self._cache.__len__()
     def __getitem__(self, i):
@@ -76,22 +79,29 @@ class UnisCollection(object):
             ls.insert(bisect.bisect_left(index_keys, v[0]), v)
     
     def append(self, obj):
+        if obj._runtime and obj._runtime != self._runtime:
+            raise ValueError("Resource already belongs to another runtime")
+            
+        obj._runtime = self._runtime
+        obj._collection = self.collection
+        
+        obj.setDeferred(self._runtime.defer_update)
+        if obj.remoteObject():
+            obj.update()
+        
         keys = [k for k, v in self._indices["id"]]
-        i = bisect.bisect_left(keys, obj.id)
-        if i < len(self._indices["id"]) and obj.id  == self._indices["id"][i][0]:
-            self[self._indices["id"][i][1]] = obj
+        index = bisect.bisect_left(keys, obj.id)
+        if index < len(self._indices["id"]) and obj.id  == self._indices["id"][index][0]:
+            old = self[self._indices["id"][index][1]]
+            old._runtime = None
+            self[self._indices["id"][index][1]] = obj
         else:
-            obj._runtime = self._runtime
-            obj._collection = self.collection
-            obj.setDeferred(self._runtime.defer_update)
-            if obj.remoteObject():
-                obj.update()
-            index = len(self._cache)
             self._rangeset.add(index)
             self._cache.append(obj)
+            self._runtime._publish(Events.new, obj)
+            
             for k, ls in self._indices.items():
                 self._indexitem(k, ls, obj, index)
-            self._runtime._publish(Events.new, self._cache[index])
     
     def createIndex(self, k):
         ls = []
@@ -201,15 +211,16 @@ class ul_iter(object):
                 self.index += 1
                 return result
             else:
-                index = 0
-
+                self.local_done = True
+                self.index = 0
+        
         # Could check for an empty local cache here, but results in an extra db hit at the end of the list
         if self.index % self.PAGE_SIZE == 0:
             self.local_cache = self.ls._runtime._unis.get(self.ls._href, limit = self.PAGE_SIZE, skip = self.index)
         if not self.local_cache:
             self.ls.subscribe()
             raise StopIteration()
-            
+        
         result = self.ls._model(self.local_cache.pop(0), self.ls._runtime, defer=self.ls._runtime.defer_update, local_only=False)
         self.index += 1
         if result.id in self.complete:

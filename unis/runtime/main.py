@@ -47,7 +47,10 @@ class Runtime(object):
             return getattr(self.__dict__["_oal"], n)
         else:
             raise AttributeError("_oal not found in Runtime")
-            
+        
+    @property
+    def collections(self):
+        return self._oal._cache.keys()
         
     def find(self, href):
         return self._oal.find(href)
@@ -67,7 +70,7 @@ class Runtime(object):
             for service in self._services:
                 func = getattr(service, ty)
                 func(service, resource)
-                
+    
     def shutdown(self):
         self.log.info("Tearing down connection to UNIS...")
         self._oal.shutdown()

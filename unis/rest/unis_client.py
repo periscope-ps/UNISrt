@@ -13,7 +13,7 @@ class UnisError(Exception):
 class UnisClient(object):
     def __init__(self, url, **kwargs):
         self.log = get_logger()
-        re_str = 'http[s]?://(?P<host>[^:/]+)(?::(?P<port>[0-9]{1,4}))$'
+        re_str = 'http[s]?://(?P<host>[^:/]+)(?::(?P<port>[0-9]{1,5}))$'
         if not re.compile(re_str).match(url):
             raise ValueError("unis url is malformed")
         

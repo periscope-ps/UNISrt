@@ -131,7 +131,7 @@ class UnisList(metaclass = JSONObjectMeta):
 
 class UnisObject(metaclass = JSONObjectMeta):
     def initialize(self, src={}, runtime=None, set_attr=True, defer=False, local_only=True):
-        assert isinstance(src, dict), "{t} src must be of type dict".format(t = type(self))
+        assert isinstance(src, dict), "{t} src must be of type dict, got {t2}".format(t = type(self), t2 = type(src))
         
         self._runtime = runtime
         self._collection = None
@@ -286,6 +286,7 @@ class UnisObject(metaclass = JSONObjectMeta):
             if update and not self._local:
                 self._pending = True
                 self.ts = int(time.time()) * 1000000
+                self.selfRef = "{a}/{c}/{i}".format(a = self._runtime._addr, c = self._collection, i = self.id)
                 self._runtime.update(self)
     def flush(self):
         if self._dirty and not self._pending:
@@ -298,7 +299,11 @@ class UnisObject(metaclass = JSONObjectMeta):
             uid = self.id
             if not validate_id:
                 self.__dict__["id"] = "tmpid"
-            jsonschema.validate(self.to_JSON(), self._schema, resolver = self._resolver)
+            try:
+                jsonschema.validate(self.to_JSON(), self._schema, resolver = self._resolver)
+            except:
+                self.__dict__["id"] = uid
+                raise
             self.__dict__["id"] = uid
         else:
             raise AttributeError("No schema found for object")

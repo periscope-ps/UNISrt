@@ -325,9 +325,6 @@ class CollectionTest(unittest.TestCase):
             i += 1
         self.assertEqual(i, 100)
 
-        i = 0
-        for n in col:
-            self.assertIn((n.id, int(n.id)), col._indices["id"])
         self.assertEqual(rt._unis.subscribe.call_count, 1)
         self.assertTrue(col._subscribed)
     
@@ -403,7 +400,8 @@ class CollectionTest(unittest.TestCase):
 
     def test_where_single_pre_init(self):
         # Arrange
-        rt = MagicMock()
+        rt = Mock()
+        rt._unis.get.return_value = None
         col = UnisCollection("", "", Node, rt)
         col.append(Node({"id": "1", "v": 1}))
         col.append(Node({"id": "2", "v": 2}))
@@ -421,6 +419,7 @@ class CollectionTest(unittest.TestCase):
     def test_where_lt_pre_init(self):
         # Arrange
         rt = MagicMock()
+        rt._unis.get.return_value = None
         col = UnisCollection("", "", Node, rt)
         nodes = [Node({"id": "1", "v": 1}), Node({"id": "2", "v": 2}), Node({"id": "3", "v": 3})]
         for node in nodes:
@@ -439,6 +438,7 @@ class CollectionTest(unittest.TestCase):
     def test_where_le_pre_init(self):
         # Arrange
         rt = MagicMock()
+        rt._unis.get.return_value = None
         col = UnisCollection("", "", Node, rt)
         nodes = [Node({"id": "1", "v": 1}), Node({"id": "2", "v": 2}), Node({"id": "3", "v": 3})]
         for node in nodes:
@@ -458,6 +458,7 @@ class CollectionTest(unittest.TestCase):
     def test_where_gt_pre_init(self):
         # Arrange
         rt = MagicMock()
+        rt._unis.get.return_value = None
         col = UnisCollection("", "", Node, rt)
         nodes = [Node({"id": "1", "v": 1}), Node({"id": "2", "v": 2}), Node({"id": "3", "v": 3})]
         for node in nodes:
@@ -476,6 +477,7 @@ class CollectionTest(unittest.TestCase):
     def test_where_ge_pre_init(self):
         # Arrange
         rt = MagicMock()
+        rt._unis.get.return_value = None
         col = UnisCollection("", "", Node, rt)
         nodes = [Node({"id": "1", "v": 1}), Node({"id": "2", "v": 2}), Node({"id": "3", "v": 3})]
         for node in nodes:
@@ -495,6 +497,7 @@ class CollectionTest(unittest.TestCase):
     def test_where_multi_pre_init(self):
         # Arrange
         rt = MagicMock()
+        rt._unis.get.return_value = None
         col = UnisCollection("", "", Node, rt)
         nodes = [Node({"id": "1", "v": 1}), Node({"id": "2", "v": 2}), Node({"id": "3", "v": 3})]
         for node in nodes:
@@ -642,6 +645,7 @@ class CollectionTest(unittest.TestCase):
     def test_where_func_pre_init(self):
         # Arrange
         rt = MagicMock()
+        rt._unis.get.return_value = None
         col = UnisCollection("", "", Node, rt)
         nodes = [Node({"id": "1", "v": 1}), Node({"id": "2", "v": 2}), Node({"id": "3", "v": 3})]
         for node in nodes:
