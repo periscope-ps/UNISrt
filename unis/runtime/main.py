@@ -1,4 +1,5 @@
 import configparser
+import copy
 
 from unis.services import RuntimeService
 from unis.runtime import settings
@@ -14,7 +15,7 @@ class Runtime(object):
                     val = super(DefaultDict, self).get(k, default)
                     return val or default
             
-            self._settings = DefaultDict(settings.DEFAULT_CONFIG)
+            self._settings = DefaultDict(copy.deepcopy(settings.DEFAULT_CONFIG))
             if settings.CONFIGFILE:
                 tmpConfig = configparser.RawConfigParser(allow_no_value=True)
                 tmpConfig.read(settings.CONFIGFILE)

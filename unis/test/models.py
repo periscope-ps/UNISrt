@@ -324,7 +324,7 @@ class CollectionTest(unittest.TestCase):
             self.assertEqual(int(n.id), i)
             i += 1
         self.assertEqual(i, 100)
-
+        
         self.assertEqual(rt._unis.subscribe.call_count, 1)
         self.assertFalse(col._do_sync)
     
