@@ -12,8 +12,8 @@ class DataCollection(object):
         self._functions = {}
         self._ready = False
         
-        self.attachFunction("min", lambda x, acc: x if acc > x else acc, 0)
-        self.attachFunction("max", lambda x, acc: x if not acc or acc < x else acc)
+        self.attachFunction("min", lambda x, prior, state: x if prior > x else prior, 0)
+        self.attachFunction("max", lambda x, prior, state: x if not acc or prior < x else prior)
         
     def __repr__(self):
         pass
@@ -24,14 +24,14 @@ class DataCollection(object):
     def __setitem__(self, i, k):
         raise RuntimeError("Cannot set values to a data collection")
         
-    def attachFunction(self, n, f, default = None):
+    def attachFunction(self, n, f, default = None, state = {}):
         iname = "_" + n
-        self._functions[iname] = f
+        self._functions[iname] = (f, state)
         setattr(self, iname, default)
-        setattr(self, n, property(lambda self: return getattr(self, iname))
-            
-    
-
+        setattr(self, n, property(lambda self: getattr(self, iname)))
+        
+        
+        
 class UnisCollection(object):
     def __init__(self, href, collection, model, runtime, auto_sync=True):
         self._cache = []

@@ -57,9 +57,9 @@ class Runtime(object):
     def find(self, href):
         return self._oal.find(href)
     
-    def insert(self, resource, sync=False):
+    def insert(self, resource, commit=False):
         result = self._oal.insert(resource)
-        if sync:
+        if commit:
             resource.commit()
         return result
     
