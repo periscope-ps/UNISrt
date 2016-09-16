@@ -10,6 +10,11 @@ from unis.runtime.settings import MIME, get_logger
 class UnisError(Exception):
     pass
 
+class UnisReferenceError(UnisError):
+    def __init__(self, msg, href):
+        super(UnisReferenceError, self).__init__(msg)
+        self.href = href
+
 class UnisClient(object):
     def __init__(self, url, **kwargs):
         self.log = get_logger()

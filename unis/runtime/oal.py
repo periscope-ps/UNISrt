@@ -4,7 +4,7 @@ import sys
 
 from unis.models import schemaLoader
 from unis.models.lists import UnisCollection
-from unis.rest import UnisClient, UnisError
+from unis.rest import UnisClient, UnisError, UnisReferenceError
 
 # The ObjectLayer converts json objects from UNIS into python objects and stores
 # them in query-able collections.  Clients have access to find and update, but
@@ -54,11 +54,15 @@ class ObjectLayer(object):
     
     # Returns weakref to cache object
     def find(self, href):
-        re_str = "{full}|{rel}".format(full = 'http[s]?://(?P<host>[^:/]+)(?::(?P<port>[0-9]{1,5}))?/(?P<col1>[a-zA-Z]+)/(?P<uid1>\S+)$',
+        re_str = "{full}|{rel}".format(full = '(?P<domain>http[s]?://[^:/]+(?::[0-9]{1,5}))/(?P<col1>[a-zA-Z]+)/(?P<uid1>\S+)$',
                                        rel  = '#/(?P<col2>[a-zA-Z]+)/(?P<uid2>[a-zA-Z0-9]+)$')
         matches = re.compile(re_str).match(href)
         
         if matches:
+            domain = matches.group("domain")
+            if domain and domain != self._addr:
+                raise UnisReferenceError("Resource does not belong to the registered instance of UNIS", href)
+                
             tmpCollection = matches.group("col1") or matches.group("col2")
             tmpUid = matches.group("uid1") or matches.group("uid2")
             if tmpCollection not in self._cache:
