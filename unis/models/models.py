@@ -164,7 +164,6 @@ class UnisObject(metaclass = JSONObjectMeta):
     
     def __getattr__(self, n):
         return self.get_virtual(n)
-
     
     def __setattr__(self, n, v):
         self.set_virtual("_lasttouched", datetime.datetime.utcnow())
@@ -296,7 +295,7 @@ class UnisObject(metaclass = JSONObjectMeta):
     
     def validate(self, validate_id=False):
         if self._schema and self._resolver:
-            uid = self.id
+            uid = getattr(self, "id", None)
             if not validate_id:
                 self.__dict__["id"] = "tmpid"
             try:
