@@ -73,8 +73,6 @@ class UnisList(metaclass = JSONObjectMeta):
             return self.ls.items[item]
     
     def initialize(self, model, parent, *args):
-        for arg in args:
-            assert isinstance(arg, model)
         self.model = model
         self._parent = parent
         self.items = []
@@ -111,7 +109,14 @@ class UnisList(metaclass = JSONObjectMeta):
         return tmpResult
     
     def __getitem__(self, key):
-        return self.items[key]
+        v = self.items[key]
+        if isinstance(v, dict):
+            v = self._resolve_dict(v)
+            self.items[key] = v
+        elif isinstance(v, list):
+            v = self._resolve_list(v, n)
+            self.items[key] = v
+        return v
     def __setitem__(self, key, v):
         assert isinstance(v, self.model), "{t1} is not of type {t2}".format(t1 = type(v), t2 = self.model)
         self.items[key] = v
@@ -122,12 +127,41 @@ class UnisList(metaclass = JSONObjectMeta):
             self._parent.update()
     def __delitem__(self, key):
         self.items.__delitem__(key)
+    def __len__(self):
+        return self.items.__len__()
     def __iter__(self):
-        return iter(self.items)
+        for i in range(len(self.items)):
+            yield self[i]
     def __repr__(self):
         return self.items.__repr__()
     def __str__(self):
         return self.items.__str__()
+
+    def _resolve_list(self, ls, n):
+        return UnisList(self.model, self._parent, *ls)
+    
+    def _resolve_dict(self, o):
+        if "$schema" in o:
+            if self._parent._local:
+                model = self._schemaLoader.get_class(o["$schema"])
+                o = model(o, self._parent._runtime)
+            else:
+                o = self._parent._runtime.insert(o)
+        elif "href" in o:
+            if self._parent._runtime:
+                o = self._parent._runtime.find(o["href"])
+            else:
+                return o
+        else:
+            # Convert object and cache
+            o = UnisObject(o, self._parent._runtime)
+            o.set_virtual("_nocol", True)
+            o.set_virtual("_parent", self)
+            
+        assert isinstance(o, self.model), "expected model {t}, got {t2}".format(t = type(self.model), t2 = type(o))
+        return o
+
+
 
 class UnisObject(metaclass = JSONObjectMeta):
     def initialize(self, src={}, runtime=None, set_attr=True, defer=False, local_only=True):
@@ -202,16 +236,8 @@ class UnisObject(metaclass = JSONObjectMeta):
     
     
     def _resolve_list(self, ls, n):
-        tmpResult = UnisList(self._models.get(n, UnisObject), self)
-        for i in ls:
-            if isinstance(i, dict):
-                tmpResult.items.append(self._resolve_dict(i))
-            elif isinstance(i, list):
-                tmpResult.items.append(self._resolve_list(i, n))
-            else:
-                tmpResult.items.append(i)
-        return tmpResult
-        
+        return UnisList(self._models.get(n, UnisObject), self, *ls)
+    
     def _resolve_dict(self, o):
         if "$schema" in o:
             if self._local:

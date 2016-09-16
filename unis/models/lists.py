@@ -7,6 +7,16 @@ from unis.utils.pubsub import Events
 
 class DataCollection(object):
     def __init__(self, href, subscribe = True):
+        def mean(x, prior, state):
+            state["sum"] += x
+            state["count"] += 1
+            return state["sum"] / state["count"]
+        def jitter(x, prior, state):
+            state["count"] += 1
+            delta = x - state["mean"]
+            state["mean"] += delta / state["count"]
+            return prior + (delta * (x - state["mean"]))
+            
         self._cache = []
         self._subscribe = subscribe
         self._functions = {}
@@ -14,6 +24,8 @@ class DataCollection(object):
         
         self.attachFunction("min", lambda x, prior, state: x if prior > x else prior, 0)
         self.attachFunction("max", lambda x, prior, state: x if not acc or prior < x else prior)
+        self.attachFunction("mean", mean, state={"sum": 0, "count": 0})
+        self.attachFunction("jitter", jitter, 0, {"mean": 0, "count": 0}, post_process=lambda x, state: x / max(state["count"] - 1, 1))
         
     def __repr__(self):
         pass
@@ -24,12 +36,9 @@ class DataCollection(object):
     def __setitem__(self, i, k):
         raise RuntimeError("Cannot set values to a data collection")
         
-    def attachFunction(self, n, f, default = None, state = {}):
-        iname = "_" + n
-        self._functions[iname] = (f, state)
-        setattr(self, iname, default)
-        setattr(self, n, property(lambda self: getattr(self, iname)))
-        
+    def attachFunction(self, n, f, default=None, state={}, post_process=lambda x: x):
+        self._functions[n] = (f, (default, state))
+        setattr(self, n, property(lambda self: post_process(*self._functions[n][1])))
         
         
 class UnisCollection(object):
