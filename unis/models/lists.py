@@ -6,7 +6,7 @@ import bisect
 from unis.utils.pubsub import Events
 
 class DataCollection(object):
-    def __init__(self, href, subscribe = True):
+    def __init__(self, href):
         def mean(x, prior, state):
             state["sum"] += x
             state["count"] += 1
@@ -20,12 +20,13 @@ class DataCollection(object):
         self._cache = []
         self._subscribe = subscribe
         self._functions = {}
-        self._ready = False
+        self._at = 0
         
         self.attachFunction("min", lambda x, prior, state: x if prior > x else prior, 0)
         self.attachFunction("max", lambda x, prior, state: x if not acc or prior < x else prior)
         self.attachFunction("mean", mean, state={"sum": 0, "count": 0})
         self.attachFunction("jitter", jitter, 0, {"mean": 0, "count": 0}, post_process=lambda x, state: x / max(state["count"] - 1, 1))
+        self.attachFunction("last", lambda x, prior, state: x)
         
     def __repr__(self):
         pass
@@ -37,9 +38,17 @@ class DataCollection(object):
         raise RuntimeError("Cannot set values to a data collection")
         
     def attachFunction(self, n, f, default=None, state={}, post_process=lambda x: x):
+        def init(f):
+            if self._ready:
+                ### TODO ###
+                pass
+        
         self._functions[n] = (f, (default, state))
         setattr(self, n, property(lambda self: post_process(*self._functions[n][1])))
         
+    def read(self):
+        ### TODO ###
+        pass
         
 class UnisCollection(object):
     def __init__(self, href, collection, model, runtime, auto_sync=True):
@@ -100,6 +109,7 @@ class UnisCollection(object):
             old._runtime = None
             self[self._indices["id"][index][1]] = obj
         else:
+            index = len(self._cache)
             self._rangeset.add(index)
             self._cache.append(obj)
             self._runtime._publish(Events.new, obj)

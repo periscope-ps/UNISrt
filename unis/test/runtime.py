@@ -34,7 +34,7 @@ from unis.runtime.oal import ObjectLayer
 class OALTest(unittest.TestCase):
     @patch.object(unis.runtime.oal.UnisClient, 'getResources', return_value = [{ "href": "#/nodes", "targetschema": { "items": { "href": SCHEMAS["Node"] } } }])
     @patch.object(unis.runtime.oal.UnisClient, 'get', return_value = { "id": "2", "ts": 1, "v": 2})
-    @patch.object(unis.runtime.oal.UnisCollection, 'where', return_value = [Node({ "id": "1", "ts": 1, "v": 0})])
+    @patch.object(unis.runtime.oal.UnisCollection, 'where', return_value = iter([Node({ "id": "1", "ts": 1, "v": 0})]))
     @patch.object(unis.runtime.oal.UnisCollection, 'append')
     def test_find_rel(self, a_mock, wh_mock, g_mock, gr_mock):
         oal = ObjectLayer("http://localhost:8888")
@@ -47,7 +47,7 @@ class OALTest(unittest.TestCase):
         wh_mock.assert_called_once_with({"id": "1"})
         
     @patch.object(unis.runtime.oal.UnisClient, 'getResources', return_value = [{ "href": "#/nodes", "targetschema": { "items": { "href": SCHEMAS["Node"] } } }])
-    @patch.object(unis.runtime.oal.UnisCollection, 'where', return_value = [Node({ "id": "1", "ts": 1, "v": 0 })])
+    @patch.object(unis.runtime.oal.UnisCollection, 'where', return_value = iter([Node({ "id": "1", "ts": 1, "v": 0 })]))
     @patch.object(unis.runtime.oal.UnisClient, 'get', return_value = { "id": "1", "ts": 1, "v": 0})
     @patch.object(unis.runtime.oal.UnisCollection, 'append')
     def test_find_abs(self, a_mock, g_mock, wh_mock, gr_mock):
@@ -61,7 +61,7 @@ class OALTest(unittest.TestCase):
         wh_mock.assert_called_once_with({"id": "1"})
             
     @patch.object(unis.runtime.oal.UnisClient, 'getResources', return_value = [{ "href": "#/nodes", "targetschema": { "items": { "href": SCHEMAS["Node"] } } }])
-    @patch.object(unis.runtime.oal.UnisCollection, 'where', return_value = [])
+    @patch.object(unis.runtime.oal.UnisCollection, 'where', return_value = iter([]))
     @patch.object(unis.runtime.oal.UnisClient, 'get', return_value = { "id": "1", "ts": 1, "v": 0})
     @patch.object(unis.runtime.oal.UnisCollection, 'append')
     def test_find_page_miss(self, a_mock, g_mock, wh_mock, gr_mock):
@@ -77,7 +77,7 @@ class OALTest(unittest.TestCase):
 
 
     @patch.object(unis.runtime.oal.UnisClient, 'getResources', return_value = [{ "href": "#/nodes", "targetschema": { "items": { "href": SCHEMAS["Node"] } } }])
-    @patch.object(unis.runtime.oal.UnisCollection, 'where', return_value = [Node({ "id": "1", "ts": 1, "v": 0 })])
+    @patch.object(unis.runtime.oal.UnisCollection, 'where', return_value = iter([Node({ "id": "1", "ts": 1, "v": 0 })]))
     @patch.object(unis.runtime.oal.UnisClient, 'get', return_value = { "id": "1", "ts": 1, "v": 0})
     @patch.object(unis.runtime.oal.UnisCollection, 'append')
     def test_find_bad_url(self, a_mock, g_mock, wh_mock, gr_mock):

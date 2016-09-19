@@ -13,8 +13,23 @@
 # under the License.
 
 from setuptools import setup
+from setuptools import Command
+
+import unis.test.runtests as tests
 
 version = "0.1.dev"
+
+class tester(Command):
+    description = "Run unittests for the program"
+    user_options = []
+    
+    def initialize_options(self):
+        pass
+    def finalize_options(self):
+        pass
+
+    def run(self):
+        return tests.main()
 
 setup(
     name = "nre",
@@ -34,7 +49,7 @@ setup(
         "websocket-client"
         #"graph-tool" -- apt-get install
     ],
-    
+    cmdclass={'test': tester },
     entry_points = {
         'console_scripts': [
             'nreshell = nreshell:main',

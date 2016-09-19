@@ -278,7 +278,7 @@ class UnisObject(metaclass = JSONObjectMeta):
         if not n:
             if self._local:
                 if self._runtime:
-                    self.__dict__["ts"] = int(time.time()) * 1000000
+                    self.__dict__["ts"] = int(time.time() * 1000000)
                     self._local = False
                     self._dirty = True
                     self.update()
@@ -310,12 +310,12 @@ class UnisObject(metaclass = JSONObjectMeta):
                     update = True
             if update and not self._local:
                 self._pending = True
-                self.ts = int(time.time()) * 1000000
+                self.ts = int(time.time() * 1000000)
                 self.selfRef = "{a}/{c}/{i}".format(a = self._runtime._addr, c = self._collection, i = self.id)
                 self._runtime.update(self)
     def flush(self):
         if self._dirty and not self._pending:
-            self.__dict__["ts"] = int(time.time()) * 1000000
+            self.__dict__["ts"] = int(time.time() * 1000000)
             self._pending = True
             self._runtime.update(self)
     

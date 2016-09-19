@@ -69,7 +69,7 @@ class ObjectLayer(object):
                 raise ValueError("unknown collection {c} in href".format(c = tmpCollection))
             
             try:
-                return self._cache[tmpCollection].where({"id": tmpUid})[0]
+                return list(self._cache[tmpCollection].where({"id": tmpUid}))[0]
             except IndexError:
                 tmpResource = self._unis.get(href)
                 if tmpResource:
