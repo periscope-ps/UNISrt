@@ -12,9 +12,20 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
+from __future__ import print_function 
 from setuptools import setup
+import sys
 
-version = "0.1.dev"
+version = "0.1.dev0"
+
+sys.path.append(".")
+if sys.version_info[0] < 3: 
+    print("------------------------------")
+    print("Must use python 3.0 or greater", file=sys.stderr)
+    print("Found python version ", sys.version_info, file=sys.stderr)
+    print("Installation aborted", file=sys.stderr)
+    print("------------------------------")
+    sys.exit()
 
 setup(
     name = "nre",
