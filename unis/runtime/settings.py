@@ -1,4 +1,5 @@
 from unis.settings import UNISRT_ROOT
+from unis.services.data import DataService
 
 ##################################################################
 # UNISrt Configuration
@@ -15,7 +16,8 @@ DEFAULT_CONFIG = {
         "url": "http://localhost:8888",
         "use_ssl": False,
         "cert": None
-    }
+    },
+    "services": [ DataService ]
 }
 
 ##################################################################

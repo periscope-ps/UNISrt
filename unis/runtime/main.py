@@ -44,6 +44,9 @@ class Runtime(object):
             self.settings["unis"]["url"] = url
         self._oal = ObjectLayer(runtime=self, **self.settings["unis"])
         
+        for service in self.settings["services"]:
+            self.addService(service)
+        
     def __getattr__(self, n):
         if "_oal" in self.__dict__:
             return getattr(self.__dict__["_oal"], n)
@@ -64,14 +67,17 @@ class Runtime(object):
         return result
     
     def addService(self, service):
-        if not isinstance(service, RuntimeService):
+        if isinstance(service, type):
+            instance = service(self)
+        if not isinstance(instance, RuntimeService):
             raise ValueError("Service must by of type RuntimeService")
-        self._services.append(service)
+        instance.attach(self)
+        self._services.append(instance)
     def _publish(self, ty, resource):
         if ty in Events:
             for service in self._services:
-                func = getattr(service, ty)
-                func(service, resource)
+                func = getattr(service, ty.name)
+                func(resource)
     
     def shutdown(self):
         self.log.info("Tearing down connection to UNIS...")

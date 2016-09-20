@@ -319,11 +319,8 @@ class CollectionTest(unittest.TestCase):
             col.append(Node({"id": str(i)}))
         
         # Assert
-        i = 0
-        for n in col:
+        for i, n in enumerate(col):
             self.assertEqual(int(n.id), i)
-            i += 1
-        self.assertEqual(i, 100)
         
         self.assertEqual(rt._unis.subscribe.call_count, 1)
         self.assertFalse(col._do_sync)

@@ -6,7 +6,7 @@ class ServiceMetaclass(type):
             def nf(self, resource):
                 tmpState = resource.isDeferred()
                 resource.setDeferred(True)
-                kwargs['fn'](self, resource)
+                kwargs[fn](self, resource)
                 resource.setDeferred(tmpState)
             return nf
         
@@ -14,9 +14,11 @@ class ServiceMetaclass(type):
             setattr(cls, op, decoratorFactory(op))
 
 class RuntimeService(metaclass=ServiceMetaclass):
-    def __init__(self, runtime):
+    def __init__(self, runtime=None):
         self.runtime = runtime
         super(RuntimeService, self).__init__()
+    def attach(self, runtime):
+        self.runtime = runtime
     
     def new(self, resource):
         pass

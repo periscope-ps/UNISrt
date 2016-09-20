@@ -61,10 +61,10 @@ setup(
         #"graph-tool" -- apt-get install
     ],
     cmdclass={'test': tester },
-    entry_points = {
-        'console_scripts': [
-            'nreshell = nreshell:main',
-            'helm = apps.helm.helm:main',
-        ]
-    },
+    #entry_points = {
+    #    'console_scripts': [
+    #        'nreshell = nreshell:main',
+    #        'helm = apps.helm.helm:main',
+    #    ]
+    #},
 )

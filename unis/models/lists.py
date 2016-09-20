@@ -6,7 +6,7 @@ import bisect
 from unis.utils.pubsub import Events
 
 class DataCollection(object):
-    def __init__(self, href):
+    def __init__(self, mid, runtime, subscribe=True):
         def mean(x, prior, state):
             state["sum"] += x
             state["count"] += 1
@@ -17,39 +17,73 @@ class DataCollection(object):
             state["mean"] += delta / state["count"]
             return prior + (delta * (x - state["mean"]))
             
+        self._href = "#/data/{mid}".format(mid = mid)
+        self.metadataId = mid
         self._cache = []
-        self._subscribe = subscribe
         self._functions = {}
         self._at = 0
+        self._runtime = runtime
+        self._ready = False
+        
+        if not subscribe:
+            self._subscribe = lambda: False
         
         self.attachFunction("min", lambda x, prior, state: x if prior > x else prior, 0)
-        self.attachFunction("max", lambda x, prior, state: x if not acc or prior < x else prior)
+        self.attachFunction("max", lambda x, prior, state: x if not prior or prior < x else prior)
         self.attachFunction("mean", mean, state={"sum": 0, "count": 0})
         self.attachFunction("jitter", jitter, 0, {"mean": 0, "count": 0}, post_process=lambda x, state: x / max(state["count"] - 1, 1))
         self.attachFunction("last", lambda x, prior, state: x)
         
-    def __repr__(self):
-        pass
     def __len__(self):
         pass
     def __getitem__(self, key):
         pass
     def __setitem__(self, i, k):
         raise RuntimeError("Cannot set values to a data collection")
+
+    def __getattribute__(self, n):
+        if n != "_functions" and  n in self._functions:
+            self.load()
+            func, pp, meta = self._functions[n]
+            return pp(*meta)
+        return super(DataCollection, self).__getattribute__(n)
         
-    def attachFunction(self, n, f, default=None, state={}, post_process=lambda x: x):
-        def init(f):
-            if self._ready:
-                ### TODO ###
-                pass
+    def attachFunction(self, n, f, default=None, state={}, post_process=lambda x, s: x):
+        def func():
+            self.load()
+            post_process(*self._function[n][1])
+            
+        self._functions[n] = (f, post_process, (default, state))
         
-        self._functions[n] = (f, (default, state))
-        setattr(self, n, property(lambda self: post_process(*self._functions[n][1])))
-        
-    def read(self):
+    def load(self):
+        if not self._ready:
+            for record in CollectionIterator(self, ts="gt={ts}".format(ts = self._at)):
+                self._process(record)
+            self._ready = self._subscribe()
+            
+    def _process(self, record):
         ### TODO ###
-        pass
-        
+        # Process records (and store?)
+        self._at = max(self._at, record["ts"])
+        for k, v in self._functions.items():
+            func, pp, meta = v
+            prior, state = meta
+            value = func(record["value"], prior, state)
+            self._functions[k] = (func, pp, (value, state))
+    
+    def _subscribe(self):
+        def _callback(v):
+            v = json.loads(v)
+            for k, v in v["data"].items():
+                for record in v:
+                    self._process(record)
+            
+        self._runtime._unis.subscribe("data/{i}".format(i=self.metadataId), _callback)
+        self._subscribe = lambda: True
+        return True
+    
+
+
 class UnisCollection(object):
     def __init__(self, href, collection, model, runtime, auto_sync=True):
         self._cache = []
@@ -81,10 +115,12 @@ class UnisCollection(object):
             for k,v in obj.__dict__.items():
                 tmpOld.__dict__[k] = v
             self._runtime._publish(Events.update, self._cache[i])
+        else:
+            raise ValueError("Attempted to insert an older object than current version into collection")
     def __iter__(self):
         if not self._do_sync:
             return iter(self._cache)
-        return ul_iter(self)
+        return MixedCollectionIterator(self)
     def _indexitem(self, k, ls, item, index):
         v = (getattr(item, k), index) if getattr(item, k, None) else None
         if v:
@@ -194,37 +230,59 @@ class UnisCollection(object):
         def _callback(v):
             v = json.loads(v)
             resource = self._model(v["data"], self._runtime, True, self._runtime.defer_update, False)
-            self.append(resource)
+            try:
+                self.append(resource)
+            except ValueError:
+                pass
         
         self._runtime._unis.subscribe(self.collection, _callback)
         self.subscribe = lambda: None
         
     def sync(self):
         self._do_sync = True
-        for i in ul_iter(self):
+        for i in MixedCollectionIterator(self):
             pass
 
 
-class ul_iter(object):
-    def __init__(self, ls):
+class CollectionIterator(object):
+    def __init__(self, ls, **kwargs):
         self.ls = ls
         self.index = 0
-        self.PAGE_SIZE = 100
         self.local_cache = []
-        self.complete = {}
-        self.local_done = False
-    
+        self.kwargs = kwargs
+        self.kwargs.update({"url": ls._href, "limit": 100})
+        
     def __iter__(self):
         return self
-    
     def next(self):
         return self.__next__()
+    def __next__(self):
+        if self.index % self.kwargs["limit"] == 0:
+            self.local_cache = self.ls._runtime._unis.get(skip = self.index, **self.kwargs)
+        if not self.local_cache:
+            self.finalize()
+        
+        self.index += 1
+        result =  self.processResult(self.local_cache.pop(0))
+        return result
+    
+    def finalize(self):
+        raise StopIteration()
+    
+    def processResult(self, res):
+        return res
+
+
+class MixedCollectionIterator(CollectionIterator):
+    def __init__(self, ls):
+        self.local_done = False
+        super(MixedCollectionIterator, self).__init__(ls)
+    
     def __next__(self):
         # Return all locally stored values first
         if not self.local_done:
             if self.index < len(self.ls):
                 result = self.ls[self.index]
-                self.complete[result.id] = result
                 self.index += 1
                 return result
             else:
@@ -232,19 +290,17 @@ class ul_iter(object):
                 self.index = 0
         
         if self.ls._do_sync:
-            # Could check for an empty local cache here, but results in an extra db hit at the end of the list
-            if self.index % self.PAGE_SIZE == 0:
-                self.local_cache = self.ls._runtime._unis.get(self.ls._href, limit = self.PAGE_SIZE, skip = self.index)
-            if not self.local_cache:
-                self.ls._do_sync = False
-                self.ls.subscribe()
-                raise StopIteration()
-        
-            result = self.ls._model(self.local_cache.pop(0), self.ls._runtime, defer=self.ls._runtime.defer_update, local_only=False)
-            self.index += 1
-            if result.id in self.complete:
-                return self.__next__()
-            else:
-                self.ls.append(result)
-                self.complete[result.id] = result
-                return result
+            return super(MixedCollectionIterator, self).__next__()
+    
+    def finalize(self):
+        self.ls._do_sync = False
+        self.ls.subscribe()
+        super(MixedCollectionIterator, self).finalize()
+
+    def processResult(self, res):
+        result = self.ls._model(res, self.ls._runtime, defer=self.ls._runtime.defer_update, local_only=False)
+        try:
+            self.ls.append(result)
+            return result
+        except ValueError:
+            return self.__next__()
