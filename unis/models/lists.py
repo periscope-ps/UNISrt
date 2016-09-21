@@ -141,8 +141,6 @@ class UnisCollection(object):
         keys = [k for k, v in self._indices["id"]]
         index = bisect.bisect_left(keys, obj.id)
         if index < len(self._indices["id"]) and obj.id  == self._indices["id"][index][0]:
-            old = self[self._indices["id"][index][1]]
-            old._runtime = None
             self[self._indices["id"][index][1]] = obj
         else:
             index = len(self._cache)
@@ -242,8 +240,8 @@ class UnisCollection(object):
         self._do_sync = True
         for i in MixedCollectionIterator(self):
             pass
-
-
+        
+        
 class CollectionIterator(object):
     def __init__(self, ls, **kwargs):
         self.ls = ls

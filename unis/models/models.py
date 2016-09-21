@@ -270,6 +270,9 @@ class UnisObject(metaclass = JSONObjectMeta):
                     tmpResult[k] = v.to_JSON()
             elif isinstance(v, UnisList):
                 tmpResult[k] = v.to_JSON()
+            elif isinstance(v, list):
+                self.__dict__[k] = self._resolve_list(v, k)
+                tmpResult[k] = self.__dict__[k].to_JSON()
             else:
                 tmpResult[k] = v
         return tmpResult
@@ -282,6 +285,7 @@ class UnisObject(metaclass = JSONObjectMeta):
                     self._local = False
                     self._dirty = True
                     self.update()
+                    self._runtime._publish(Events.new, self)
                 else:
                     raise AttributeError("Object does not have a registered runtime")
         else:

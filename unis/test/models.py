@@ -255,6 +255,7 @@ class CollectionTest(unittest.TestCase):
         self.assertEqual(col._indices["id"], [("1", 0)])
         self.assertEqual(col._rangeset, set([0]))
         self.assertEqual(col[0].v, 2)
+        self.assertEqual(n1._runtime, rt)
         rt._publish.assert_any_call(Events.new, n1)
         rt._publish.assert_any_call(Events.update, n1)
         self.assertEqual(rt._publish.call_count, 2)

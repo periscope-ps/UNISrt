@@ -11,7 +11,8 @@ class ServiceMetaclass(type):
             return nf
         
         for op in ['new', 'update', 'delete']:
-            setattr(cls, op, decoratorFactory(op))
+            if op in kwargs:
+                setattr(cls, op, decoratorFactory(op))
 
 class RuntimeService(metaclass=ServiceMetaclass):
     def __init__(self, runtime=None):

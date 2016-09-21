@@ -122,7 +122,7 @@ class ObjectLayer(object):
         self.defer_update = runtime.settings["defer_update"]
     
     def _publish(self, ty, resource):
-        if self._subscriber:
+        if getattr(self, "_subscriber", None):
             self._subscriber._publish(ty, resource)
     def about(self):
         return [v.uri for k,v in self._models.items()]

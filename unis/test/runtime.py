@@ -113,7 +113,7 @@ class OALTest(unittest.TestCase):
         
         self.assertEqual(a_mock.call_count, 1)
         
-    @patch.object(unis.runtime.oal.UnisClient, 'getResources', return_value = [{ "href": "#/nodes", "targetschema": { "items": { "href": SCHEMAS["Node"] } } }])
+    @patch.object(unis.runtime.oal.UnisClient, 'getResources', return_value = [{ "href": "#/nodes", "targetschema": { "items": { "href": SCHEMAS["Node"] } } }]) 
     @patch.object(unis.runtime.oal.UnisCollection, 'append')
     def test_insert_obj(self, a_mock, gr_mock):
         oal = ObjectLayer("http://localhost:8888")
@@ -123,4 +123,22 @@ class OALTest(unittest.TestCase):
         
         gr_mock.assert_called_once_with()
         a_mock.assert_called_once_with(n)
+                
+    @patch.object(unis.runtime.oal.UnisClient, 'getResources', return_value = [{ "href": "#/nodes", "targetschema": { "items": { "href": SCHEMAS["Node"] } } }])
+    @patch.object(unis.runtime.oal.UnisClient, 'post')
+    @patch.object(unis.runtime.oal.UnisCollection, 'updateIndex')
+    @patch.object(unis.runtime.oal.UnisCollection, 'append')
+    def test_modify_object(self, a_mock, ui_mock, p_mock, gr_mock):
+        oal = ObjectLayer("http://localhost:8888")
+        n = Node({"id": "1"})
         
+        oal.insert(n)
+        n._runtime = oal
+        n._collection = "nodes"
+        n.commit()
+        n.name = "blah"
+        
+        self.assertEqual(n.name, "blah")
+        a_mock.called_once_with(n)
+        p_mock.assert_called_with("#/nodes", json.dumps(n.to_JSON()))
+        ui_mock.assert_called_with(n)
