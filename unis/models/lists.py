@@ -2,6 +2,7 @@
 import json
 import types
 import bisect
+import uuid
 
 from unis.utils.pubsub import Events
 

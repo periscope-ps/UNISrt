@@ -26,12 +26,15 @@ class UnisClient(object):
         self._verify = kwargs.get("verify", False)
         self._ssl = kwargs.get("cert", None)
         self._executor = ThreadPoolExecutor(max_workers=12)
-        self._sockets = []
+        self._sockets = {}
     
     def shutdown(self):
         self.log.info("Removing sockets")
-        for socket in self._sockets:
-            socket.close()
+        for s in self._sockets.values():
+            if s["shutdown"]:
+                s["socket"].close()
+            else:
+                s["shutdown"] = True
         self._executor.shutdown()
     
     def getResources(self):
@@ -73,11 +76,19 @@ class UnisClient(object):
         def on_message(ws, message):
             self.log.debug("ws-message <url={u} msg={m}>".format(u = url, m = message))
             callback(message)
-        ws = websocket.WebSocketApp(url, on_message = on_message,
+        def on_open(ws):
+            self.log.debug("ws-connect <url={u}>".format(u = url))
+            if self._sockets[url]["shutdown"]:
+                ws.close()
+            else:
+                self._sockets[url]["shutdown"] = True
+            
+        ws = websocket.WebSocketApp(url, 
+                                    on_message = on_message,
+                                    on_open  = on_open, 
                                     on_error = lambda ws, error: self.log.error("ws-error <url={u} error={e}>".format(u = url, e = error)),
-                                    on_open  = lambda ws: self.log.debug("ws-connect <url={u}>".format(u = url)), 
                                     on_close = lambda ws: self.log.debug("ws-close <url={u}>".format(u = url)))
-        self._sockets.append(ws)
+        self._sockets[url] = { "socket": ws, "shutdown": False }
         ws.run_forever(sslopt=kwargs)
         
     def _build_query(self, args, **kwargs):
