@@ -1,5 +1,7 @@
+import atexit
 import configparser
 import copy
+import signal
 
 from unis.services import RuntimeService
 from unis.runtime import settings
@@ -37,6 +39,11 @@ class Runtime(object):
     def __init__(self, url=None, defer_update=False, auto_sync=True):
         self.log = settings.get_logger()
         self.log.info("Starting Unis network Runtime Environment...")
+        
+        signal.signal(signal.SIGINT, self.shutdown)
+        signal.signal(signal.SIGTERM, self.shutdown)
+        atexit.register(self.shutdown)
+        
         self._services = []
         self.settings["defer_update"] = defer_update
         self.settings["auto_sync"] = auto_sync
@@ -79,7 +86,7 @@ class Runtime(object):
                 func = getattr(service, ty.name)
                 func(resource)
     
-    def shutdown(self):
+    def shutdown(self, sig=None, frame=None):
         self.log.info("Tearing down connection to UNIS...")
         self._oal.shutdown()
         self.log.info("Teardown complete.")
@@ -87,3 +94,6 @@ class Runtime(object):
         return self
     def __exit__(self, type, value, traceback):
         self.shutdown()
+    def __del__(self):
+        self.shutdown()
+        super(Runtime, self).__del__()
