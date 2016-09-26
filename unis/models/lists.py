@@ -63,8 +63,6 @@ class DataCollection(object):
             self._ready = self._subscribe()
             
     def _process(self, record):
-        ### TODO ###
-        # Process records (and store?)
         self._at = max(self._at, record["ts"])
         for k, v in self._functions.items():
             func, pp, meta = v
@@ -95,6 +93,8 @@ class UnisCollection(object):
         self._rangeset = set()
         self._do_sync = auto_sync
         self.collection = collection
+        self.locked = False
+        
     def __repr__(self):
         tmpOut = []
         for item in self:
@@ -129,6 +129,7 @@ class UnisCollection(object):
             ls.insert(bisect.bisect_left(index_keys, v[0]), v)
     
     def append(self, obj):
+        print("Append: ", "locked" if self.locked else "unlocked")
         if obj._runtime and obj._runtime != self._runtime:
             raise ValueError("Resource already belongs to another runtime")
             
@@ -139,18 +140,20 @@ class UnisCollection(object):
         if obj.remoteObject():
             obj.update()
         
-        keys = [k for k, v in self._indices["id"]]
-        index = bisect.bisect_left(keys, obj.id)
-        if index < len(self._indices["id"]) and obj.id  == self._indices["id"][index][0]:
-            self[self._indices["id"][index][1]] = obj
-        else:
-            index = len(self._cache)
-            self._rangeset.add(index)
-            self._cache.append(obj)
-            self._runtime._publish(Events.new, obj)
-            
-            for k, ls in self._indices.items():
-                self._indexitem(k, ls, obj, index)
+        if hasattr(obj, "id"):
+            keys = [k for k, v in self._indices["id"]]
+            index = bisect.bisect_left(keys, obj.id)
+            if index < len(self._indices["id"]) and obj.id  == self._indices["id"][index][0]:
+                self[self._indices["id"][index][1]] = obj
+                return
+        
+        index = len(self._cache)
+        self._rangeset.add(index)
+        self._cache.append(obj)
+        self._runtime._publish(Events.new, obj)
+        
+        for k, ls in self._indices.items():
+            self._indexitem(k, ls, obj, index)
     
     def createIndex(self, k):
         ls = []
@@ -158,18 +161,18 @@ class UnisCollection(object):
         for i, item in enumerate(self._cache):
             self._indexitem(k, ls, item, i)
     def updateIndex(self, item):
+        print("UpdateIndex: ", "locked" if self.locked else "unlocked")
         def get_index():
-            for key, i in self._indices["id"]:
-                if key == item.id:
+            for i, v in enumerate(self._cache):
+                if v == item:
                     return i
             raise ValueError("Item does not exist in collection")
-        
+            
         i = get_index()
         for k, ls in self._indices.items():
-            if k != "id":
-                new_ls = list(filter(lambda x: x[1] != i, ls))
-                self._indexitem(k, new_ls, item, i)
-                self._indices[k] = new_ls
+            new_ls = list(filter(lambda x: x[1] != i, ls))
+            self._indexitem(k, new_ls, item, i)
+            self._indices[k] = new_ls
         self._runtime._publish(Events.update, self._cache[i])
     
     def where(self, pred, use_index = True):
@@ -225,17 +228,19 @@ class UnisCollection(object):
             raise ValueError("where expects function or dictionary predicate list - got {v}".format(v = type(pred)))
     
     # Subscribe to unis websocket to ensure {} query is valid
-    def subscribe(self):
+    def _subscribe(self):
         def _callback(v):
             v = json.loads(v)
             resource = self._model(v["data"], self._runtime, True, self._runtime.defer_update, False)
             try:
+                while self.locked:
+                    pass
                 self.append(resource)
             except ValueError:
                 pass
         
         self._runtime._unis.subscribe(self.collection, _callback)
-        self.subscribe = lambda: None
+        self._subscribe = lambda: None
         
     def sync(self):
         self._do_sync = True
@@ -293,7 +298,7 @@ class MixedCollectionIterator(CollectionIterator):
     
     def finalize(self):
         self.ls._do_sync = False
-        self.ls.subscribe()
+        self.ls._subscribe()
         super(MixedCollectionIterator, self).finalize()
 
     def processResult(self, res):

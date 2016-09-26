@@ -233,6 +233,11 @@ class UnisObject(metaclass = JSONObjectMeta):
         return self._defer
     def setDeferred(self, n):
         self._defer = n
+    def setWithoutUpdate(self, n, v):
+        if n in self.__dict__:
+            self.__dict__[n] = v
+        else:
+            raise AttributeError("'{c}' object has no attribute '{n}'".format(c=type(self), n=n))
     
     
     def _resolve_list(self, ls, n):

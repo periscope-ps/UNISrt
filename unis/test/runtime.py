@@ -92,7 +92,7 @@ class OALTest(unittest.TestCase):
         self.assertRaises(ValueError, oal.find, "#/bad_col/1")
         
     @patch.object(unis.runtime.oal.UnisClient, 'getResources', return_value = [{ "href": "#/nodes", "targetschema": { "items": { "href": SCHEMAS["Node"] } } }])
-    @patch.object(unis.runtime.oal.UnisClient, 'post')
+    @patch.object(unis.runtime.oal.UnisClient, 'post', return_value = {"id": "1", "v": 1})
     @patch.object(unis.runtime.oal.UnisCollection, 'updateIndex')
     def test_update_ref(self, ui_mock, p_mock, gr_mock):
         oal = ObjectLayer("http://localhost:8888")
@@ -125,7 +125,7 @@ class OALTest(unittest.TestCase):
         a_mock.assert_called_once_with(n)
                 
     @patch.object(unis.runtime.oal.UnisClient, 'getResources', return_value = [{ "href": "#/nodes", "targetschema": { "items": { "href": SCHEMAS["Node"] } } }])
-    @patch.object(unis.runtime.oal.UnisClient, 'post')
+    @patch.object(unis.runtime.oal.UnisClient, 'post', return_value = { "id": "1" })
     @patch.object(unis.runtime.oal.UnisCollection, 'updateIndex')
     @patch.object(unis.runtime.oal.UnisCollection, 'append')
     def test_modify_object(self, a_mock, ui_mock, p_mock, gr_mock):

@@ -57,7 +57,8 @@ setup(
         "pytz",
         "python-dateutil",
         "httplib2",
-        "websocket-client"
+        "websocket-client",
+        "requests"
         #"graph-tool" -- apt-get install
     ],
     cmdclass={'test': tester },

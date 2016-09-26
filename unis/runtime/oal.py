@@ -84,13 +84,18 @@ class ObjectLayer(object):
     
     def update(self, resource):
         ref = "#/{c}".format(c = getattr(resource, "_collection", ""))
+        self._cache[resource._collection].locked = True
         try:
             tmpResponse = self._unis.post(ref, json.dumps(resource.to_JSON()))
         except:
+            self._cache[resource._collection].locked = False
             resource._pending = False
             raise
-        
+        if tmpResponse["id"] != resource.id:
+            resource.setWithoutUpdate("id", tmpResponse["id"])
+            resource.setWithoutUpdate("selfRef", tmpResponse["selfRef"])
         self._cache[resource._collection].updateIndex(resource)
+        self._cache[resource._collection].locked = False
         resource._pending = False
     
     def insert(self, resource, uid=None):
@@ -111,8 +116,6 @@ class ObjectLayer(object):
             for k, item_meta in self._models.items():
                 if isinstance(resource, item_meta.model):
                     resource.id = uid or resource.id
-                    if not resource.id:
-                        raise ValueError("Resource does not have a valid id attribute")
                     self._cache[item_meta.name].append(resource)
                     return resource
             raise ValueError("Resource type not found in ObjectLayer")
