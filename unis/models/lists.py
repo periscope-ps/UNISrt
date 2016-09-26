@@ -129,7 +129,6 @@ class UnisCollection(object):
             ls.insert(bisect.bisect_left(index_keys, v[0]), v)
     
     def append(self, obj):
-        print("Append: ", "locked" if self.locked else "unlocked")
         if obj._runtime and obj._runtime != self._runtime:
             raise ValueError("Resource already belongs to another runtime")
             
@@ -161,7 +160,6 @@ class UnisCollection(object):
         for i, item in enumerate(self._cache):
             self._indexitem(k, ls, item, i)
     def updateIndex(self, item):
-        print("UpdateIndex: ", "locked" if self.locked else "unlocked")
         def get_index():
             for i, v in enumerate(self._cache):
                 if v == item:
