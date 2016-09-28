@@ -86,6 +86,7 @@ class ObjectLayer(object):
         ref = "#/{c}".format(c = getattr(resource, "_collection", ""))
         self._cache[resource._collection].locked = True
         try:
+            resource.validate()
             tmpResponse = self._unis.post(ref, json.dumps(resource.to_JSON()))
         except:
             self._cache[resource._collection].locked = False

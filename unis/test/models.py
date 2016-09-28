@@ -141,13 +141,19 @@ class NetworkResourceTest(unittest.TestCase):
 
     def test_validate_on_change(self):
         from jsonschema.exceptions import ValidationError
+        def f(res):
+            def val():
+                setattr(res, "name", 10)
+                res.validate()
+            return val
+        
         
         good = Node(NetworkResourceTest.VALID_NODE)
         bad = Node(NetworkResourceTest.VALID_NODE)
         
         good.name = "modified"
         self.assertEqual(good.name, "modified")
-        self.assertRaises(ValidationError, lambda: setattr(bad, "name", 10))
+        self.assertRaises(ValidationError, f(bad))
         
     def test_modify_runtime(self):
         # Arrange

@@ -94,16 +94,16 @@ class UnisList(metaclass = JSONObjectMeta):
         self._parent._dirty = True
         self._parent.update()
         
-    def to_JSON(self):
+    def to_JSON(self, include_virtuals=False):
         tmpResult = []
         for item in self.items:
             if isinstance(item, UnisList):
-                tmpResult.append(item.to_JSON())
+                tmpResult.append(item.to_JSON(include_virtuals))
             elif isinstance(item, UnisObject):
                 if not item._local:
                     tmpResult.append({ "rel": "full", "href": item.selfRef })
-                elif item.get_virtual("_nocol"):
-                    tmpResult.append(item.to_JSON())
+                elif item.get_virtual("_nocol") or include_virtuals:
+                    tmpResult.append(item.to_JSON(include_virtuals))
             else:
                 tmpResult.append(item)
         return tmpResult
@@ -220,8 +220,6 @@ class UnisObject(metaclass = JSONObjectMeta):
                         self.update()
                 else:
                     self.update()
-            else:
-                self.validate()
         else:
             self.set_virtual(n, v)
     
@@ -262,7 +260,7 @@ class UnisObject(metaclass = JSONObjectMeta):
             o.set_virtual("_parent", self)
             return o
     
-    def to_JSON(self):
+    def to_JSON(self, include_virtuals=False):
         tmpResult = {}
         for k, v in self.__dict__.items():
             if isinstance(v, UnisObject):
@@ -270,14 +268,14 @@ class UnisObject(metaclass = JSONObjectMeta):
                     if v._schema:
                         tmpResult[k] = { "rel": "full", "href": v.selfRef }
                     else:
-                        tmpResult[k] = v.to_JSON()
-                if v.get_virtual("_nocol"):
-                    tmpResult[k] = v.to_JSON()
+                        tmpResult[k] = v.to_JSON(include_virtuals)
+                elif v.get_virtual("_nocol") or include_virtuals:
+                    tmpResult[k] = v.to_JSON(include_virtuals)
             elif isinstance(v, UnisList):
-                tmpResult[k] = v.to_JSON()
+                tmpResult[k] = v.to_JSON(include_virtuals)
             elif isinstance(v, list):
                 self.__dict__[k] = self._resolve_list(v, k)
-                tmpResult[k] = self.__dict__[k].to_JSON()
+                tmpResult[k] = self.__dict__[k].to_JSON(include_virtuals)
             else:
                 tmpResult[k] = v
         return tmpResult
@@ -309,15 +307,8 @@ class UnisObject(metaclass = JSONObjectMeta):
             self._parent._dirty = True
             self._parent.update(force)
         else:
-            update = False
-            if force:
-                self.validate()
-                update = True
-            elif (self._dirty and not self._pending):
-                self.validate()
-                if not self._defer:
-                    update = True
-            if update and not self._local:
+            update = force or (not self._defer and self._dirty)
+            if update and not self._local and not self._pending:
                 self._pending = True
                 self.ts = int(time.time() * 1000000)
                 self.selfRef = "{a}/{c}/{i}".format(a = self._runtime._addr, c = self._collection, i = self.id)
@@ -341,6 +332,9 @@ class UnisObject(metaclass = JSONObjectMeta):
             self.__dict__["id"] = uid
         else:
             raise AttributeError("No schema found for object")
+            
+    def __str__(self):
+        return json.dumps(self.to_JSON(include_virtuals=True))
 
 
 def schemaMetaFactory(name, schema, parents = [JSONObjectMeta], loader=None):
