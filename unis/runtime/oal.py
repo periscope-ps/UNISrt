@@ -92,9 +92,11 @@ class ObjectLayer(object):
             self._cache[resource._collection].locked = False
             resource._pending = False
             raise
-        if tmpResponse["id"] != resource.id:
-            resource.setWithoutUpdate("id", tmpResponse["id"])
-            resource.setWithoutUpdate("selfRef", tmpResponse["selfRef"])
+        if tmpResponse["id"] != getattr(resource, "id", None):
+            resource.id = tmpResponse["id"]
+            resource.selfRef = tmpResponse["selfRef"]
+            resource.commit("id")
+            resource.commit("selfRef")
         self._cache[resource._collection].updateIndex(resource)
         self._cache[resource._collection].locked = False
         resource._pending = False
@@ -116,7 +118,7 @@ class ObjectLayer(object):
         else:
             for k, item_meta in self._models.items():
                 if isinstance(resource, item_meta.model):
-                    resource.id = uid or resource.id
+                    resource.id = uid or getattr(resource, "id", None)
                     self._cache[item_meta.name].append(resource)
                     return resource
             raise ValueError("Resource type not found in ObjectLayer")

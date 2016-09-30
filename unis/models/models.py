@@ -46,11 +46,14 @@ class JSONObjectMeta(type):
         def set_virt(self, n, v):
             cls.__meta__.__get__(self)[n] = v
             return v
+        def has_virt(self, n):
+            return n in cls.__meta__.__get__(self)
         
         cls.__meta__ = JSONObjectMeta.AttrDict()
         cls._models = {}
         cls.get_virtual = get_virt
         cls.set_virtual = set_virt
+        cls.has_virtual = has_virt
         cls.remoteObject = lambda obj: isinstance(obj, UnisObject) and not obj._local
     
     def __call__(cls, *args, **kwargs):
@@ -293,6 +296,8 @@ class UnisObject(metaclass = JSONObjectMeta):
                     raise AttributeError("Object does not have a registered runtime")
         else:
             if n not in self.__dict__:
+                if not self.has_virtual(n):
+                    self.set_virtual(n, None)
                 self.__dict__[n] = self.get_virtual(n)
                 if not self._local:
                     self._dirty = True
@@ -363,7 +368,7 @@ def schemaMetaFactory(name, schema, parents = [JSONObjectMeta], loader=None):
                         if instance._override_virtual and k in instance.__meta__:
                             instance.__dict__[k] = instance.__meta__[k]
                         else:
-                            defaults = { "string": "", "boolean": False, "integer": 0, "number": 0, "object": {}, "array": [] }
+                            defaults = { "string": "", "boolean": False, "integer": 0, "number": 0, "object": None, "array": [] }
                             instance.__dict__[k] = v.get("default", defaults.get(v.get("type", "object"), None))
             return instance
             
