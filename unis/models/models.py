@@ -290,7 +290,12 @@ class UnisObject(metaclass = JSONObjectMeta):
                     self.__dict__["ts"] = int(time.time() * 1000000)
                     self._local = False
                     self._dirty = True
-                    self.update()
+                    try:
+                        self.update()
+                    except:
+                        self._local = True
+                        raise
+                    
                     self._runtime._publish(Events.new, self)
                 else:
                     raise AttributeError("Object does not have a registered runtime")
@@ -368,8 +373,15 @@ def schemaMetaFactory(name, schema, parents = [JSONObjectMeta], loader=None):
                         if instance._override_virtual and k in instance.__meta__:
                             instance.__dict__[k] = instance.__meta__[k]
                         else:
-                            defaults = { "string": "", "boolean": False, "integer": 0, "number": 0, "object": None, "array": [] }
-                            instance.__dict__[k] = v.get("default", defaults.get(v.get("type", "object"), None))
+                            ty = "null"
+                            defaults = { "null": None, "string": "", "boolean": False, "integer": 0, "number": 0, "object": {}, "array": [] }
+                            if "anyOf" in v:
+                                for t in v["anyOf"]:
+                                    if "type" in t:
+                                        ty = t["type"]
+                                        break
+                                        
+                            instance.__dict__[k] = v.get("default", defaults.get(v.get("type", ty), None))
             return instance
             
     return SchemaMetaClass
