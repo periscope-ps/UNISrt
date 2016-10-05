@@ -52,7 +52,6 @@ class ObjectLayer(object):
         else:
             raise AttributeError("{n} not found in ObjectLayer".format(n = n))
     
-    # Returns weakref to cache object
     def find(self, href):
         re_str = "{full}|{rel}".format(full = '(?P<domain>http[s]?://[^:/]+(?::[0-9]{1,5}))/(?P<col1>[a-zA-Z]+)/(?P<uid1>\S+)$',
                                        rel  = '#/(?P<col2>[a-zA-Z]+)/(?P<uid2>[a-zA-Z0-9]+)$')
@@ -68,9 +67,9 @@ class ObjectLayer(object):
             if tmpCollection not in self._cache:
                 raise ValueError("unknown collection {c} in href".format(c = tmpCollection))
             
-            try:
+            if self._cache[tmpCollection].hasValue("id", tmpUid):
                 return list(self._cache[tmpCollection].where({"id": tmpUid}))[0]
-            except IndexError:
+            else:
                 tmpResource = self._unis.get(href)
                 if tmpResource:
                     model = self._models[tmpCollection].model

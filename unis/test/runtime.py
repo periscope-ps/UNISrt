@@ -33,10 +33,11 @@ from unis.runtime.oal import ObjectLayer
 
 class OALTest(unittest.TestCase):
     @patch.object(unis.runtime.oal.UnisClient, 'getResources', return_value = [{ "href": "#/nodes", "targetschema": { "items": { "href": SCHEMAS["Node"] } } }])
-    @patch.object(unis.runtime.oal.UnisClient, 'get', return_value = { "id": "2", "ts": 1, "v": 2})
+    @patch.object(unis.runtime.oal.UnisClient, 'get', return_value = { "id": "1", "ts": 1, "v": 2})
+    @patch.object(unis.runtime.oal.UnisCollection, 'hasValue', return_value = True)
     @patch.object(unis.runtime.oal.UnisCollection, 'where', return_value = iter([Node({ "id": "1", "ts": 1, "v": 0})]))
     @patch.object(unis.runtime.oal.UnisCollection, 'append')
-    def test_find_rel(self, a_mock, wh_mock, g_mock, gr_mock):
+    def test_find_rel(self, a_mock, wh_mock, h_mock, g_mock, gr_mock):
         oal = ObjectLayer("http://localhost:8888")
         
         v = oal.find("#/nodes/1")
@@ -44,13 +45,16 @@ class OALTest(unittest.TestCase):
         self.assertIsInstance(v, Node)
         self.assertEqual(v.id, "1")
         gr_mock.assert_called_once_with()
+        h_mock.assert_called_once_with("id", "1")
         wh_mock.assert_called_once_with({"id": "1"})
+
         
     @patch.object(unis.runtime.oal.UnisClient, 'getResources', return_value = [{ "href": "#/nodes", "targetschema": { "items": { "href": SCHEMAS["Node"] } } }])
     @patch.object(unis.runtime.oal.UnisCollection, 'where', return_value = iter([Node({ "id": "1", "ts": 1, "v": 0 })]))
+    @patch.object(unis.runtime.oal.UnisCollection, 'hasValue', return_value = True)
     @patch.object(unis.runtime.oal.UnisClient, 'get', return_value = { "id": "1", "ts": 1, "v": 0})
     @patch.object(unis.runtime.oal.UnisCollection, 'append')
-    def test_find_abs(self, a_mock, g_mock, wh_mock, gr_mock):
+    def test_find_abs(self, a_mock, g_mock, h_mock, wh_mock, gr_mock):
         oal = ObjectLayer("http://localhost:8888")
         
         v = oal.find("http://localhost:8888/nodes/1")
@@ -58,13 +62,15 @@ class OALTest(unittest.TestCase):
         self.assertIsInstance(v, Node)
         self.assertEqual(v.id, "1")
         gr_mock.assert_called_once_with()
+        h_mock.assert_called_once_with("id", "1")
         wh_mock.assert_called_once_with({"id": "1"})
-            
+    
     @patch.object(unis.runtime.oal.UnisClient, 'getResources', return_value = [{ "href": "#/nodes", "targetschema": { "items": { "href": SCHEMAS["Node"] } } }])
     @patch.object(unis.runtime.oal.UnisCollection, 'where', return_value = iter([]))
+    @patch.object(unis.runtime.oal.UnisCollection, 'hasValue', return_value = False)
     @patch.object(unis.runtime.oal.UnisClient, 'get', return_value = { "id": "1", "ts": 1, "v": 0})
     @patch.object(unis.runtime.oal.UnisCollection, 'append')
-    def test_find_page_miss(self, a_mock, g_mock, wh_mock, gr_mock):
+    def test_find_page_miss(self, a_mock, g_mock, h_mock, wh_mock, gr_mock):
         oal = ObjectLayer("http://localhost:8888")
         
         v = oal.find("http://localhost:8888/nodes/1")
@@ -72,7 +78,7 @@ class OALTest(unittest.TestCase):
         self.assertIsInstance(v, Node)
         self.assertEqual(v.id, "1")
         gr_mock.assert_called_once_with()
-        wh_mock.assert_called_once_with({"id": "1"})
+        h_mock.assert_called_once_with("id", "1")
         g_mock.assert_called_once_with("http://localhost:8888/nodes/1")
 
 

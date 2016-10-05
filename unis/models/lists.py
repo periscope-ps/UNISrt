@@ -172,6 +172,13 @@ class UnisCollection(object):
             self._indexitem(k, new_ls, item, i)
             self._indices[k] = new_ls
         self._runtime._publish(Events.update, self._cache[i])
+    def hasValue(self, k, v):
+        if k in self._indices:
+            keys = [item[0] for item in self._indices[k]]
+            slices = slice(bisect.bisect_left(keys, v), bisect.bisect_right(keys, v))
+            return len(self._indices[k][slices]) > 0
+        else:
+            raise ValueError("No key {k} in collection".format(k=k))
     
     def where(self, pred, use_index = True):
         funcs = {
@@ -184,7 +191,7 @@ class UnisCollection(object):
             "le": lambda x, ls: slice(0, bisect.bisect_right(ls, x)),
             "gt": lambda x, ls: slice(bisect.bisect_right(ls, x), len(ls)),
             "ge": lambda x, ls: slice(bisect.bisect_left(ls, x), len(ls)),
-            "eq": lambda x, ls: slice(bisect.bisect_left(keys, x), bisect.bisect_right(keys, x)) 
+            "eq": lambda x, ls: slice(bisect.bisect_left(ls, x), bisect.bisect_right(ls, x)) 
         }
         if isinstance(pred, types.FunctionType):
             for v in filter(pred, self):

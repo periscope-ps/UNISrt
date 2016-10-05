@@ -96,4 +96,3 @@ class Runtime(object):
         self.shutdown()
     def __del__(self):
         self.shutdown()
-        super(Runtime, self).__del__()
