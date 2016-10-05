@@ -1,0 +1,22 @@
+language: python
+
+python:
+ - "3.4.2"
+
+virtualenv:
+      system_site_packages: true
+
+# command to install dependencies
+install: 
+ - "sudo python3 setup.py install"
+
+script:
+ - unis/test/runtests.py
+
+notifications:
+  slack: crest-networks:nctOxrMsZdnYU8jGrkpSjpvf
+#  email:
+#    on_success: never
+#    on_failure: change
+#    recipients:
+#      - dlt@crest.iu.edu
