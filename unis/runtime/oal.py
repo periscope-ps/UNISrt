@@ -72,7 +72,7 @@ class ObjectLayer(object):
             else:
                 tmpResource = self._unis.get(href)
                 if tmpResource:
-                    model = self._models[tmpCollection].model
+                    model = schemaLoader.get_class(tmpResource["$schema"])
                     tmpObject = model(tmpResource, self, local_only=False)
                     self._cache[tmpCollection].append(tmpObject)
                     return tmpObject

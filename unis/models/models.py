@@ -140,7 +140,7 @@ class UnisList(metaclass = JSONObjectMeta):
         return self.items.__repr__()
     def __str__(self):
         return self.items.__str__()
-
+        
     def _resolve_list(self, ls, n):
         return UnisList(self.model, self._parent, *ls)
     

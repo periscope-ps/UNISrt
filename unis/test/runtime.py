@@ -68,9 +68,9 @@ class OALTest(unittest.TestCase):
     @patch.object(unis.runtime.oal.UnisClient, 'getResources', return_value = [{ "href": "#/nodes", "targetschema": { "items": { "href": SCHEMAS["Node"] } } }])
     @patch.object(unis.runtime.oal.UnisCollection, 'where', return_value = iter([]))
     @patch.object(unis.runtime.oal.UnisCollection, 'hasValue', return_value = False)
-    @patch.object(unis.runtime.oal.UnisClient, 'get', return_value = { "id": "1", "ts": 1, "v": 0})
+    @patch.object(unis.runtime.oal.UnisClient, 'get', return_value = { "$schema": SCHEMAS["Node"], "id": "1", "ts": 1, "v": 0})
     @patch.object(unis.runtime.oal.UnisCollection, 'append')
-    def test_find_page_miss(self, a_mock, g_mock, h_mock, wh_mock, gr_mock):
+    def test_find_miss(self, a_mock, g_mock, h_mock, wh_mock, gr_mock):
         oal = ObjectLayer("http://localhost:8888")
         
         v = oal.find("http://localhost:8888/nodes/1")

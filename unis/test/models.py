@@ -518,9 +518,9 @@ class CollectionTest(unittest.TestCase):
         
     def test_where_eq_index_post_init(self):
         rt = MagicMock()
-        rt._unis.get.return_value = [{"$schema": "http://unis.crest.iu.edu/schema/20160630/node", "id": "1", "v": 1}, 
-                                     {"$schema": "http://unis.crest.iu.edu/schema/20160630/node", "id": "2", "v": 2}, 
-                                     {"$schema": "http://unis.crest.iu.edu/schema/20160630/node", "id": "3", "v": 3}]
+        rt._unis.get.return_value = [{"$schema": SCHEMAS["Node"], "id": "1", "v": 1}, 
+                                     {"$schema": SCHEMAS["Node"], "id": "2", "v": 2}, 
+                                     {"$schema": SCHEMAS["Node"], "id": "3", "v": 3}]
         col = UnisCollection("", "", Node, rt)
         [n for n in col]
         
@@ -535,9 +535,9 @@ class CollectionTest(unittest.TestCase):
         
     def test_where_eq_no_index_post_init(self):
         rt = MagicMock()
-        rt._unis.get.return_value = [{"$schema": "http://unis.crest.iu.edu/schema/20160630/node", "id": "1", "v": 1}, 
-                                     {"$schema": "http://unis.crest.iu.edu/schema/20160630/node", "id": "2", "v": 2}, 
-                                     {"$schema": "http://unis.crest.iu.edu/schema/20160630/node", "id": "3", "v": 3}]
+        rt._unis.get.return_value = [{"$schema": SCHEMAS["Node"], "id": "1", "v": 1}, 
+                                     {"$schema": SCHEMAS["Node"], "id": "2", "v": 2}, 
+                                     {"$schema": SCHEMAS["Node"], "id": "3", "v": 3}]
         col = UnisCollection("", "", Node, rt)
         [n for n in col]
         
@@ -552,9 +552,9 @@ class CollectionTest(unittest.TestCase):
         
     def test_where_lt_index_post_init(self):
         rt = MagicMock()
-        rt._unis.get.return_value = [{"$schema": "http://unis.crest.iu.edu/schema/20160630/node", "id": "1", "v": 1}, 
-                                     {"$schema": "http://unis.crest.iu.edu/schema/20160630/node", "id": "2", "v": 2}, 
-                                     {"$schema": "http://unis.crest.iu.edu/schema/20160630/node", "id": "3", "v": 3}]
+        rt._unis.get.return_value = [{"$schema": SCHEMAS["Node"], "id": "1", "v": 1}, 
+                                     {"$schema": SCHEMAS["Node"], "id": "2", "v": 2}, 
+                                     {"$schema": SCHEMAS["Node"], "id": "3", "v": 3}]
         col = UnisCollection("", "", Node, rt)
         [n for n in col]
         
@@ -571,9 +571,9 @@ class CollectionTest(unittest.TestCase):
 
     def test_where_le_index_post_init(self):
         rt = MagicMock()
-        rt._unis.get.return_value = [{"$schema": "http://unis.crest.iu.edu/schema/20160630/node", "id": "1", "v": 1}, 
-                                     {"$schema": "http://unis.crest.iu.edu/schema/20160630/node", "id": "2", "v": 2}, 
-                                     {"$schema": "http://unis.crest.iu.edu/schema/20160630/node", "id": "3", "v": 3}]
+        rt._unis.get.return_value = [{"$schema": SCHEMAS["Node"], "id": "1", "v": 1}, 
+                                     {"$schema": SCHEMAS["Node"], "id": "2", "v": 2}, 
+                                     {"$schema": SCHEMAS["Node"], "id": "3", "v": 3}]
         col = UnisCollection("", "", Node, rt)
         [n for n in col]
         
@@ -591,9 +591,9 @@ class CollectionTest(unittest.TestCase):
 
     def test_where_gt_index_post_init(self):
         rt = MagicMock()
-        rt._unis.get.return_value = [{"$schema": "http://unis.crest.iu.edu/schema/20160630/node", "id": "1", "v": 1}, 
-                                     {"$schema": "http://unis.crest.iu.edu/schema/20160630/node", "id": "2", "v": 2}, 
-                                     {"$schema": "http://unis.crest.iu.edu/schema/20160630/node", "id": "3", "v": 3}]
+        rt._unis.get.return_value = [{"$schema": SCHEMAS["Node"], "id": "1", "v": 1}, 
+                                     {"$schema": SCHEMAS["Node"], "id": "2", "v": 2}, 
+                                     {"$schema": SCHEMAS["Node"], "id": "3", "v": 3}]
         col = UnisCollection("", "", Node, rt)
         [n for n in col]
         
@@ -610,9 +610,9 @@ class CollectionTest(unittest.TestCase):
         
     def test_where_ge_index_post_init(self):
         rt = MagicMock()
-        rt._unis.get.return_value = [{"$schema": "http://unis.crest.iu.edu/schema/20160630/node", "id": "1", "v": 1}, 
-                                     {"$schema": "http://unis.crest.iu.edu/schema/20160630/node", "id": "2", "v": 2}, 
-                                     {"$schema": "http://unis.crest.iu.edu/schema/20160630/node", "id": "3", "v": 3}]
+        rt._unis.get.return_value = [{"$schema": SCHEMAS["Node"], "id": "1", "v": 1}, 
+                                     {"$schema": SCHEMAS["Node"], "id": "2", "v": 2}, 
+                                     {"$schema": SCHEMAS["Node"], "id": "3", "v": 3}]
         col = UnisCollection("", "", Node, rt)
         [n for n in col]
         
@@ -629,9 +629,9 @@ class CollectionTest(unittest.TestCase):
 
     def test_where_multi_index_post_init(self):
         rt = MagicMock()
-        rt._unis.get.return_value = [{"$schema": "http://unis.crest.iu.edu/schema/20160630/node", "id": "1", "v": 1}, 
-                                     {"$schema": "http://unis.crest.iu.edu/schema/20160630/node", "id": "2", "v": 2}, 
-                                     {"$schema": "http://unis.crest.iu.edu/schema/20160630/node", "id": "3", "v": 3}]
+        rt._unis.get.return_value = [{"$schema": SCHEMAS["Node"], "id": "1", "v": 1}, 
+                                     {"$schema": SCHEMAS["Node"], "id": "2", "v": 2}, 
+                                     {"$schema": SCHEMAS["Node"], "id": "3", "v": 3}]
         col = UnisCollection("", "", Node, rt)
         col.createIndex("v")
         [n for n in col]
@@ -647,9 +647,9 @@ class CollectionTest(unittest.TestCase):
         
     def test_where_mixed_multi_index_post_init(self):
         rt = MagicMock()
-        rt._unis.get.return_value = [{"$schema": "http://unis.crest.iu.edu/schema/20160630/node", "id": "1", "v": 1}, 
-                                     {"$schema": "http://unis.crest.iu.edu/schema/20160630/node", "id": "2", "v": 2}, 
-                                     {"$schema": "http://unis.crest.iu.edu/schema/20160630/node", "id": "3", "v": 3}]
+        rt._unis.get.return_value = [{"$schema": SCHEMAS["Node"], "id": "1", "v": 1}, 
+                                     {"$schema": SCHEMAS["Node"], "id": "2", "v": 2}, 
+                                     {"$schema": SCHEMAS["Node"], "id": "3", "v": 3}]
         col = UnisCollection("", "", Node, rt)
         [n for n in col]
         
@@ -683,9 +683,9 @@ class CollectionTest(unittest.TestCase):
         
     def tests_where_func_post_init(self):
         rt = MagicMock()
-        rt._unis.get.return_value = [{"$schema": "http://unis.crest.iu.edu/schema/20160630/node", "id": "1", "v": 1}, 
-                                     {"$schema": "http://unis.crest.iu.edu/schema/20160630/node", "id": "2", "v": 2}, 
-                                     {"$schema": "http://unis.crest.iu.edu/schema/20160630/node", "id": "3", "v": 3}]
+        rt._unis.get.return_value = [{"$schema": SCHEMAS["Node"], "id": "1", "v": 1}, 
+                                     {"$schema": SCHEMAS["Node"], "id": "2", "v": 2}, 
+                                     {"$schema": SCHEMAS["Node"], "id": "3", "v": 3}]
         col = UnisCollection("", "", Node, rt)
         [n for n in col]
         
