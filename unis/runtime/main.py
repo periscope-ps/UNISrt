@@ -88,7 +88,8 @@ class Runtime(object):
     
     def shutdown(self, sig=None, frame=None):
         self.log.info("Tearing down connection to UNIS...")
-        self._oal.shutdown()
+        if hasattr(self, "_oal"):
+            self._oal.shutdown()
         self.log.info("Teardown complete.")
     def __enter__(self):
         return self

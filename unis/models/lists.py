@@ -5,6 +5,7 @@ import bisect
 import uuid
 
 from unis.utils.pubsub import Events
+from unis.models.models import schemaLoader
 
 class DataCollection(object):
     def __init__(self, mid, runtime, subscribe=True):
@@ -105,7 +106,7 @@ class UnisCollection(object):
     def __getitem__(self, i):
         return self._cache[i]
     def __setitem__(self, i, obj):
-        if type(obj) != self._model:
+        if self._model._schema["name"] not in obj.names:
             raise TypeError("Resource not of correct type: got {t1}, expected {t2}".format(t1=self._model, t2=type(obj)))
         if self._cache[i].id != obj.id:
             raise AttributeError("Resource ids must match when setting to UnisCollections")
@@ -131,6 +132,8 @@ class UnisCollection(object):
     def append(self, obj):
         if obj._runtime and obj._runtime != self._runtime:
             raise ValueError("Resource already belongs to another runtime")
+        if self._model._schema["name"] not in obj.names:
+            raise TypeError("Resource not of correct type: got {t1}, expected {t2}".format(t1=self._model, t2=type(obj)))
             
         obj._runtime = self._runtime
         obj._collection = self.collection
@@ -236,7 +239,11 @@ class UnisCollection(object):
     def _subscribe(self):
         def _callback(v):
             v = json.loads(v)
-            resource = self._model(v["data"], self._runtime, True, self._runtime.defer_update, False)
+            if "$schema" in v.get("data", {}):
+                model = schemaLoader.get_class(v["data"]["$schema"])
+            else:
+                raise ValueError("Bad message from UNIS")
+            resource = model(v["data"], self._runtime, True, self._runtime.defer_update, False)
             try:
                 while self.locked:
                     pass
@@ -305,9 +312,13 @@ class MixedCollectionIterator(CollectionIterator):
         self.ls._do_sync = False
         self.ls._subscribe()
         super(MixedCollectionIterator, self).finalize()
-
+        
     def processResult(self, res):
-        result = self.ls._model(res, self.ls._runtime, defer=self.ls._runtime.defer_update, local_only=False)
+        if "$schema" in res:
+            model = schemaLoader.get_class(res["$schema"])
+        else:
+            raise TypeError("Bad resource from UNIS")
+        result = model(res, self.ls._runtime, defer=self.ls._runtime.defer_update, local_only=False)
         try:
             self.ls.append(result)
             return result

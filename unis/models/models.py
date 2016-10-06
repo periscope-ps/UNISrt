@@ -51,6 +51,7 @@ class JSONObjectMeta(type):
         
         cls.__meta__ = JSONObjectMeta.AttrDict()
         cls._models = {}
+        cls.names = []
         cls.get_virtual = get_virt
         cls.set_virtual = set_virt
         cls.has_virtual = has_virt
@@ -352,6 +353,9 @@ def schemaMetaFactory(name, schema, parents = [JSONObjectMeta], loader=None):
     class SchemaMetaClass(*parents):
         def __init__(cls, name, bases, classDict):
             super(SchemaMetaClass, cls).__init__(name=name, bases=bases, classDict=classDict)
+            cls.names = [name]
+            for base in bases:
+                cls.names.extend(base.names)
             cls._schema = schema
             cls._schemaLoader = loader
             cls._models = {}
