@@ -116,11 +116,11 @@ class ObjectLayer(object):
                 raise ValueError("No schema in dict, cannot continue")
         else:
             for k, item_meta in self._models.items():
-                if isinstance(resource, item_meta.model):
+                if item_meta.model._schema["name"] in resource.names:
                     resource.id = uid or getattr(resource, "id", None)
                     self._cache[item_meta.name].append(resource)
                     return resource
-            raise ValueError("Resource type not found in ObjectLayer")
+            raise ValueError("Resource type {n} not found in ObjectLayer".format(n=resource.names))
     
     def subscribe(self, runtime):
         self._subscriber = runtime
