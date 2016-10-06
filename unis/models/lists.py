@@ -142,7 +142,7 @@ class UnisCollection(object):
         if obj.remoteObject():
             obj.update()
         
-        if hasattr(obj, "id"):
+        if getattr(obj, "id", None):
             keys = [k for k, v in self._indices["id"]]
             index = bisect.bisect_left(keys, obj.id)
             if index < len(self._indices["id"]) and obj.id  == self._indices["id"][index][0]:
