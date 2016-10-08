@@ -130,16 +130,17 @@ class ObjectLayer(object):
                         if not s:
                             roots.append(dependentCol)
                             cols[dependentCol] = None
+                        else:
+                            cols[dependentCol] = s
             roots = []
-            counts = {}
+            shortest = None
             for col, s in cols.items():
                 if isinstance(s, set):
-                    for dependent in s:
-                        counts[dependent] = counts.get(dependent, 0) + 1
-                        
-            counts = sorted(counts, key=counts.get, reverse=True)
-            if len(counts):
-                roots.append(counts[0])
+                    if shortest is None or len(shortest) > len(s):
+                        shortest = s
+            
+            if shortest:
+                roots = list(shortest)
         
         self._pending = set()
                    
@@ -209,6 +210,9 @@ class ObjectLayer(object):
         return [v.uri for k,v in self._models.items()]
         
     def shutdown(self):
+        if self._pending:
+            self.flush()
+        
         self._unis.shutdown()
     def __enter__(self):
         return self
