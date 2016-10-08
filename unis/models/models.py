@@ -81,18 +81,26 @@ class UnisList(metaclass = JSONObjectMeta):
         self._parent = parent
         self.items = []
         for item in args:
+            if isinstance(item, dict) and item.get("$schema", None):
+                if self._parent._runtime:
+                    item = self._parent._runtime.insert(o)
+                    item._defer = self._parent._defer
+                    if not self._parent._local:
+                        item.commit()
+            
+            if isinstance(item, UnisObject):
+                self._parent._waiting_on.add(item)
             self.items.append(item)
     
     def append(self, item):
-        if item.get_virtual("_nocol"):
-            item._parent = self
-        assert isinstance(item, self.model), "{t1} is not of type {t2}".format(t1 = type(item), t2 = self.model)
+        assert (isinstance(item, self.model) or isinstance(item, LocalObject)), "{t1} is not of type {t2}".format(t1 = type(item), t2 = self.model)
         self.items.append(item)
-        if not item._local or item.get_virtual("_nocol"):
-            if item.get_virtual("_nocol"):
-                item._parent = self
-            self._parent._dirty = True
-            self._parent.update()
+        if isinstance(item, UnisObject):
+            self._parent._waiting_on.add(item)
+        if isinstance(item, LocalObject) or not getattr(item, "_local", True):
+            if isinstance(item, LocalObject):
+                item._parent = self._parent
+            self.update()
     
     def update(self):
         self._parent._dirty = True
@@ -101,13 +109,11 @@ class UnisList(metaclass = JSONObjectMeta):
     def to_JSON(self, include_virtuals=False):
         tmpResult = []
         for item in self.items:
-            if isinstance(item, UnisList):
+            if isinstance(item, UnisList) or isinstance(item, LocalObject):
                 tmpResult.append(item.to_JSON(include_virtuals))
             elif isinstance(item, UnisObject):
-                if not item._local:
+                if not item._local and hasattr(item, "selfRef"):
                     tmpResult.append({ "rel": "full", "href": item.selfRef })
-                elif item.get_virtual("_nocol") or include_virtuals:
-                    tmpResult.append(item.to_JSON(include_virtuals))
             else:
                 tmpResult.append(item)
         return tmpResult
@@ -122,13 +128,17 @@ class UnisList(metaclass = JSONObjectMeta):
             self.items[key] = v
         return v
     def __setitem__(self, key, v):
-        assert isinstance(v, self.model), "{t1} is not of type {t2}".format(t1 = type(v), t2 = self.model)
+        assert (isinstance(v, self.model) or isinstance(v, LocalObject)), "{t1} is not of type {t2}".format(t1 = type(v), t2 = self.model)
+        oldVal = self.items[key]
+        if isinstance(oldVal, UnisObject):
+            self._parent._waiting_on = self._parent._waiting_on - set(oldVal)
         self.items[key] = v
-        if not v._local or v.get_virtual("_nocol"):
-            if v.get_virtual("_nocol"):
-                v._parent = self
-            self._parent._dirty = True
-            self._parent.update()
+        if isinstance(v, LocalObject) or not getattr(v, "_local", True):
+            if isinstance(v, LocalObject):
+                v._parent = self._parent
+            self.update()
+        if isinstance(v, UnisObject):
+            self._parent._waiting_on.add(v)
     def __delitem__(self, key):
         self.items.__delitem__(key)
     def __len__(self):
@@ -146,25 +156,104 @@ class UnisList(metaclass = JSONObjectMeta):
     
     def _resolve_dict(self, o):
         if "$schema" in o:
-            if self._parent._local:
-                model = self._schemaLoader.get_class(o["$schema"])
-                o = model(o, self._parent._runtime)
-            else:
+            if self._parent._runtime:
                 o = self._parent._runtime.insert(o)
+                o._defer = self._parent._defer
+                self._parent._waiting_on.add(o)
+                if not self._parent._local:
+                    o.commit()
         elif "href" in o:
             if self._parent._runtime:
                 o = self._parent._runtime.find(o["href"])
             else:
                 return o
         else:
-            # Convert object and cache
-            o = UnisObject(o, self._parent._runtime)
-            o.set_virtual("_nocol", True)
-            o.set_virtual("_parent", self)
+            o = LocalObject(o, self._parent)
             
         assert isinstance(o, self.model), "expected model {t}, got {t2}".format(t = type(self.model), t2 = type(o))
         return o
 
+
+class LocalObject(object):
+    def __init__(self, src, parent):
+        self._parent = parent
+        for k, v in src.items():
+            self.__dict__[k] = v
+    
+    def __getattribute__(self, n):
+        if n == "__dict__":
+            return super(LocalObject, self).__getattribute__(n)
+        else:
+            v = super(LocalObject, self).__getattribute__(n)
+            if isinstance(v, list):
+                v = self._resolve_list(v, n)
+            elif isinstance(v, dict):
+                v = self._resolve_dict(v)
+            self.__dict__[n] = v
+            return v
+    
+    def __setattr__(self, n, v):
+        oldVal = self.__dict__.get(n, None)
+        if isinstance(oldVal, UnisObject):
+            self._parent._waiting_on = self._parent._waiting_on - set(oldVal)
+        if isinstance(oldVal, UnisList):
+            self._parent._waiting_on = self._parent._waiting_on - set(list(oldVal))
+        self.__dict__[n] = v
+        if isinstance(v, LocalObject):
+            v._parent = self._parent
+        elif isinstance(v, UnisObject):
+            self._parent._waiting_on.add(v)
+        
+        if not getattr(v, "_local", False):
+            self.update()
+    
+    def __str__(self):
+        return json.dumps(self.to_JSON(include_virtuals=True))
+    
+    def _resolve_list(self, ls, n):
+        return UnisList(self._models.get(n, UnisObject), self, *ls)
+    
+    def _resolve_dict(self, o):
+        if "$schema" in o:
+            if self._parent._runtime:
+                o = self._parent._runtime.insert(o)
+                o._defer = self._parent._defer
+                self._parent._waiting_on.add(o)
+                if not self._parent._local:
+                    o.commit()
+        elif "href" in o:
+            if self._parent._runtime:
+                return self._parent._runtime.find(o["href"])
+            else:
+                return o
+        else:
+            o = LocalObject(o, self)
+            return o
+    
+    def update(self):
+        self._parent._dirty = True
+        self._parent.update()
+
+
+    def to_JSON(self, include_virtuals=False):
+        tmpResult = {}
+        for k, v in self.__dict__.items():
+            if isinstance(v, UnisObject):
+                if not v._local or include_virtuals:
+                    if v._schema and hasattr(v, "selfRef"):
+                        tmpResult[k] = { "rel": "full", "href": v.selfRef }
+                    else:
+                        tmpResult[k] = v.to_JSON(include_virtuals)
+            elif isinstance(v, UnisList) or isinstance(v, LocalObject):
+                tmpResult[k] = v.to_JSON(include_virtuals)
+            elif isinstance(v, list):
+                self.__dict__[k] = self._resolve_list(v, k)
+                tmpResult[k] = self.__dict__[k].to_JSON(include_virtuals)
+            else:
+                tmpResult[k] = v
+        return tmpResult
+
+        
 
 
 class UnisObject(metaclass = JSONObjectMeta):
@@ -175,10 +264,9 @@ class UnisObject(metaclass = JSONObjectMeta):
         self._collection = None
         self._defer = defer
         self._dirty = False
-        self._pending = False
         self._local = local_only
-        self._nocol = False
         self._override_virtual = False
+        self._waiting_on = set()
         
         for k, v in src.items():
             if set_attr:
@@ -204,15 +292,23 @@ class UnisObject(metaclass = JSONObjectMeta):
         return self.get_virtual(n)
     
     def __setattr__(self, n, v):
-        self.set_virtual("_lasttouched", datetime.datetime.utcnow())
-        
         if n in self.__dict__:
             if isinstance(v, list):
                 v = UnisList(self._models.get(n, UnisObject), self, *v)
             if v == self.__dict__[n]:
                 return
+                
+            oldVal = self.__dict__.get(n, None)
+            if isinstance(oldVal, UnisObject):
+                self._waiting_on = self._waiting_on - set(oldVal)
+            if isinstance(oldVal, UnisList):
+                self._waiting_on = self._waiting_on - set(list(oldVal))
             super(UnisObject, self).__setattr__(n, v)
             self.set_virtual("_dirty", True)
+            
+            if isinstance(v, UnisObject):
+                self._waiting_on.add(v)
+                
             if not self._local:
                 if isinstance(v, UnisObject):
                     model = self._models.get(n, type(v))
@@ -227,10 +323,6 @@ class UnisObject(metaclass = JSONObjectMeta):
         else:
             self.set_virtual(n, v)
     
-    def isPending(self):
-        return self._pending
-    def modified(self):
-        return self._lasttouched
     def isDeferred(self):
         return self._defer
     def setDeferred(self, n):
@@ -247,35 +339,31 @@ class UnisObject(metaclass = JSONObjectMeta):
     
     def _resolve_dict(self, o):
         if "$schema" in o:
-            if self._local:
-                model = self._schemaLoader.get_class(o["$schema"])
-                return model(o, self._runtime)
-            else:
-                return self._runtime.insert(o)
+            if self._runtime:
+                o = self._runtime.insert(o)
+                o._defer = self._defer
+                self._waiting_on.add(o)
+                if not self._local:
+                    o.commit()
         elif "href" in o:
             if self._runtime:
                 return self._runtime.find(o["href"])
             else:
                 return o
         else:
-            # Convert object and cache
-            o = UnisObject(o, self._runtime)
-            o.set_virtual("_nocol", True)
-            o.set_virtual("_parent", self)
+            o = LocalObject(o, self)
             return o
     
     def to_JSON(self, include_virtuals=False):
         tmpResult = {}
         for k, v in self.__dict__.items():
             if isinstance(v, UnisObject):
-                if not v._local:
-                    if v._schema:
+                if not v._local or include_virtuals:
+                    if v._schema and hasattr(v, "selfRef"):
                         tmpResult[k] = { "rel": "full", "href": v.selfRef }
                     else:
                         tmpResult[k] = v.to_JSON(include_virtuals)
-                elif v.get_virtual("_nocol") or include_virtuals:
-                    tmpResult[k] = v.to_JSON(include_virtuals)
-            elif isinstance(v, UnisList):
+            elif isinstance(v, UnisList) or isinstance(v, LocalObject):
                 tmpResult[k] = v.to_JSON(include_virtuals)
             elif isinstance(v, list):
                 self.__dict__[k] = self._resolve_list(v, k)
@@ -308,26 +396,10 @@ class UnisObject(metaclass = JSONObjectMeta):
                 if not self._local:
                     self._dirty = True
                     self.update()
-                elif self.get_virtual("_nocol"):
-                    p = self.get_virtual("_parent")
-                    p._dirty = True
-                    p.update(True)
     
     def update(self, force = False):
-        if self.get_virtual("_nocol"):
-            self._parent._dirty = True
-            self._parent.update(force)
-        else:
-            update = force or (not self._defer and self._dirty)
-            if update and not self._local and not self._pending:
-                self._pending = True
-                self.ts = int(time.time() * 1000000)
-                self.selfRef = "{a}/{c}/{i}".format(a = self._runtime._addr, c = self._collection, i = self.id)
-                self._runtime.update(self)
-    def flush(self):
-        if self._dirty and not self._pending:
+        if (force or self._dirty) and not self._local:
             self.__dict__["ts"] = int(time.time() * 1000000)
-            self._pending = True
             self._runtime.update(self)
     
     def validate(self, validate_id=False):

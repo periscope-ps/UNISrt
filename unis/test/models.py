@@ -25,7 +25,7 @@ from unittest.mock import MagicMock, Mock
 
 from unis.models.settings import SCHEMAS
 from unis.models import Node, Exnode, Extent
-from unis.models.models import CACHE, UnisObject, UnisList, schemaLoader
+from unis.models.models import CACHE, UnisObject, UnisList, schemaLoader, LocalObject
 from unis.models.lists import UnisCollection
 
 from unis.utils.pubsub import Events
@@ -100,7 +100,7 @@ class UnisObjectTest(unittest.TestCase):
         v = obj1.v
         
         # Assert
-        self.assertIsInstance(v, UnisObject)
+        self.assertIsInstance(v, LocalObject)
         self.assertTrue(hasattr(v, "a"))
         self.assertEqual(v.a, "1")
         
@@ -192,27 +192,6 @@ class NetworkResourceTest(unittest.TestCase):
         # Assert
         runtime.find.assert_called_once_with("test")
         
-    def test_flush(self):
-        # Arrange
-        r1 = MagicMock()
-        r2 = MagicMock()
-        r3 = MagicMock()
-        n1 = Node({"id": "1"}, runtime=r1, local_only=False)
-        n2 = Node({"id": "2"}, runtime=r2, local_only=False)
-        n3 = Node({"id": "3"}, runtime=r3, local_only=False)
-        n1._dirty = True
-        n2._pending = True
-        
-        # Act
-        n1.flush()
-        n2.flush()
-        n3.flush()
-        
-        # Assert
-        r1.update.assert_called_once_with(n1)
-        self.assertEqual(0, r2.update.call_count)
-        self.assertEqual(0, r3.update.call_count)
-       
 class CollectionTest(unittest.TestCase):
     def test_init(self):
         # Act

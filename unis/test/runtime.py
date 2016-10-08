@@ -98,15 +98,15 @@ class OALTest(unittest.TestCase):
         self.assertRaises(ValueError, oal.find, "#/bad_col/1")
         
     @patch.object(unis.runtime.oal.UnisClient, 'getResources', return_value = [{ "href": "#/nodes", "targetschema": { "items": { "href": SCHEMAS["Node"] } } }])
-    @patch.object(unis.runtime.oal.UnisClient, 'post', return_value = {"id": "1", "v": 1})
+    @patch.object(unis.runtime.oal.UnisClient, 'post', return_value = {"selfRef": "test", "id": "1", "v": 1})
     @patch.object(unis.runtime.oal.UnisCollection, 'updateIndex')
     def test_update_ref(self, ui_mock, p_mock, gr_mock):
         oal = ObjectLayer("http://localhost:8888")
-        n = Node({"id": "1", "v": 1})
+        n = Node({"selfRef": "test", "id": "1", "v": 1})
         n._collection = "nodes"
         
         oal.update(n)
-        p_mock.assert_called_with("#/nodes", json.dumps(n.to_JSON()))
+        p_mock.assert_called_with("#/nodes", json.dumps([n.to_JSON()]))
 
     
     @patch.object(unis.runtime.oal.UnisClient, 'getResources', return_value = [{ "href": "#/nodes", "targetschema": { "items": { "href": SCHEMAS["Node"] } } }])
@@ -131,12 +131,12 @@ class OALTest(unittest.TestCase):
         a_mock.assert_called_once_with(n)
                 
     @patch.object(unis.runtime.oal.UnisClient, 'getResources', return_value = [{ "href": "#/nodes", "targetschema": { "items": { "href": SCHEMAS["Node"] } } }])
-    @patch.object(unis.runtime.oal.UnisClient, 'post', return_value = { "id": "1" })
+    @patch.object(unis.runtime.oal.UnisClient, 'post', return_value = { "selfRef": "test", "id": "1" })
     @patch.object(unis.runtime.oal.UnisCollection, 'updateIndex')
     @patch.object(unis.runtime.oal.UnisCollection, 'append')
     def test_modify_object(self, a_mock, ui_mock, p_mock, gr_mock):
         oal = ObjectLayer("http://localhost:8888")
-        n = Node({"id": "1"})
+        n = Node({"selfRef": "test", "id": "1"})
         
         oal.insert(n)
         n._runtime = oal
@@ -146,5 +146,5 @@ class OALTest(unittest.TestCase):
         
         self.assertEqual(n.name, "blah")
         a_mock.called_once_with(n)
-        p_mock.assert_called_with("#/nodes", json.dumps(n.to_JSON()))
+        p_mock.assert_called_with("#/nodes", json.dumps([n.to_JSON()]))
         ui_mock.assert_called_with(n)

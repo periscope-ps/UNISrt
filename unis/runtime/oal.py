@@ -1,6 +1,8 @@
 import json
 import re
 import sys
+import time
+import uuid
 
 from unis.models import schemaLoader
 from unis.models.lists import UnisCollection
@@ -29,6 +31,7 @@ class ObjectLayer(object):
         self._models = {}
         self._addr = url
         self._unis = UnisClient(url, **kwargs)
+        self._pending = set()
         for resource in self._unis.getResources():
             re_str = "{full}|{rel}".format(full = 'http[s]?://(?P<host>[^:/]+)(?::(?P<port>[0-9]{1,5}))?/(?P<col1>[a-zA-Z]+)$',
                                            rel  = '#/(?P<col2>[a-zA-Z]+)$')
@@ -81,24 +84,97 @@ class ObjectLayer(object):
         else:
             raise ValueError("href must be a direct uri to a unis resource.")
     
+    def flush(self):
+        if not self._pending:
+            return
+        
+        requests = {}
+        cols = {}
+        roots = []
+        
+        # Generate dependency tree
+        for obj in self._pending:
+            collectionName = obj._collection
+            if collectionName not in cols:
+                roots.append(collectionName)
+                cols[collectionName] = set()
+                
+            pending = obj._waiting_on & self._pending
+            if pending:
+                if collectionName in roots:
+                    roots.remove(collectionName)
+                for dependent in pending:
+                    dependentCol = dependent._collection
+                    if dependentCol not in cols:
+                        roots.append(dependentCol)
+                        cols[dependentCol] = set()
+                    cols[collectionName].add(dependentCol)
+            
+            if collectionName in requests:
+                requests[collectionName].append(obj)
+            else:
+                requests[collectionName] = [obj]
+            
+        for col in roots:
+            cols[col] = None
+            
+        # Order requests
+        do_once = True
+        while do_once or roots:
+            do_once = False
+            for col in roots:
+                self._do_update(requests[col], col)
+                for dependentCol, s in cols.items():
+                    if isinstance(s, set):
+                        s = s - set([col])
+                        if not s:
+                            roots.append(dependentCol)
+                            cols[dependentCol] = None
+            roots = []
+            counts = {}
+            for col, s in cols.items():
+                if isinstance(s, set):
+                    for dependent in s:
+                        counts[dependent] = counts.get(dependent, 0) + 1
+                        
+            counts = sorted(counts, key=counts.get, reverse=True)
+            if len(counts):
+                roots.append(counts[0])
+        
+        self._pending = set()
+                   
     def update(self, resource):
-        ref = "#/{c}".format(c = getattr(resource, "_collection", ""))
-        self._cache[resource._collection].locked = True
+        if resource.isDeferred() or self.defer_update:
+            self._pending.add(resource)
+        else:
+            self._do_update([resource], resource._collection)
+    def _do_update(self, resources, collection):
+        ref = "#/{c}".format(c=collection)
+        self._cache[collection].locked = True
+        msg = []
+        response = []
         try:
-            resource.validate()
-            tmpResponse = self._unis.post(ref, json.dumps(resource.to_JSON()))
+            for resource in resources:
+                if not getattr(resource, "id", None):
+                    resource.commit("id")
+                    resource.setWithoutUpdate("id", str(uuid.uuid4()))
+                resource.validate()
+                resource.setWithoutUpdate("ts", int(time.time() * 1000000))
+                msg.append(resource.to_JSON())
+            response = self._unis.post(ref, json.dumps(msg))
         except:
-            self._cache[resource._collection].locked = False
-            resource._pending = False
             raise
-        if tmpResponse["id"] != getattr(resource, "id", None):
-            resource.id = tmpResponse["id"]
-            resource.selfRef = tmpResponse["selfRef"]
-            resource.commit("id")
-            resource.commit("selfRef")
-        self._cache[resource._collection].updateIndex(resource)
-        self._cache[resource._collection].locked = False
-        resource._pending = False
+        finally:
+            for resource in resources:
+                response = response if isinstance(response, list) else [response]
+                for resp in response:
+                    if resp["id"] == resource.id:
+                        if resp["selfRef"] != getattr(resource, "selfRef", None):
+                            resource.selfRef = resp["selfRef"]
+                            resource.commit("selfRef")
+                resource._pending = False
+                self._cache[collection].updateIndex(resource)
+            self._cache[collection].locked = False
     
     def insert(self, resource, uid=None):
         if isinstance(resource, dict):
