@@ -43,9 +43,8 @@ class tester(Command):
         return tests.main()
 
 setup(
-    name = "nre",
+    name = "unisrt",
     version = version,
-    py_modules=['nreshell', 'settings'],
     packages = ["unis", "unis.runtime", "unis.models", "unis.utils", "unis.rest", "unis.services", "unis.test"],
     package_data = { 'unis': ['schemas/*']},
     author = "Miao Zhang, Jeremy Musser",
@@ -59,7 +58,6 @@ setup(
         "httplib2",
         "websocket-client",
         "requests"
-        #"graph-tool" -- apt-get install
     ],
     cmdclass={'test': tester },
     #entry_points = {
