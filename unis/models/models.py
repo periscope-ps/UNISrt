@@ -176,7 +176,7 @@ class UnisList(metaclass = JSONObjectMeta):
 
 class LocalObject(metaclass=JSONObjectMeta):
     def initialize(self, src, parent):
-        self._parent = parent
+        self.set_virtual("_parent", parent)
         for k, v in src.items():
             self.__dict__[k] = v
     
