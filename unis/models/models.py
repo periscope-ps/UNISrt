@@ -174,23 +174,25 @@ class UnisList(metaclass = JSONObjectMeta):
         return o
 
 
-class LocalObject(object):
-    def __init__(self, src, parent):
+class LocalObject(metaclass=JSONObjectMeta):
+    def initialize(self, src, parent):
         self._parent = parent
         for k, v in src.items():
             self.__dict__[k] = v
     
+    
     def __getattribute__(self, n):
-        if n == "__dict__":
-            return super(LocalObject, self).__getattribute__(n)
-        else:
-            v = super(LocalObject, self).__getattribute__(n)
+        v = super(LocalObject, self).__getattribute__(n)
+        if n != "__dict__" and n in self.__dict__:
             if isinstance(v, list):
                 v = self._resolve_list(v, n)
             elif isinstance(v, dict):
                 v = self._resolve_dict(v)
             self.__dict__[n] = v
-            return v
+        return v
+    
+    def __getattr__(self, n):
+        return self.get_virtual(n)
     
     def __setattr__(self, n, v):
         oldVal = self.__dict__.get(n, None)
