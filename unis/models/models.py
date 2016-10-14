@@ -255,28 +255,26 @@ class LocalObject(metaclass=JSONObjectMeta):
                 tmpResult[k] = v
         return tmpResult
 
-        
 
 
 class UnisObject(metaclass = JSONObjectMeta):
     def initialize(self, src={}, runtime=None, set_attr=True, defer=False, local_only=True):
         assert isinstance(src, dict), "{t} src must be of type dict, got {t2}".format(t = type(self), t2 = type(src))
         
+        for k, v in src.items():
+            if set_attr:
+                self.__dict__[k] = v
+            else:
+                self.set_virtual(k, v)
+        
         self._runtime = runtime
         self._collection = None
         self._defer = defer
         self._dirty = False
         self._local = local_only
-        self._override_virtual = False
         self._waiting_on = set()
+        self._override_virtual = set_attr
         
-        for k, v in src.items():
-            if set_attr:
-                self.__dict__[k] = v
-            else:
-                self._override_virtual = True
-                self.set_virtual(k, v)
-    
     def __getattribute__(self, n):
         if n in ["get_virtual", "__dict__"]:
             return super(UnisObject, self).__getattribute__(n)
