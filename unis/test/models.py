@@ -42,6 +42,7 @@ class UnisObjectTest(unittest.TestCase):
         self.assertIsInstance(obj2, UnisObject)
         self.assertEqual(obj1.to_JSON(), {})
         self.assertEqual(obj2.to_JSON(), test_data)
+        self.assertEqual(obj2.to_JSON(include_virtuals=True), test_data)
         for key, value in test_data.items():
             self.assertTrue(hasattr(obj2, key))
             self.assertEqual(getattr(obj2, key), value)
@@ -89,7 +90,7 @@ class UnisObjectTest(unittest.TestCase):
         
         # Assert
         self.assertIsInstance(vs, UnisList)
-        self.assertEqual(vs.to_JSON(), ["1", "2", "3"])
+        self.assertEqual(vs.to_JSON(include_virtuals=True), ["1", "2", "3"])
         self.assertEqual(vs._parent, obj1)
     
     def test_inner_dict(self):

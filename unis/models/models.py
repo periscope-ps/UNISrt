@@ -262,7 +262,10 @@ class UnisObject(metaclass = JSONObjectMeta):
         assert isinstance(src, dict), "{t} src must be of type dict, got {t2}".format(t = type(self), t2 = type(src))
         
         for k, v in src.items():
-            self.set_virtual(k, v)
+            if set_attr:
+                self.__dict__[k] = v
+            else:
+                self.set_virtual(k, v)
         
         self._runtime = runtime
         self._collection = None
@@ -270,7 +273,6 @@ class UnisObject(metaclass = JSONObjectMeta):
         self._dirty = False
         self._local = local_only
         self._waiting_on = set()
-        self._override_virtual = set_attr
         
     def __getattribute__(self, n):
         if n in ["get_virtual", "__dict__"]:
@@ -443,7 +445,7 @@ def schemaMetaFactory(name, schema, parents = [JSONObjectMeta], loader=None):
             if schema.get("type", "object") == "object":
                 for k, v in schema.get("properties", {}).items():
                     if k not in instance.__dict__:
-                        if instance._override_virtual and k in instance.__meta__:
+                        if k in instance.__meta__:
                             instance.__dict__[k] = instance.__meta__[k]
                         else:
                             ty = "null"
