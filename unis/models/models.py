@@ -262,10 +262,7 @@ class UnisObject(metaclass = JSONObjectMeta):
         assert isinstance(src, dict), "{t} src must be of type dict, got {t2}".format(t = type(self), t2 = type(src))
         
         for k, v in src.items():
-            if set_attr:
-                self.__dict__[k] = v
-            else:
-                self.set_virtual(k, v)
+            self.set_virtual(k, v)
         
         self._runtime = runtime
         self._collection = None
