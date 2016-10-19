@@ -143,12 +143,14 @@ class ObjectLayer(object):
                 roots = list(shortest)
         
         self._pending = set()
-                   
+        
     def update(self, resource):
         if resource.isDeferred() or self.defer_update:
             self._pending.add(resource)
-        else:
+        if resource not in self._pending:
+            self._pending.add(resource)
             self._do_update([resource], resource._collection)
+            self._pending.remove(resource)
     def _do_update(self, resources, collection):
         ref = "#/{c}".format(c=collection)
         self._cache[collection].locked = True
@@ -158,7 +160,7 @@ class ObjectLayer(object):
             for resource in resources:
                 if not getattr(resource, "id", None):
                     resource.commit("id")
-                    resource.setWithoutUpdate("id", str(uuid.uuid4()))
+                    resource.id = str(uuid.uuid4())
                 resource.validate()
                 resource.setWithoutUpdate("ts", int(time.time() * 1000000))
                 msg.append(resource.to_JSON())
