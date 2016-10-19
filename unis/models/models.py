@@ -12,14 +12,14 @@ from unis.models.settings import SCHEMAS, JSON_SCHEMA_SCHEMA, JSON_SCHEMA_HYPER,
 from unis.utils.pubsub import Events
 
 # Define the default JSON Schemas that are defined in the JSON schema RFC
-JSON_SCHEMA        = json.loads(open(JSON_SCHEMAS_ROOT + "/schema").read())
-HYPER_SCHEMA       = json.loads(open(JSON_SCHEMAS_ROOT + "/hyper-schema").read())
-HYPER_LINKS_SCHEMA = json.loads(open(JSON_SCHEMAS_ROOT + "/links").read())
+#JSON_SCHEMA        = json.loads(open(JSON_SCHEMAS_ROOT + "/schema").read())
+#HYPER_SCHEMA       = json.loads(open(JSON_SCHEMAS_ROOT + "/hyper-schema").read())
+#HYPER_LINKS_SCHEMA = json.loads(open(JSON_SCHEMAS_ROOT + "/links").read())
 
 CACHE = {
-    JSON_SCHEMA_SCHEMA: JSON_SCHEMA,
-    JSON_SCHEMA_HYPER: HYPER_SCHEMA,
-    JSON_SCHEMA_LINKS: HYPER_LINKS_SCHEMA,
+    #JSON_SCHEMA_SCHEMA: JSON_SCHEMA,
+    #JSON_SCHEMA_HYPER: HYPER_SCHEMA,
+    #JSON_SCHEMA_LINKS: HYPER_LINKS_SCHEMA,
 }
 
 # For internal use only
@@ -468,7 +468,7 @@ class SchemasLoader(object):
     _CLASSES_CACHE = {}
     _LOCATIONS = {}
     
-    def __init__(self, locations=None, cache=None, class_cache=None):
+    def __init__(self, locations=None, cache={}, class_cache=None):
         assert isinstance(locations, (dict, type(None))), \
             "locations is not of type dict or None."
         assert isinstance(cache, (dict, type(None))), \
@@ -476,7 +476,7 @@ class SchemasLoader(object):
         assert isinstance(class_cache, (dict, type(None))), \
             "class_cache is not of type dict or None."
         self._LOCATIONS = locations or {}
-        self._CACHE = cache or {}
+        self._CACHE = cache
         self._CLASSES_CACHE = class_cache or {}
     
     def get(self, uri):

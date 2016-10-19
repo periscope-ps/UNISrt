@@ -1,11 +1,11 @@
 import os
 
-from unis.settings import UNISRT_ROOT
+from unis.settings import LOCAL_ROOT
 
 SCHEMA_HOST        = 'unis.crest.iu.edu'
 SCHEMAS_LOCAL      = False
 
-JSON_SCHEMAS_ROOT  = os.path.join(UNISRT_ROOT, "schemas")
+JSON_SCHEMAS_ROOT  = os.path.join(LOCAL_ROOT, "schemas")
 SCHEMA_CACHE_DIR   = os.path.join(JSON_SCHEMAS_ROOT, ".cache")
 
 JSON_SCHEMA_SCHEMA = "http://json-schema.org/draft-04/schema#"
