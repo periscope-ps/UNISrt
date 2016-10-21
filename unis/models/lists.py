@@ -200,7 +200,7 @@ class UnisCollection(object):
                 yield v
         elif isinstance(pred, dict):
             no_index = {}
-            iterator = self
+            iterator = MixedCollectionIterator(self)
             if not self._do_sync and use_index:
                 sets = [self._rangeset]
                 for k, v in pred.items():
@@ -229,6 +229,8 @@ class UnisCollection(object):
                         if not p(getattr(item, k, None), v2):
                             valid = False
                             break
+                    if not valid:
+                        break
                 if valid:
                     yield item
         else:
@@ -252,6 +254,15 @@ class UnisCollection(object):
         
         self._runtime._unis.subscribe(self.collection, _callback)
         self._subscribe = lambda: None
+    
+    def _fromId(self, uid):
+        keys = [item[0] for item in self._indices["id"]]
+        index = bisect.bisect_left(keys, uid)
+        if index < len(self._indices["id"]):
+            return self[self._indices["id"][index][1]]
+        else:
+            raise KeyError("No object with id {}".format(uid))
+        
         
     def sync(self):
         self._do_sync = True
@@ -259,6 +270,12 @@ class UnisCollection(object):
             pass
         
         
+####### TODO ###########
+# Process all records  #
+# Before returning any #
+# to reduce extra gets #
+# from user operations #
+
 class CollectionIterator(object):
     def __init__(self, ls, **kwargs):
         self.ls = ls
@@ -291,7 +308,9 @@ class CollectionIterator(object):
 class MixedCollectionIterator(CollectionIterator):
     def __init__(self, ls):
         self.local_done = False
+        self._seen = set()
         super(MixedCollectionIterator, self).__init__(ls)
+        self._complete = not self.ls._do_sync
     
     def __next__(self):
         # Return all locally stored values first
@@ -299,15 +318,18 @@ class MixedCollectionIterator(CollectionIterator):
             if self.index < len(self.ls):
                 result = self.ls[self.index]
                 self.index += 1
+                self._seen.add(getattr(result, "id", None))
                 return result
             else:
                 self.local_done = True
                 self.index = 0
         
-        if self.ls._do_sync:
+        if not self._complete:
             return super(MixedCollectionIterator, self).__next__()
+        raise RuntimeError("Iterator outside object bounds")
     
     def finalize(self):
+        self._complete = True
         self.ls._do_sync = False
         self.ls._subscribe()
         super(MixedCollectionIterator, self).finalize()
@@ -320,6 +342,10 @@ class MixedCollectionIterator(CollectionIterator):
         result = model(res, self.ls._runtime, local_only=False)
         try:
             self.ls.append(result)
+            self._seen.add(result.id)
             return result
         except ValueError:
-            return self.__next__()
+            if result.id in self._seen:
+                return self.__next__()
+            else:
+                return self.ls._fromId(result.id)
