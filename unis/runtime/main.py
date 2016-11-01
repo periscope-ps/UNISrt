@@ -8,7 +8,18 @@ from unis.runtime import settings
 from unis.runtime.oal import ObjectLayer
 from unis.utils.pubsub import Events
 
-class Runtime(object):
+class RuntimeMeta(type):
+    instances = {}
+    def __call__(cls, *args, **kwargs):
+        try:
+            url = kwargs.get('url', args[0] if len(args) else None)
+        except IndexError:
+            raise AttributeError("Runtime constructor must contain url as first argument")
+        if url not in cls.instances:
+            cls.instances[url] = super(RuntimeMeta, cls).__call__(*args, **kwargs)
+        return cls.instances[url]
+
+class Runtime(metaclass=RuntimeMeta):
     @property
     def settings(self):
         if not hasattr(self, "_settings"):
