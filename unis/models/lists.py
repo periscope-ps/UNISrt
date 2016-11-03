@@ -1,5 +1,6 @@
 
 import json
+import time
 import types
 import bisect
 import uuid
@@ -8,12 +9,12 @@ from unis.utils.pubsub import Events
 from unis.models.models import schemaLoader
 
 class DataCollection(object):
-    def __init__(self, mid, runtime, subscribe=True):
-        def mean(x, prior, state):
+    def __init__(self, mid, runtime, subscribe=True, pull_history=False):
+        def mean(x, ts, prior, state):
             state["sum"] += x
             state["count"] += 1
             return state["sum"] / state["count"]
-        def jitter(x, prior, state):
+        def jitter(x, ts, prior, state):
             state["count"] += 1
             delta = x - state["mean"]
             state["mean"] += delta / state["count"]
@@ -23,18 +24,20 @@ class DataCollection(object):
         self.metadataId = mid
         self._cache = []
         self._functions = {}
-        self._at = 0
+        self._at = 0 if pull_history else int(time.time() * 1000000)
         self._runtime = runtime
         self._ready = False
         
         if not subscribe:
             self._subscribe = lambda: False
+        elif not pull_history:
+            self._ready = self._subscribe()
         
-        self.attachFunction("min", lambda x, prior, state: x if prior > x else prior, 0)
-        self.attachFunction("max", lambda x, prior, state: x if not prior or prior < x else prior)
+        self.attachFunction("min", lambda x, ts, prior, state: x if isinstance(prior, type(None)) or prior > x else prior)
+        self.attachFunction("max", lambda x, ts, prior, state: x if not prior or prior < x else prior)
         self.attachFunction("mean", mean, state={"sum": 0, "count": 0})
-        self.attachFunction("jitter", jitter, 0, {"mean": 0, "count": 0}, post_process=lambda x, state: x / max(state["count"] - 1, 1))
-        self.attachFunction("last", lambda x, prior, state: x)
+        self.attachFunction("jitter", jitter, 0, {"mean": 0, "count": 0}, lambda x, state: x / max(state["count"] - 1, 1))
+        self.attachFunction("last", lambda x, ts, prior, state: x)
         
     def __len__(self):
         pass
@@ -42,7 +45,7 @@ class DataCollection(object):
         pass
     def __setitem__(self, i, k):
         raise RuntimeError("Cannot set values to a data collection")
-
+        
     def __getattribute__(self, n):
         if n != "_functions" and  n in self._functions:
             self.load()
@@ -51,29 +54,24 @@ class DataCollection(object):
         return super(DataCollection, self).__getattribute__(n)
         
     def attachFunction(self, n, f, default=None, state={}, post_process=lambda x, s: x):
-        def func():
-            self.load()
-            post_process(*self._function[n][1])
-            
         self._functions[n] = (f, post_process, (default, state))
         
     def load(self):
         if not self._ready:
-            for record in CollectionIterator(self, ts="gt={ts}".format(ts = self._at)):
+            for record in CollectionIterator(self, sort="ts:1", ts="gt={ts}".format(ts = self._at)):
                 self._process(record)
             self._ready = self._subscribe()
             
     def _process(self, record):
-        self._at = max(self._at, record["ts"])
+        self._at = int(max(self._at, record["ts"]))
         for k, v in self._functions.items():
             func, pp, meta = v
             prior, state = meta
-            value = func(record["value"], prior, state)
+            value = func(record["value"], record["ts"], prior, state)
             self._functions[k] = (func, pp, (value, state))
     
     def _subscribe(self):
         def _callback(v):
-            v = json.loads(v)
             for k, v in v["data"].items():
                 for record in v:
                     self._process(record)
@@ -85,7 +83,7 @@ class DataCollection(object):
 
 
 class UnisCollection(object):
-    def __init__(self, href, collection, model, runtime, auto_sync=True):
+    def __init__(self, href, collection, model, runtime, auto_sync=True, subscribe=True):
         self._cache = []
         self._indices = { "id": []}
         self._runtime = runtime
@@ -95,6 +93,9 @@ class UnisCollection(object):
         self._do_sync = auto_sync
         self.collection = collection
         self.locked = False
+        
+        if not subscribe:
+            self._subscribe = lambda: None
         
     def __repr__(self):
         tmpOut = []
@@ -239,7 +240,6 @@ class UnisCollection(object):
     # Subscribe to unis websocket to ensure {} query is valid
     def _subscribe(self):
         def _callback(v):
-            v = json.loads(v)
             if "$schema" in v.get("data", {}):
                 model = schemaLoader.get_class(v["data"]["$schema"])
             else:

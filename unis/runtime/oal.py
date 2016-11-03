@@ -32,6 +32,14 @@ class ObjectLayer(object):
         self._addr = url
         self._unis = UnisClient(url, **kwargs)
         self._pending = set()
+        settings = {}
+        if runtime:
+            self._subscriber = runtime
+            self.defer_update = runtime.settings["defer_update"]
+            settings = runtime.settings
+        else:
+            settings = {"auto_sync": True, "subscribe": False}
+            
         for resource in self._unis.getResources():
             re_str = "{full}|{rel}".format(full = 'http[s]?://(?P<host>[^:/]+)(?::(?P<port>[0-9]{1,5}))?/(?P<col1>[a-zA-Z]+)$',
                                            rel  = '#/(?P<col2>[a-zA-Z]+)$')
@@ -42,12 +50,8 @@ class ObjectLayer(object):
             model = schemaLoader.get_class(schema)
             self._models[collection] = self.iCollection(collection, schema, model)
             if collection not in ["events", "data"]:
-                sync = runtime.settings["auto_sync"] if runtime else True
-                self._cache[collection] = UnisCollection(resource["href"], collection, model, self, sync)
+                self._cache[collection] = UnisCollection(resource["href"], collection, model, self, settings["auto_sync"], settings["subscribe"])
         
-        if runtime:
-            self._subscriber = runtime
-            self.defer_update = runtime.settings["defer_update"]
     
     def __getattr__(self, n):
         if n in self._cache:

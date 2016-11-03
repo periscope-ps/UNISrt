@@ -26,15 +26,17 @@ class UnisClient(object):
         self._verify = kwargs.get("verify", False)
         self._ssl = kwargs.get("cert", None)
         self._executor = ThreadPoolExecutor(max_workers=12)
-        self._sockets = {}
+        self._socket = None
+        self._shutdown = False
+        self._channels = {}
     
     def shutdown(self):
         self.log.info("Removing sockets")
-        for s in self._sockets.values():
-            if s["shutdown"]:
-                s["socket"].close()
-            else:
-                s["shutdown"] = True
+        if self._socket and self._shutdown:
+            self._socket.close()
+            self._socket = None
+        else:
+            self._shutdown = True
         self._executor.shutdown()
     
     def getResources(self):
@@ -61,8 +63,17 @@ class UnisClient(object):
                                                   verify = self._verify, cert = self._ssl))
     
     def subscribe(self, collection, callback):
-        return self._executor.submit(self._subscribe, collection, callback)
-    def _subscribe(self, collection, callback):
+        if collection not in self._channels:
+            self._channels[collection] = []
+        self._channels[collection].append(callback)
+        
+        if self._socket:
+            while not self._shutdown:
+                pass
+            self._socket.send(json.dumps({ 'query': {}, 'resourceType': collection}))
+        else:
+            self._subscribe(collection)
+    def _subscribe(self, collection):
         kwargs = {}
         if self._ssl:
             kwargs["ca_certs"] = self._ssl[0]
@@ -75,21 +86,24 @@ class UnisClient(object):
                                                      c = collection)
         def on_message(ws, message):
             self.log.debug("ws-message <url={u} msg={m}>".format(u = url, m = message))
-            callback(message)
+            message = json.loads(message)
+            callbacks = self._channels[message["headers"]["collection"]]
+            for callback in callbacks:
+                callback(message)
         def on_open(ws):
             self.log.debug("ws-connect <url={u}>".format(u = url))
-            if self._sockets[url]["shutdown"]:
+            if self._shutdown:
                 ws.close()
             else:
-                self._sockets[url]["shutdown"] = True
+                self._shutdown = True
             
-        ws = websocket.WebSocketApp(url, 
-                                    on_message = on_message,
-                                    on_open  = on_open, 
-                                    on_error = lambda ws, error: self.log.error("ws-error <url={u} error={e}>".format(u = url, e = error)),
-                                    on_close = lambda ws: self.log.debug("ws-close <url={u}>".format(u = url)))
-        self._sockets[url] = { "socket": ws, "shutdown": False }
-        ws.run_forever(sslopt=kwargs)
+        self._socket = websocket.WebSocketApp(url, 
+                                              on_message = on_message,
+                                              on_open  = on_open, 
+                                              on_error = lambda ws, error: self.log.error("ws-error <url={u} error={e}>".format(u = url, e = error)),
+                                              on_close = lambda ws: self.log.debug("ws-close <url={u}>".format(u = url)))
+
+        self._executor.submit(self._socket.run_forever, sslopt=kwargs)
         
     def _build_query(self, args, **kwargs):
         if kwargs:

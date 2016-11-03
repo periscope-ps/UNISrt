@@ -47,7 +47,7 @@ class Runtime(metaclass=RuntimeMeta):
                         
         return self._settings
     
-    def __init__(self, url=None, defer_update=False, auto_sync=True):
+    def __init__(self, url=None, defer_update=False, subscribe=True, auto_sync=True):
         self.log = settings.get_logger()
         self.log.info("Starting Unis network Runtime Environment...")
         
@@ -57,6 +57,7 @@ class Runtime(metaclass=RuntimeMeta):
         
         self._services = []
         self.settings["defer_update"] = defer_update
+        self.settings["subscribe"] = subscribe
         self.settings["auto_sync"] = auto_sync
         if url:
             self.settings["unis"]["url"] = url
