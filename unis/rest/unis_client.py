@@ -87,6 +87,8 @@ class UnisClient(object):
         def on_message(ws, message):
             self.log.debug("ws-message <url={u} msg={m}>".format(u = url, m = message))
             message = json.loads(message)
+            if "headers" not in message or "collection" not in message["headers"]:
+                raise UnisError("Depreciated header in message, client UNIS incompatable")
             callbacks = self._channels[message["headers"]["collection"]]
             for callback in callbacks:
                 callback(message)
