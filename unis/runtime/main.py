@@ -19,7 +19,7 @@ class RuntimeMeta(type):
             cls.instances[url] = super(RuntimeMeta, cls).__call__(*args, **kwargs)
         return cls.instances[url]
 
-class Runtime(metaclass=RuntimeMeta):
+class Runtime(object):
     @property
     def settings(self):
         if not hasattr(self, "_settings"):
