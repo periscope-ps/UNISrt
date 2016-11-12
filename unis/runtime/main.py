@@ -107,5 +107,3 @@ class Runtime(object):
         return self
     def __exit__(self, type, value, traceback):
         self.shutdown()
-    def __del__(self):
-        self.shutdown()

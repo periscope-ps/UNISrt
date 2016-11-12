@@ -310,7 +310,7 @@ class CollectionTest(unittest.TestCase):
             self.assertEqual(int(n.id), i)
         
         self.assertEqual(rt._unis.subscribe.call_count, 1)
-        self.assertFalse(col._do_sync)
+        self.assertTrue(col._full)
     
     def tes_iter_remote(self):
         # Arrange

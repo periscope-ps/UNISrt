@@ -91,6 +91,7 @@ class UnisCollection(object):
         self._model = model
         self._rangeset = set()
         self._do_sync = auto_sync
+        self._full = False
         self.collection = collection
         self.locked = False
         
@@ -121,7 +122,7 @@ class UnisCollection(object):
         else:
             raise ValueError("Attempted to insert an older object than current version into collection")
     def __iter__(self):
-        if not self._do_sync:
+        if not self._do_sync or self._full:
             return iter(self._cache)
         return MixedCollectionIterator(self)
     def _indexitem(self, k, ls, item, index):
@@ -201,39 +202,45 @@ class UnisCollection(object):
                 yield v
         elif isinstance(pred, dict):
             no_index = {}
-            iterator = MixedCollectionIterator(self)
-            if not self._do_sync and use_index:
-                sets = [self._rangeset]
-                for k, v in pred.items():
-                    if not isinstance(v, dict):
-                        v = { "eq": v }
-                        
-                    if k in self._indices:
-                        keys = [item[0] for item in self._indices[k]]
-                        for k2, v2 in v.items():
-                            func = slices[k2]
-                            sets.append(set([item[1] for item in self._indices[k][func(v2, keys)]]))
-                    else:
-                        no_index[k] = v
-                iterator = (self[i] for i in set.intersection(*sets))
+            iterator = self
+            
+            if not self._do_sync:
+                iterator = MixedCollectionIterator(self, force=True, **pred)
+                for v in iterator:
+                    yield v
             else:
-                for k, v in pred.items():
-                    if not isinstance(v, dict):
-                        pred[k] = {"eq": v}
-                no_index = pred
+                if self._full and use_index:
+                    sets = [self._rangeset]
+                    for k, v in pred.items():
+                        if not isinstance(v, dict):
+                            v = { "eq": v }
+                        
+                        if k in self._indices:
+                            keys = [item[0] for item in self._indices[k]]
+                            for k2, v2 in v.items():
+                                func = slices[k2]
+                                sets.append(set([item[1] for item in self._indices[k][func(v2, keys)]]))
+                        else:
+                            no_index[k] = v
+                    iterator = (self[i] for i in set.intersection(*sets))
+                else:
+                    for k, v in pred.items():
+                        if not isinstance(v, dict):
+                            pred[k] = {"eq": v}
+                    no_index = pred
                 
-            for item in iterator:
-                valid = True
-                for k, v in no_index.items():
-                    for k2, v2 in v.items():
-                        p = funcs[k2]
-                        if not p(getattr(item, k, None), v2):
-                            valid = False
+                for item in iterator:
+                    valid = True
+                    for k, v in no_index.items():
+                        for k2, v2 in v.items():
+                            p = funcs[k2]
+                            if not p(getattr(item, k, None), v2):
+                                valid = False
+                                break
+                        if not valid:
                             break
-                    if not valid:
-                        break
-                if valid:
-                    yield item
+                    if valid:
+                        yield item
         else:
             raise ValueError("where expects function or dictionary predicate list - got {v}".format(v = type(pred)))
     
@@ -265,8 +272,7 @@ class UnisCollection(object):
         
         
     def sync(self):
-        self._do_sync = True
-        for i in MixedCollectionIterator(self):
+        for i in MixedCollectionIterator(self, force=True):
             pass
         
         
@@ -306,11 +312,11 @@ class CollectionIterator(object):
 
 
 class MixedCollectionIterator(CollectionIterator):
-    def __init__(self, ls):
+    def __init__(self, ls, force=False, **kwargs):
         self.local_done = False
         self._seen = set()
-        super(MixedCollectionIterator, self).__init__(ls)
-        self._complete = not self.ls._do_sync
+        super(MixedCollectionIterator, self).__init__(ls, **kwargs)
+        self._complete = not (force or self.ls._do_sync)
     
     def __next__(self):
         # Return all locally stored values first
@@ -330,7 +336,7 @@ class MixedCollectionIterator(CollectionIterator):
     
     def finalize(self):
         self._complete = True
-        self.ls._do_sync = False
+        self.ls._full = True
         self.ls._subscribe()
         super(MixedCollectionIterator, self).finalize()
         
