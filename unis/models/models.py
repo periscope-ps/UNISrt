@@ -85,7 +85,7 @@ class UnisList(metaclass = JSONObjectMeta):
                 if self._parent._runtime:
                     item = self._parent._runtime.insert(item)
                     item._defer = self._parent._defer
-                    itme._local = self._parent._local
+                    item._local = self._parent._local
             
             if isinstance(item, UnisObject):
                 self._parent._waiting_on.add(item)

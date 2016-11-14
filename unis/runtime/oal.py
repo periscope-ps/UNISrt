@@ -184,12 +184,13 @@ class ObjectLayer(object):
             self._cache[collection].locked = False
     
     def insert(self, resource, uid=None):
-        if isinstance(resource, dict) and "$schema" in resource:
-            model = schemaLoader.get_class(schema)
-            resource = model(resource)
-        else:
-            raise ValueError("No schema in dict, cannot continue")
-        
+        if isinstance(resource, dict):
+            if "$schema" in resource:
+                model = schemaLoader.get_class(resource["$schema"])
+                resource = model(resource)
+            else:
+                raise ValueError("No schema in dict, cannot continue")
+                
         for k, item_meta in self._models.items():
             if item_meta.model._schema["name"] in resource.names:
                 resource.id = uid or getattr(resource, "id", None)
