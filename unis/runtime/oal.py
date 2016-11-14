@@ -30,7 +30,7 @@ class ObjectLayer(object):
         self._cache = {}
         self._models = {}
         self._addr = url
-        self._unis = UnisClient(url, **kwargs)
+        self._unis = UnisClient(url, inline=runtime.settings["inline"], **kwargs)
         self._pending = set()
         settings = {}
         if runtime:

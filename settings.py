@@ -34,8 +34,8 @@ MIME = {
 STANDALONE_DEFAULTS = {
 }
 
-DEBUG = False
-NETLOGGER_NAMESPACE = "nre"
+DEBUG = True
+NETLOGGER_NAMESPACE = "urt"
 
 def config_logger(logger):
     """Configures netlogger"""

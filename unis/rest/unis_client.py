@@ -16,7 +16,7 @@ class UnisReferenceError(UnisError):
         self.href = href
 
 class UnisClient(object):
-    def __init__(self, url, **kwargs):
+    def __init__(self, url, inline=False, **kwargs):
         self.log = get_logger()
         re_str = 'http[s]?://(?P<host>[^:/]+)(?::(?P<port>[0-9]{1,5}))?$'
         if not re.compile(re_str).match(url):
@@ -27,6 +27,7 @@ class UnisClient(object):
         self._ssl = kwargs.get("cert", None)
         self._executor = ThreadPoolExecutor(max_workers=12)
         self._socket = None
+        self._inline = inline
         self._shutdown = False
         self._channels = {}
     
@@ -47,7 +48,7 @@ class UnisClient(object):
         
     def get(self, url, limit = None, **kwargs):
         args = self._get_conn_args(url)
-        args["url"] = self._build_query(args, limit = limit, **kwargs)
+        args["url"] = self._build_query(args, inline=self._inline, limit=limit, **kwargs)
         self.log.debug("get <url={u} headers={h}>".format(u = args["url"], h = args["headers"]))
         return self._check_response(requests.get(args["url"], verify = self._verify, cert = self._ssl))
     
@@ -107,14 +108,18 @@ class UnisClient(object):
 
         self._executor.submit(self._socket.run_forever, sslopt=kwargs)
         
-    def _build_query(self, args, **kwargs):
+    def _build_query(self, args, inline=False, **kwargs):
         if kwargs:
             q = ""
             for k,v in kwargs.items():
                 if v:
                     q += "{k}={v}&".format(k = k, v = v)
                 
-            return "{b}?{q}".format(b = args["url"], q = q[0:-1])
+            if inline:
+                q += "inline"
+            else:
+                q = q[0:-1]
+            return "{b}?{q}".format(b=args["url"], q=q)
         return args["url"]
     
     def _get_conn_args(self, url):
