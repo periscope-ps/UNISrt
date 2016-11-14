@@ -125,6 +125,9 @@ class UnisCollection(object):
         if not self._do_sync or self._full:
             return iter(self._cache)
         return MixedCollectionIterator(self)
+    def __contains__(self, item):
+        return item in self._cache
+        
     def _indexitem(self, k, ls, item, index):
         v = (getattr(item, k), index) if getattr(item, k, None) else None
         if v:

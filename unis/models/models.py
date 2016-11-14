@@ -315,7 +315,8 @@ class UnisObject(metaclass = JSONObjectMeta):
                         raise ValueError("{t1}.{n} expects {t2} - got {t3}".format(t1=type(self), n=n, t2=model, t3=type(v)))
                         
                     if not v._local:
-                        self._runtime.insert(v)
+                        if v not in self._runtime:
+                            self._runtime.insert(v)
                         self.update()
                 else:
                     self.update()

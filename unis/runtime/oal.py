@@ -224,3 +224,7 @@ class ObjectLayer(object):
         return self
     def __exit__(self, type, value, traceback):
         self.shutdown()
+    def __contains__(self, resource):
+        for k, item_meta in self._models.items():
+            if item_meta.model._schema["name"] in resource.names:
+                return resource in self._cache[item_meta.name]
