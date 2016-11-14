@@ -83,10 +83,9 @@ class UnisList(metaclass = JSONObjectMeta):
         for item in args:
             if isinstance(item, dict) and item.get("$schema", None):
                 if self._parent._runtime:
-                    item = self._parent._runtime.insert(o)
+                    item = self._parent._runtime.insert(item)
                     item._defer = self._parent._defer
-                    if not self._parent._local:
-                        item.commit()
+                    itme._local = self._parent._local
             
             if isinstance(item, UnisObject):
                 self._parent._waiting_on.add(item)
