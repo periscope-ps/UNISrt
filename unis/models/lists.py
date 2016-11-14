@@ -119,8 +119,8 @@ class UnisCollection(object):
             for k,v in obj.__dict__.items():
                 tmpOld.__dict__[k] = v
             self._runtime._publish(Events.update, self._cache[i])
-        else:
-            raise ValueError("Attempted to insert an older object than current version into collection")
+        #else:
+        #    raise ValueError("Attempted to insert an older object than current version into collection")
     def __iter__(self):
         if not self._do_sync or self._full:
             return iter(self._cache)
