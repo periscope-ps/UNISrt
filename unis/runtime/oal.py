@@ -184,26 +184,18 @@ class ObjectLayer(object):
             self._cache[collection].locked = False
     
     def insert(self, resource, uid=None):
-        if isinstance(resource, dict):
-            if "$schema" in resource:
-                for k, item_meta in self._models.items():
-                    if item_meta.uri == resource["$schema"]:
-                        resource["id"] = resource.get("id", uid)
-                        if not resource["id"]:
-                            raise ValueError("Resource does not have a valid id attribute")
-                        resource = item_meta.model(resource, self, local_only=False)
-                        self._cache[item_meta.name].append(resource)
-                        return resource
-                raise ValueError("Unknown schema - {s}".format(s = resource["$schema"]))
-            else:
-                raise ValueError("No schema in dict, cannot continue")
+        if isinstance(resource, dict) and "$schema" in resource:
+            model = schemaLoader.get_class(schema)
+            resource = model(resource)
         else:
-            for k, item_meta in self._models.items():
-                if item_meta.model._schema["name"] in resource.names:
-                    resource.id = uid or getattr(resource, "id", None)
-                    self._cache[item_meta.name].append(resource)
-                    return resource
-            raise ValueError("Resource type {n} not found in ObjectLayer".format(n=resource.names))
+            raise ValueError("No schema in dict, cannot continue")
+        
+        for k, item_meta in self._models.items():
+            if item_meta.model._schema["name"] in resource.names:
+                resource.id = uid or getattr(resource, "id", None)
+                self._cache[item_meta.name].append(resource)
+                return resource
+        raise ValueError("Resource type {n} not found in ObjectLayer".format(n=resource.names))
     
     def subscribe(self, runtime):
         self._subscriber = runtime
