@@ -156,7 +156,7 @@ def get_eventtype_related(eventtype, subject):
     to_command = {
         'ping': "ping -c 1 %s",
         'iperf': "iperf -c %s",
-        'iperf3': "iperf3 -c %s",
+        'iperf3': "iperf3 -f m -c %s",
         'traceroute': "traceroute %s",
         'owping': "owping %s"
     }

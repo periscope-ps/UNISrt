@@ -94,7 +94,7 @@ class UNISrt(object):
                 # TODO: needs SSL, not figured out yet, pretend it does not exist for now
                 if instance_url == 'https://dlt.crest.iu.edu:9000' or instance_url == 'http://iu-ps01.crest.osris.org:8888'\
                                     or instance_url == 'http://dev.crest.iu.edu:8888' or instance_url == 'http://unis.crest.iu.edu:8890'\
-                                    or instance_url == 'http://monitor.crest.iu.edu:9000':
+                                    or instance_url == 'http://monitor.crest.iu.edu:9000' or instance_url == 'http://sc-ps01.osris.org:8888': 
                     continue
                 
                 if instance_url not in self._subunisclient:

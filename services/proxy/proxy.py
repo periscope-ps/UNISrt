@@ -12,6 +12,7 @@ from BaseHTTPServer import HTTPServer
 from BaseHTTPServer import BaseHTTPRequestHandler
 
 logger = settings.get_logger('proxy')
+stop_repeat = False
 
 class MyRequestHandler (BaseHTTPRequestHandler) :
     
@@ -184,6 +185,7 @@ class MyRequestHandler (BaseHTTPRequestHandler) :
                     for target in data['insert']:
                         ends = target['endpoints']
                         events = target['events']
+                        repeat = target['repeat']
                         targets.append({'src-domain': ends[0]['domain'], 'src-node': ends[0]['node'],\
                                         'src-addr': ends[0]['ipv4'], 'dst-addr': ends[1]['ipv4'],\
                                         'unis_instance': ends[0]['unis_instance'], 'events': events})
@@ -191,21 +193,32 @@ class MyRequestHandler (BaseHTTPRequestHandler) :
                                         'src-addr': ends[1]['ipv4'], 'dst-addr': ends[0]['ipv4'],\
                                         'unis_instance': ends[1]['unis_instance'], 'events': events})
                     
-                    if not self.server.unisrt.forecaster.follow(targets):
+                    if data.get('repeat', None):
+                        import threading                    
+                        import time
+                        def run(self):
+                            while True:
+                                if stop_repeat:
+                                    break
+                                self.server.unisrt.forecaster.follow(targets)
+                                time.sleep(data['repeat'])
+                        threading.Thread(name='repeater', target=run, args=()).start()
+                    else:
+                        if not self.server.unisrt.forecaster.follow(targets):
                     
-                    #if not self.server.unisrt.forecaster.follow(targets,\
-                    #                                            data['events'],\
-                    #                                            data['schedulers'],\
-                    #                                            data['schedule_params']):
+                        #if not self.server.unisrt.forecaster.follow(targets,\
+                        #                                            data['events'],\
+                        #                                            data['schedulers'],\
+                        #                                            data['schedule_params']):
                         
-                    #if not self.server.unisrt.forecaster.follow(targets,\
-                    #                                            ['iperf', 'owping'],\
-                    #                                            scheduler="builtins.scheduled",\
-                    #                                            schedule_params={'every': 1800, 'duration': 30, 'num_tests': 1}):
-                        data = {}
-                        self.send_response(400)
-                        self.end_headers()
-                        return
+                        #if not self.server.unisrt.forecaster.follow(targets,\
+                        #                                            ['iperf', 'owping'],\
+                        #                                            scheduler="builtins.scheduled",\
+                        #                                            schedule_params={'every': 1800, 'duration': 30, 'num_tests': 1}):
+                            data = {}
+                            self.send_response(400)
+                            self.end_headers()
+                            return
                 
                 self.send_response(200)
                 self.end_headers()
