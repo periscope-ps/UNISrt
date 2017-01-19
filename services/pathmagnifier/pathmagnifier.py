@@ -5,9 +5,6 @@ from copy import deepcopy
 
 from kernel.models import ipport, link, path
 from libnre.utils import *
-from test.test_math import acc_check
-from wx.lib.agw.cubecolourdialog import Distance
-from matplotlib.backend_bases import LocationEvent
 
 TRACEROUTE = "ps:tools:blipp:linux:net:traceroute:hopip"
 logger = settings.get_logger('pathmagnifier')

@@ -19,8 +19,8 @@ version = "0.1.dev"
 setup(
     name = "nre",
     version = version,
-    py_modules=['nreshell', 'settings'],
-    packages = ["kernel", "libnre", "apps", "apps.helm", "apps.helm.schedulers", "apps.faultlocator", "apps.faultlocator.alarms"],
+    py_modules=['settings'],
+    packages = ["kernel", "libnre", "nreshell", "services", "services.scheduler", "services.forecaster", "services.proxy"],
     package_data = {},
     author = "Miao Zhang",
     author_email="miaozhan@indiana.edu",
@@ -31,13 +31,11 @@ setup(
         "netlogger",
         "pytz",
         "python-dateutil"
-        #"graph-tool" -- apt-get install
     ],
     
     entry_points = {
         'console_scripts': [
-            'nreshell = nreshell:main',
-            'helm = apps.helm.helm:main',
+            'nreshell = nreshell.nreshell:main'
         ]
     },
 )

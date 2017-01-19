@@ -185,7 +185,6 @@ class MyRequestHandler (BaseHTTPRequestHandler) :
                     for target in data['insert']:
                         ends = target['endpoints']
                         events = target['events']
-                        repeat = target['repeat']
                         targets.append({'src-domain': ends[0]['domain'], 'src-node': ends[0]['node'],\
                                         'src-addr': ends[0]['ipv4'], 'dst-addr': ends[1]['ipv4'],\
                                         'unis_instance': ends[0]['unis_instance'], 'events': events})
@@ -196,10 +195,11 @@ class MyRequestHandler (BaseHTTPRequestHandler) :
                     if data.get('repeat', None):
                         import threading                    
                         import time
-                        def run(self):
+                        def run():
                             while True:
                                 if stop_repeat:
                                     break
+                                print data['insert'][0]
                                 self.server.unisrt.forecaster.follow(targets)
                                 time.sleep(data['repeat'])
                         threading.Thread(name='repeater', target=run, args=()).start()
@@ -238,6 +238,6 @@ class NREServer(HTTPServer):
         setattr(self, 'unisrt', unisrt)
         
 def run(unisrt, kwargs):
-    server = NREServer(("localhost", 8080), MyRequestHandler)
+    server = NREServer(("0.0.0.0", 8080), MyRequestHandler)
     server.set_nre(unisrt)
     server.serve_forever()
