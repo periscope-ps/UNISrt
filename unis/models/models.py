@@ -6,9 +6,10 @@ import jsonschema
 import time
 import re
 import weakref
+import tempfile
 
 from unis.models.settings import SCHEMAS, JSON_SCHEMA_SCHEMA, JSON_SCHEMA_HYPER, \
-    JSON_SCHEMA_LINKS, JSON_SCHEMAS_ROOT, SCHEMAS_LOCAL, SCHEMA_CACHE_DIR
+    JSON_SCHEMA_LINKS, JSON_SCHEMAS_ROOT, SCHEMAS_LOCAL
 from unis.utils.pubsub import Events
 
 # Define the default JSON Schemas that are defined in the JSON schema RFC
@@ -540,7 +541,7 @@ if SCHEMAS_LOCAL:
         except Exception as e:
             print("Error loading cached schema for {0}: {1}".format(e, s))
 
-http_client = httplib2.Http(SCHEMA_CACHE_DIR)
+http_client = httplib2.Http()
 schemaLoader = SchemasHTTPLib2(http_client, cache=CACHE)
 
 JSONSchema = schemaLoader.get_class(JSON_SCHEMA_SCHEMA, "JSONSchema")

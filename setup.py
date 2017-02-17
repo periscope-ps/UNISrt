@@ -57,7 +57,9 @@ setup(
         "python-dateutil",
         "httplib2",
         "websocket-client",
-        "requests"
+        "requests",
+        "jsonschema",
+        "bson"
     ],
     cmdclass={'test': tester },
     #entry_points = {
