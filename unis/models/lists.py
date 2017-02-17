@@ -358,6 +358,8 @@ class MixedCollectionIterator(CollectionIterator):
             raise TypeError("Bad resource from UNIS")
         result = model(res, self.ls._runtime, local_only=False)
         try:
+            if result.id in self._seen:
+                return self.__next__()
             self.ls.append(result)
             self._seen.add(result.id)
             return result
