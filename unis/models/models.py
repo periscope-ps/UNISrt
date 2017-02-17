@@ -383,8 +383,6 @@ class UnisObject(metaclass = JSONObjectMeta):
                     except:
                         self._local = True
                         raise
-                    
-                    self._runtime._publish(Events.new, self)
                 else:
                     raise AttributeError("Object does not have a registered runtime")
         else:

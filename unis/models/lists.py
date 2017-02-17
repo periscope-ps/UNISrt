@@ -1,4 +1,3 @@
-
 import json
 import time
 import types
@@ -85,6 +84,7 @@ class DataCollection(object):
 class UnisCollection(object):
     def __init__(self, href, collection, model, runtime, auto_sync=True, subscribe=True):
         self._cache = []
+        self._services = []
         self._indices = { "id": []}
         self._runtime = runtime
         self._href = href
@@ -118,7 +118,7 @@ class UnisCollection(object):
         if (not (getattr(tmpOld, "ts", None) and getattr(obj, "ts", None))) or tmpOld.ts < obj.ts:
             for k,v in obj.__dict__.items():
                 tmpOld.__dict__[k] = v
-            self._runtime._publish(Events.update, self._cache[i])
+            self._serve(Events.update, self._cache[i])
         #else:
         #    raise ValueError("Attempted to insert an older object than current version into collection")
     def __iter__(self):
@@ -133,6 +133,11 @@ class UnisCollection(object):
         if v:
             index_keys = [i[0] for i in ls]
             ls.insert(bisect.bisect_left(index_keys, v[0]), v)
+        
+    def _serve(self, ty, resource):
+        for service in self._services:
+            f = getattr(ty.name, service)
+            f(resource)
     
     def append(self, obj):
         if obj._runtime and obj._runtime != self._runtime:
@@ -156,10 +161,13 @@ class UnisCollection(object):
         index = len(self._cache)
         self._rangeset.add(index)
         self._cache.append(obj)
-        self._runtime._publish(Events.new, obj)
+        self._serve(Events.new, obj)
         
         for k, ls in self._indices.items():
             self._indexitem(k, ls, obj, index)
+    
+    def addService(self, service):
+        self._services.append(service)
     
     def createIndex(self, k):
         ls = []
@@ -178,7 +186,7 @@ class UnisCollection(object):
             new_ls = list(filter(lambda x: x[1] != i, ls))
             self._indexitem(k, new_ls, item, i)
             self._indices[k] = new_ls
-        self._runtime._publish(Events.update, self._cache[i])
+        self._serve(Events.update, self._cache[i])
     def hasValue(self, k, v):
         if k in self._indices:
             keys = [item[0] for item in self._indices[k]]

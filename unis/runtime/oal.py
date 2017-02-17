@@ -25,20 +25,14 @@ class ObjectLayer(object):
             self.uri = schema
             self.model = model
             
-    def __init__(self, url, runtime=None, **kwargs):
+    def __init__(self, url, runtime, **kwargs):
         self.defer_update = False
         self._cache = {}
         self._models = {}
         self._addr = url
         self._unis = UnisClient(url, inline=runtime.settings["inline"], **kwargs)
         self._pending = set()
-        settings = {}
-        if runtime:
-            self._subscriber = runtime
-            self.defer_update = runtime.settings["defer_update"]
-            settings = runtime.settings
-        else:
-            settings = {"auto_sync": True, "subscribe": False}
+        self.defer_update = runtime.settings["defer_update"]
             
         for resource in self._unis.getResources():
             re_str = "{full}|{rel}".format(full = 'http[s]?://(?P<host>[^:/]+)(?::(?P<port>[0-9]{1,5}))?/(?P<col1>[a-zA-Z]+)$',
@@ -50,7 +44,7 @@ class ObjectLayer(object):
             model = schemaLoader.get_class(schema)
             self._models[collection] = self.iCollection(collection, schema, model)
             if collection not in ["events", "data"]:
-                self._cache[collection] = UnisCollection(resource["href"], collection, model, self, settings["auto_sync"], settings["subscribe"])
+                self._cache[collection] = UnisCollection(resource["href"], collection, model, self, runtime.settings["auto_sync"], runtime.settings["subscribe"])
         
     
     def __getattr__(self, n):
@@ -86,7 +80,7 @@ class ObjectLayer(object):
                 else:
                     raise UnisError("href does not reference resource in unis.")
         else:
-            raise ValueError("href must be a direct uri to a unis resource.")
+            raise ValueError("href must be a direct uri to a unis resource - Got", href)
     
     def flush(self):
         if not self._pending:
@@ -190,21 +184,21 @@ class ObjectLayer(object):
                 resource = model(resource)
             else:
                 raise ValueError("No schema in dict, cannot continue")
-                
+            
+        resource.id = uid or getattr(resource, "id", None)
+        col = self.getModel(resource.names)
+        col.append(resource)
+        return resource
+        
+    def getModel(self, names):
+        if not isinstance(names, list):
+            names = [names]
         for k, item_meta in self._models.items():
-            if item_meta.model._schema["name"] in resource.names:
-                resource.id = uid or getattr(resource, "id", None)
-                self._cache[item_meta.name].append(resource)
-                return resource
-        raise ValueError("Resource type {n} not found in ObjectLayer".format(n=resource.names))
+            if item_meta.model._schema["name"] in names:
+                return self._cache[item_meta.name]
+        
+        raise ValueError("Resource type {n} not found in ObjectLayer".format(n=names))
     
-    def subscribe(self, runtime):
-        self._subscriber = runtime
-        self.defer_update = runtime.settings["defer_update"]
-    
-    def _publish(self, ty, resource):
-        if getattr(self, "_subscriber", None):
-            self._subscriber._publish(ty, resource)
     def about(self):
         return [v.uri for k,v in self._models.items()]
         

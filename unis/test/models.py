@@ -27,9 +27,7 @@ from unis.models.settings import SCHEMAS
 from unis.models import Node, Exnode, Extent
 from unis.models.models import CACHE, UnisObject, UnisList, schemaLoader, LocalObject
 from unis.models.lists import UnisCollection
-
-from unis.utils.pubsub import Events
-
+    
 class UnisObjectTest(unittest.TestCase):
     def test_init(self):
         # Arrange
@@ -168,7 +166,7 @@ class NetworkResourceTest(unittest.TestCase):
         # Assert
         runtime.insert.assert_called_once_with(inner)
         runtime.update.assert_called_once_with(good)
-        
+            
     def test_dict_resolve_insert_runtime(self):
         # Arrange
         runtime = MagicMock()
@@ -221,9 +219,6 @@ class CollectionTest(unittest.TestCase):
         self.assertIn("id", col._indices)
         self.assertEqual(col._indices["id"], [("1", 0), ("2", 1)])
         self.assertEqual(col._rangeset, set([0, 1]))
-        rt._publish.assert_any_call(Events.new, n1)
-        rt._publish.assert_any_call(Events.new, n2)
-        self.assertEqual(rt._publish.call_count, 2)
         
     def test_append_duplicate(self):
         # Arrange
@@ -242,9 +237,6 @@ class CollectionTest(unittest.TestCase):
         self.assertEqual(col._rangeset, set([0]))
         self.assertEqual(col[0].v, 2)
         self.assertEqual(n1._runtime, rt)
-        rt._publish.assert_any_call(Events.new, n1)
-        rt._publish.assert_any_call(Events.update, n1)
-        self.assertEqual(rt._publish.call_count, 2)
         
     def test_append_bad(self):
         # Arrange
@@ -271,9 +263,6 @@ class CollectionTest(unittest.TestCase):
         self.assertEqual(col._indices["id"], [("1", 0)])
         self.assertEqual(col._rangeset, set([0]))
         self.assertEqual(col[0].v, 2)
-        rt._publish.assert_any_call(Events.new, n1)
-        rt._publish.assert_any_call(Events.update, n1)
-        self.assertEqual(rt._publish.call_count, 2)
         
     def test_setitem_bad_index(self):
         def set_col():
@@ -293,7 +282,6 @@ class CollectionTest(unittest.TestCase):
         self.assertEqual(col._indices["id"], [("1", 0)])
         self.assertEqual(col._rangeset, set([0]))
         self.assertEqual(col[0].v, 1)
-        rt._publish.assert_called_with(Events.new, n1)
         
     def test_iter(self):
         # Arrange

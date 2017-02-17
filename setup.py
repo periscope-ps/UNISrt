@@ -16,7 +16,6 @@ from __future__ import print_function
 from setuptools import setup
 from setuptools import Command
 
-import unis.test.runtests as tests
 import sys
 
 version = "0.1.dev0"
@@ -40,6 +39,7 @@ class tester(Command):
         pass
 
     def run(self):
+        import unis.test.runtests as tests
         return tests.main()
 
 setup(

@@ -25,6 +25,7 @@ UNIT_TEST_MODULES = [
     'unis.test.models.UnisObjectTest',
     'unis.test.models.NetworkResourceTest',
     'unis.test.models.CollectionTest',
+    'unis.test.runtime.UnisServiceTest',
     'unis.test.runtime.OALTest'
 ]
 

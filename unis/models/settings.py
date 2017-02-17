@@ -31,4 +31,5 @@ SCHEMAS = {
     'Measurement':     _schema.format(host = SCHEMA_HOST, directory = "20160630", name = "measurement#"),
     'Exnode':          _schema.format(host = SCHEMA_HOST, directory = "exnode/6", name = "exnode#"),
     'Extent':          _schema.format(host = SCHEMA_HOST, directory = "exnode/6", name = "extent#"),
+    'OFSwitch':        _schema.format(host = SCHEMA_HOST, directory = "ext/ofswitch/1", name = "ofswitch#"),
 }

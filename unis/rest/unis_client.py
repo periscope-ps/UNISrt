@@ -1,4 +1,5 @@
 import json
+import bson
 import re
 import requests
 import websocket
@@ -41,16 +42,16 @@ class UnisClient(object):
         self._executor.shutdown()
     
     def getResources(self):
-        headers = { 'content-type': 'application/perfsonar+json',
-                    'accept': MIME['PSJSON'] }
+        headers = { 'Content-Type': 'application/perfsonar+json',
+                    'Accept': MIME['PSBSON'] }
         self.log.debug("resources <url={u} headers={h}>".format(u = self._url, h = headers))
-        return self._check_response(requests.get(self._url, verify = self._verify, cert = self._ssl))
+        return self._check_response(requests.get(self._url, verify = self._verify, cert = self._ssl, headers=headers))
         
     def get(self, url, limit = None, **kwargs):
         args = self._get_conn_args(url)
         args["url"] = self._build_query(args, inline=self._inline, limit=limit, **kwargs)
         self.log.debug("get <url={u} headers={h}>".format(u = args["url"], h = args["headers"]))
-        return self._check_response(requests.get(args["url"], verify = self._verify, cert = self._ssl))
+        return self._check_response(requests.get(args["url"], verify = self._verify, cert = self._ssl, headers=headers))
     
     def post(self, url, data):
         args = self._get_conn_args(url)
@@ -131,14 +132,14 @@ class UnisClient(object):
         uid = matches.group("uid1") or matches.group("uid2")
         return { "collection": collection,
                  "url": "{u}/{c}{i}".format(u = self._url, c = collection, i = "/" + uid if uid else ""),
-                 "headers": { 'content-type': 'application/perfsonar+json',
-                              'accept': MIME['PSJSON'] } }
+                 "headers": { 'Content-Type': 'application/perfsonar+json',
+                              'Accept': MIME['PSBSON'] } }
     
     def _check_response(self, r):
         self.log.debug("unis-response <code={c}>".format(c = r.status_code))
         if 200 <= r.status_code <= 299:
             try:
-                return r.json()
+                return bson.loads(r.content)
             except:
                 return r.status_code
         elif 400 <= r.status_code <= 499:

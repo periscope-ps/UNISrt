@@ -75,7 +75,7 @@ class Runtime(object):
         
     @property
     def collections(self):
-        return self._oal._cache.keys()
+        return self._oal._cache.values()
         
     def find(self, href):
         return self._oal.find(href)
@@ -87,17 +87,12 @@ class Runtime(object):
         return result
     
     def addService(self, service):
+        instance = service
         if isinstance(service, type):
-            instance = service(self)
+            instance = service()
         if not isinstance(instance, RuntimeService):
             raise ValueError("Service must by of type RuntimeService")
         instance.attach(self)
-        self._services.append(instance)
-    def _publish(self, ty, resource):
-        if ty in Events:
-            for service in self._services:
-                func = getattr(service, ty.name)
-                func(resource)
     
     def shutdown(self, sig=None, frame=None):
         self.log.info("Tearing down connection to UNIS...")

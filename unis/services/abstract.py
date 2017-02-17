@@ -15,11 +15,22 @@ class ServiceMetaclass(type):
                 setattr(cls, op, decoratorFactory(op))
 
 class RuntimeService(metaclass=ServiceMetaclass):
-    def __init__(self, runtime=None):
-        self.runtime = runtime
+    targets = []
+    
+    def __init__(self, targets=[]):
+        if targets:
+            for target in targets:
+                self.targets.append(target)
         super(RuntimeService, self).__init__()
     def attach(self, runtime):
-        self.runtime = runtime
+        self._runtime = runtime
+        if self.targets:
+            for target in self.targets:
+                collection = self._runtime.getModel(getattr(target, "names", []))
+                collection.addService(self)
+        else:
+            for collection in self._runtime.collections:
+                collection.addService(self)
     
     def new(self, resource):
         pass
