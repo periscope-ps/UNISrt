@@ -85,7 +85,7 @@ def build_measurement(unisrt, service):
     '''
     measurement = {"configuration": {}}
     muuid = uuid.uuid1().hex
-    measurement['$schema'] = "http://unis.crest.iu.edu/schema/20151104/measurement#"
+    measurement['$schema'] = "http://unis.crest.iu.edu/schema/20160630/measurement#"
     measurement['service'] = service
     measurement['selfRef'] = unisrt.config['unis_url'] + "/measurements/" + muuid
     measurement['id'] = muuid
@@ -98,7 +98,7 @@ def build_metadata(unisrt, meas_obj, eventType, isforecasted=False):
     form a bare bone metadata (maybe a bare bone structure is enough?)
     '''
     metadata = {
-        "$schema": 'http://unis.crest.iu.edu/schema/20151104/metadata#',
+        "$schema": 'http://unis.crest.iu.edu/schema/20160630/metadata#',
         "id": uuid.uuid1().hex,
         "subject": {
             "href": meas_obj.selfRef,
@@ -156,7 +156,7 @@ def get_eventtype_related(eventtype, subject):
     to_command = {
         'ping': "ping -c 1 %s",
         'iperf': "iperf -c %s",
-        'iperf3': "iperf3 -c %s",
+        'iperf3': "iperf3 -f m -c %s",
         'traceroute': "traceroute %s",
         'owping': "owping %s"
     }
@@ -165,7 +165,7 @@ def get_eventtype_related(eventtype, subject):
         'ping': "ttl=(?P<ttl>\\d+).*time=(?P<rtt>\\d+\\.*\\d*) ",
         'iperf': "(?P<bandwidth>\\d*\\.?\\d* [MG]bits\\/sec)",
         'iperf3': "(?P<bandwidth>[0-9]+(.[0-9]+)?) [GMK]bits/sec\\s+(?P<retransmit>\\d+)\\s+sender\\n",
-        'traceroute': "^\\s*\\d+.*(?P<hopip>\\(.*\\))",
+        'traceroute': "(?:\\n\\s*(?P<hop>\\d+))?(?:\\s+\\*|\\s+[^( |\\n)]*\\s+(?P<hopip>\\(\\d+\\.\\d+\\.\\d+\\.\\d+\\)))",
         'owping': "= [0-9]+(.[0-9]+)?/(?P<owping>[0-9]+(.[0-9]+)?)/[0-9]+(.[0-9]+)? ms, \\(.+\\)\\n"
     }
     

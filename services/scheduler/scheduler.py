@@ -190,7 +190,7 @@ def run(unisrt, kwargs):
 def prep_test(tmp, unisrt):
         from kernel.models import port, measurement, path
         test_port1 = {
-            "$schema": "http://unis.crest.iu.edu/schema/20151104/port#",
+            "$schema": "http://unis.crest.iu.edu/schema/20160630/port#",
             "capacity": -42,
             "name": "eth1:1",
             "selfRef": "http://dev.crest.iu.edu:8889/ports/test_port1",
@@ -205,7 +205,7 @@ def prep_test(tmp, unisrt):
             }
         }
         test_port2 = {
-            "$schema": "http://unis.crest.iu.edu/schema/20151104/port#",
+            "$schema": "http://unis.crest.iu.edu/schema/20160630/port#",
             "capacity": -42,
             "name": "eth1:1",
             "selfRef": "http://dev.crest.iu.edu:8889/ports/test_port2",
@@ -220,7 +220,7 @@ def prep_test(tmp, unisrt):
             }
         }
         test_port3 = {
-            "$schema": "http://unis.crest.iu.edu/schema/20151104/port#",
+            "$schema": "http://unis.crest.iu.edu/schema/20160630/port#",
             "capacity": -42,
             "name": "eth1:1",
             "selfRef": "http://dev.crest.iu.edu:8889/ports/test_port3",
@@ -235,7 +235,7 @@ def prep_test(tmp, unisrt):
             }
         }
         test_port4 = {
-            "$schema": "http://unis.crest.iu.edu/schema/20151104/port#",
+            "$schema": "http://unis.crest.iu.edu/schema/20160630/port#",
             "capacity": -42,
             "name": "eth1:1",
             "selfRef": "http://dev.crest.iu.edu:8889/ports/test_port4",
@@ -250,7 +250,7 @@ def prep_test(tmp, unisrt):
             }
         }
         test_port5 = {
-            "$schema": "http://unis.crest.iu.edu/schema/20151104/port#",
+            "$schema": "http://unis.crest.iu.edu/schema/20160630/port#",
             "capacity": -42,
             "name": "eth1:1",
             "selfRef": "http://dev.crest.iu.edu:8889/ports/test_port5",
@@ -265,7 +265,7 @@ def prep_test(tmp, unisrt):
             }
         }
         test_port6 = {
-            "$schema": "http://unis.crest.iu.edu/schema/20151104/port#",
+            "$schema": "http://unis.crest.iu.edu/schema/20160630/port#",
             "capacity": -42,
             "name": "eth1:1",
             "selfRef": "http://dev.crest.iu.edu:8889/ports/test_port6",
@@ -281,7 +281,7 @@ def prep_test(tmp, unisrt):
         }
         
         test_measurement1 = {
-            "$schema": "http://unis.crest.iu.edu/schema/20151104/measurement#",
+            "$schema": "http://unis.crest.iu.edu/schema/20160630/measurement#",
             "selfRef": "http://dev.crest.iu.edu:8889/measurements/test_measurement1v",
             "service": "http://dev.crest.iu.edu:8889/services/56db9dc8e779895f5f68fddc",
             "eventTypes": [
@@ -314,7 +314,7 @@ def prep_test(tmp, unisrt):
             "id": "test_measurement1"
         }
         test_measurement2 = {
-            "$schema": "http://unis.crest.iu.edu/schema/20151104/measurement#",
+            "$schema": "http://unis.crest.iu.edu/schema/20160630/measurement#",
             "selfRef": "http://dev.crest.iu.edu:8889/measurements/test_measurement2v",
             "service": "http://dev.crest.iu.edu:8889/services/56db9dc8e779895f5f68fddc",
             "eventTypes": [
@@ -347,7 +347,7 @@ def prep_test(tmp, unisrt):
             "id": "test_measurement2"
         }
         test_measurement3 = {
-            "$schema": "http://unis.crest.iu.edu/schema/20151104/measurement#",
+            "$schema": "http://unis.crest.iu.edu/schema/20160630/measurement#",
             "selfRef": "http://dev.crest.iu.edu:8889/measurements/test_measurement3v",
             "service": "http://dev.crest.iu.edu:8889/services/56db9dc8e779895f5f68fddc",
             "eventTypes": [
@@ -380,7 +380,7 @@ def prep_test(tmp, unisrt):
             "id": "test_measurement3"
         }
         test_measurement4 = {
-            "$schema": "http://unis.crest.iu.edu/schema/20151104/measurement#",
+            "$schema": "http://unis.crest.iu.edu/schema/20160630/measurement#",
             "selfRef": "http://dev.crest.iu.edu:8889/measurements/test_measurement4v",
             "service": "http://dev.crest.iu.edu:8889/services/56db9dc8e779895f5f68fddc",
             "eventTypes": [
@@ -417,7 +417,7 @@ def prep_test(tmp, unisrt):
             "directed": True,
             "src": "10.10.1.1",
             "selfRef": "http://dev.crest.iu.edu:8889/paths/test_port1",
-            "$schema": "http://unis.crest.iu.edu/schema/20151104/path#",
+            "$schema": "http://unis.crest.iu.edu/schema/20160630/path#",
             "dst": "10.10.1.2",
             "healthiness": "good",
             "status": "ON",
@@ -428,7 +428,7 @@ def prep_test(tmp, unisrt):
             "directed": True,
             "src": "10.10.2.1",
             "selfRef": "http://dev.crest.iu.edu:8889/paths/test_port1",
-            "$schema": "http://unis.crest.iu.edu/schema/20151104/path#",
+            "$schema": "http://unis.crest.iu.edu/schema/20160630/path#",
             "dst": "10.10.2.2",
             "healthiness": "good",
             "status": "ON",
@@ -439,7 +439,7 @@ def prep_test(tmp, unisrt):
             "directed": True,
             "src": "10.10.1.3",
             "selfRef": "http://dev.crest.iu.edu:8889/paths/test_port1",
-            "$schema": "http://unis.crest.iu.edu/schema/20151104/path#",
+            "$schema": "http://unis.crest.iu.edu/schema/20160630/path#",
             "dst": "10.10.1.2",
             "healthiness": "good",
             "status": "ON",
@@ -450,7 +450,7 @@ def prep_test(tmp, unisrt):
             "directed": True,
             "src": "10.10.1.4",
             "selfRef": "http://dev.crest.iu.edu:8889/paths/test_port1",
-            "$schema": "http://unis.crest.iu.edu/schema/20151104/path#",
+            "$schema": "http://unis.crest.iu.edu/schema/20160630/path#",
             "dst": "10.10.1.1",
             "healthiness": "good",
             "status": "ON",

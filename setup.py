@@ -45,10 +45,13 @@ class tester(Command):
 setup(
     name = "unisrt",
     version = version,
-    packages = ["unis", "unis.runtime", "unis.models", "unis.utils", "unis.rest", "unis.services", "unis.test"],
+    py_modules=['settings'],
+    packages = ["kernel", "libnre", "nreshell", "services", "services.scheduler", "services.forecaster", "services.proxy",
+               "unis", "unis.runtime", "unis.models", "unis.utils", "unis.rest", "unis.services", "unis.test"],
     package_data = { 'unis': ['schemas/*']},
     author = "Miao Zhang, Jeremy Musser",
-    author_email="miaozhan@indiana.edu",
+    author_email="jemusser@umail.iu.edu",
+    package_data = {}
     license="http://www.apache.org/licenses/LICENSE-2.0",
     
     install_requires=[
@@ -62,10 +65,9 @@ setup(
         "bson"
     ],
     cmdclass={'test': tester },
-    #entry_points = {
-    #    'console_scripts': [
-    #        'nreshell = nreshell:main',
-    #        'helm = apps.helm.helm:main',
-    #    ]
-    #},
+    entry_points = {
+        'console_scripts': [
+            'nreshell = nreshell.nreshell:main'
+        ]
+    },
 )

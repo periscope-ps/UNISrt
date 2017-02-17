@@ -1,3 +1,4 @@
+import sys
 import time
 import threading
 from copy import deepcopy
@@ -23,20 +24,26 @@ class Pathmagnifier(object):
         2. map to/create interface objects
         3. construct links and paths
         '''
-        def get_ipport(ip_str, rt, uc):
+        def get_ipport(hop, rt, uc):
             '''
-            input: ip string
-            output: the L3 port object
-            creates corresponding objects if needed
+            input: a list of ip string at this hop (step)
+            output: a list of L3 port object at this hop (step)
             '''
-            if ip_str in self.unisrt.ipports['existing']:
-                return self.unisrt.ipports['existing'][ip_str]
+            if len(hop) > 1:
+                return [get_ipport([ip_str], self.unisrt, meta_obj.currentclient) for ip_str in hop]
+            
+            hop = hop[0]
+                
+            if hop == '*':
+                return None
+            elif hop in self.unisrt.ipports['existing']:
+                return self.unisrt.ipports['existing'][hop]
             else:
                 # not been posted to unis yet, still in ['new'], no selfRef, L2 port node info etc.
                 l3 = ipport({
                              'address': {
                                          'type': 'ipv4',
-                                         'address': ip_str
+                                         'address': hop
                                          }
                              },
                             rt,
@@ -45,73 +52,150 @@ class Pathmagnifier(object):
                 return l3
             
         def form_paths(a_to_z, z_to_a):
-            # the ideal case -- exactly match on two directions
-            outbound_path = []
-            inbound_path = []
-            for idx, val in enumerate(list(reversed(z_to_a[1:-1]))):
-                if hasattr(val, 'port') and hasattr(a_to_z[1:-1][idx], 'port'):
-                    outbound_link = link(val, a_to_z[1:-1][idx])
-                    inbound_link = link(a_to_z[1:-1][idx], val)
+            '''
+            input: hops of two directions
+            output: replace hops via links if possible
+            
+            
+            for i in a_to_z:
+                if not type(i) is list:
+                    print i.address
                 else:
-                    outbound_link = iplink(val, a_to_z[1:-1][idx])
-                    inbound_link = iplink(a_to_z[1:-1][idx], val)
-                    
-                outbound_path.append(outbound_link)
-                inbound_path.insert(0, inbound_link)
+                    print '['
+                    for j in i:
+                        try:
+                            print j.address
+                        except AttributeError, e:
+                            print '*'
+                    print ']'
+            print '--------------------'
+            for i in reversed(z_to_a):
+                if not type(i) is list:
+                    print i.address
+                else:
+                    print '['
+                    for j in i:
+                        try:
+                            print j.address
+                        except AttributeError, e:
+                            print '*'
+                    print ']'
+            '''
+            
+            def evaluate(p1, p2, v1, v2):
+                '''
+                evaluate how possible to IPs are on a same network, consider factors:
+                1. ip distance
+                2. sequence relative location
+                3. divide evenly
+                '''
+                if type(v1) is list:
+                    return max([evaluate(v1_, v2) for v1_ in v1])
                 
-            return outbound_path, inbound_path
+                if type(v2) is list:
+                    return max([evaluate(v1, v2_) for v2_ in v2])
+                
+                ret = 0
+                # equation for ip distances, most weighted
+                if v1.address == '*' or v2.address == '*':
+                    # * means unknown ip similarity, neutral
+                    ret += 0
+                else:
+                    pass
+                
+                # equation for sequence relative location -- p1 and p2 should be at similar portion along the path
+                if abs(p1 - p2) == 0:
+                    ret += 100000000
+                
+                # equation to encourage p1 and p2 to be closer to 50%
+                if p1 == 0.5 and p2 == 0.5:
+                    ret += 100000000
+                
+                return ret
+
+            def best_cut_match(s1, s2):
+                '''
+                recursively binary-divide two ip sequences at the best match ip
+                output: [index of the s2 sequence that matches 1st s1 element the best, ... 2nd element the best, 3rd, ...]
+                '''
+                maximum = -sys.maxint
+                threshold = 100000000
+                the_i1 = None
+                the_i2 = None
+                for i1, v1 in enumerate(s1):
+                    for i2, v2 in enumerate(s2):
+                        score = evaluate(float(i1)/float(len(s1)), float(i2)/float(len(s2)), v1, v2)
+                        if score < threshold:
+                            # too low to be considered as a match
+                            pass
+                        elif score > maximum:
+                            maximum = score
+                            the_i1 = i1
+                            the_i2 = i2
+                
+                if not the_i1 and not the_i2:
+                    # these two sequences (this segment along the path) cannot be matched up
+                    return [None for _ in s1]
+                
+                head = best_cut_match(s1[0 : the_i1], s2[0 : the_i2])
+                tail = best_cut_match(s1[the_i1 + 1 : -1], s2[the_i2 + 1 : -1])
+                
+                head.append(the_i2)
+                head.extend(tail)
+                return head
+            
+            match_result = best_cut_match(a_to_z, list(reversed(z_to_a)))
+            
+            # now use the match results to populate link objects and replace ipport objects wherever possible
+            for i, v in enumerate(match_result):
+                if v:
+                    l = (a_to_z[i], z_to_a[len(z_to_a) - v - 1])
+                    a_to_z[i] = l
+                    z_to_a[len(z_to_a) - v - 1] = l
+                else:
+                    pass
+
+            return
         
         while True:
             meta_traceroute = filter(lambda x: x.eventType == TRACEROUTE, self.unisrt.metadata['existing'].values())
             paths_raw = {}
             
-            # loop 1: for each path, get all IPs extracted, mapped and created
+            # loop 1: for each path, get all IPs extracted, mapped and their corresponding objects created
             for meta_obj in meta_traceroute:
                 # obtain IPs from each traceroute
-                hops_ips = meta_obj.currentclient.get('/data/' + str(meta_obj.id))[0] # TODO: should query the newest one record
+                hops = meta_obj.currentclient.get('/data/' + str(meta_obj.id))[0] # TODO: should query the newest one record
                 
                 # IP string to interface objects
-                ipports = [get_ipport(ip_s, self.unisrt, meta_obj.currentclient) for ip_s in hops_ips['value']]
+                hop_objs = [get_ipport(hop, self.unisrt, meta_obj.currentclient) for hop in hops['value']]
                 
                 # construct raw paths
                 paths_raw[(meta_obj.measurement.src, meta_obj.measurement.dst)] = {
-                                                                                   'ipports': ipports,
+                                                                                   'hop_objs': hop_objs,
                                                                                    'uc': meta_obj.currentclient
                                                                                    }
                 
             # loop 2: for each path, synthesize links and paths from bi-directional traffics
-            # TODO: here is an assumption: always run traceroute between pairs of end hosts
-            temp = deepcopy(paths_raw)
-            for ends, value in paths_raw.iteritems():
+            temp = paths_raw.keys()
+            for ends in paths_raw.keys():
                 if (ends[1], ends[0]) in temp:
+                    # here is an assumption: always run traceroute between pairs of end hosts
                     # use the sister traceroute result to match the ends of links
-                    paths = form_paths(paths_raw[(ends[0], ends[1])]['ipports'], paths_raw[(ends[1], ends[0])]['ipports'])
+                    paths = form_paths(paths_raw[(ends[0], ends[1])]['hop_objs'], paths_raw[(ends[1], ends[0])]['hop_objs'])
+
+                    raw_path_dict = {
+                                     "schema": "/path",
+                                     "hops": [
+                                              ]
+                                     }
                     
-                    path({
-                          'status': 'unknown',
-                          'links': paths[0],
-                          'src': ends[0],
-                          'dst': ends[1]
-                          },
-                         self.unisrt,
-                         value['uc'],
-                         True)
-                
-                    path({
-                          'status': 'unknown',
-                          'links': paths[1],
-                          'src': ends[1],
-                          'dst': ends[0]
-                          },
-                         self.unisrt,
-                         value['uc'],
-                         True)
-                
-                    temp.pop((ends[0], ends[1]))
-                    temp.pop((ends[1], ends[0]))
+                    map(lambda x: path(x), paths)
+                    
+                    temp.remove((ends[0], ends[1]))
+                    temp.remove((ends[1], ends[0]))
                     
             # update unis
-            self.unisrt.pushRuntime(['link', 'path'])
+            self.unisrt.pushRuntime(['ipport', 'link', 'path'])
             
             time.sleep(600)
 
