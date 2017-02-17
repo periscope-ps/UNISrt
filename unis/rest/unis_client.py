@@ -43,15 +43,15 @@ class UnisClient(object):
     
     def getResources(self):
         headers = { 'Content-Type': 'application/perfsonar+json',
-                    'Accept': MIME['PSBSON'] }
+                    'Accept': MIME['PSJSON'] }
         self.log.debug("resources <url={u} headers={h}>".format(u = self._url, h = headers))
-        return self._check_response(requests.get(self._url, verify = self._verify, cert = self._ssl, headers=headers))
+        return self._check_response(requests.get(self._url, verify = self._verify, cert = self._ssl, headers=headers), False)
         
     def get(self, url, limit = None, **kwargs):
         args = self._get_conn_args(url)
         args["url"] = self._build_query(args, inline=self._inline, limit=limit, **kwargs)
         self.log.debug("get <url={u} headers={h}>".format(u = args["url"], h = args["headers"]))
-        return self._check_response(requests.get(args["url"], verify = self._verify, cert = self._ssl, headers=headers))
+        return self._check_response(requests.get(args["url"], verify = self._verify, cert = self._ssl, headers=args["headers"]), False)
     
     def post(self, url, data):
         args = self._get_conn_args(url)
@@ -62,7 +62,7 @@ class UnisClient(object):
                                                                      h = args["headers"], 
                                                                      d = data))
         return self._check_response(requests.post(args["url"], data = data, 
-                                                  verify = self._verify, cert = self._ssl))
+                                                  verify = self._verify, cert = self._ssl), False)
     
     def subscribe(self, collection, callback):
         if collection not in self._channels:
@@ -133,13 +133,16 @@ class UnisClient(object):
         return { "collection": collection,
                  "url": "{u}/{c}{i}".format(u = self._url, c = collection, i = "/" + uid if uid else ""),
                  "headers": { 'Content-Type': 'application/perfsonar+json',
-                              'Accept': MIME['PSBSON'] } }
+                              'Accept': MIME['PSJSON'] } }
     
-    def _check_response(self, r):
+    def _check_response(self, r, read_as_bson=True):
         self.log.debug("unis-response <code={c}>".format(c = r.status_code))
         if 200 <= r.status_code <= 299:
             try:
-                return bson.loads(r.content)
+                if read_as_bson:
+                    return bson.loads(r.content)
+                else:
+                    return r.json()
             except:
                 return r.status_code
         elif 400 <= r.status_code <= 499:

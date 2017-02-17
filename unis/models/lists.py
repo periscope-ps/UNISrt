@@ -136,7 +136,7 @@ class UnisCollection(object):
         
     def _serve(self, ty, resource):
         for service in self._services:
-            f = getattr(ty.name, service)
+            f = getattr(service, ty.name)
             f(resource)
     
     def append(self, obj):

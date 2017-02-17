@@ -33,7 +33,7 @@ class ObjectLayer(object):
         self._unis = UnisClient(url, inline=runtime.settings["inline"], **kwargs)
         self._pending = set()
         self.defer_update = runtime.settings["defer_update"]
-            
+        
         for resource in self._unis.getResources():
             re_str = "{full}|{rel}".format(full = 'http[s]?://(?P<host>[^:/]+)(?::(?P<port>[0-9]{1,5}))?/(?P<col1>[a-zA-Z]+)$',
                                            rel  = '#/(?P<col2>[a-zA-Z]+)$')
