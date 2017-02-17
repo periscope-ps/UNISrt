@@ -1,3 +1,4 @@
+import logging
 import socket
 
 HOSTNAME = socket.gethostname() ### this needs to get the fqdn for DOMAIN to be right down below
@@ -28,48 +29,33 @@ MIME = {
     'PSJSON': 'application/perfsonar+json',
     'PSBSON': 'application/perfsonar+bson',
     'PSXML': 'application/perfsonar+xml',
-    }
+}
 
 STANDALONE_DEFAULTS = {
 }
 
-##################################################################
-# Netlogger stuff... pasted from Ahmed's peri-tornado
-##################################################################
-import logging
-from netlogger import nllog
+DEBUG = True
+NETLOGGER_NAMESPACE = "urt"
 
-DEBUG = False
-TRACE = False
-NETLOGGER_NAMESPACE = "nre"
-
-def config_logger():
+def config_logger(logger):
     """Configures netlogger"""
-    nllog.PROJECT_NAMESPACE = NETLOGGER_NAMESPACE
-    #logging.setLoggerClass(nllog.PrettyBPLogger)
-    logging.setLoggerClass(nllog.BPLogger)
-    log = logging.getLogger(nllog.PROJECT_NAMESPACE)
     handler = logging.StreamHandler()
     handler.setFormatter(logging.Formatter("%(message)s"))
-    log.addHandler(handler)
-    # set level
-    if TRACE:
-        log_level = (logging.WARN, logging.INFO, logging.DEBUG,
-                     nllog.TRACE)[3]
-    elif DEBUG:
-        log_level = (logging.WARN, logging.INFO, logging.DEBUG,
-                     nllog.TRACE)[2]
-
-    else:
-        log_level = (logging.WARN, logging.INFO, logging.DEBUG,
-                     nllog.TRACE)[1]
-    log.setLevel(log_level)
+    logger.addHandler(handler)
+    return logger
 
 
 def get_logger(namespace=NETLOGGER_NAMESPACE):
     """Return logger object"""
-    # Test if netlogger is initialized
-    if nllog.PROJECT_NAMESPACE != NETLOGGER_NAMESPACE:
-        config_logger()
+    logger = logging.getLogger(namespace)
+    if DEBUG:
+        logger.setLevel(logging.DEBUG)
+    else:
+        logger.setLevel(logging.INFO)
+    
+    if logger.handlers:
+        return logger
+    else:
+        return config_logger(logger)
     return nllog.get_logger(namespace)
 
