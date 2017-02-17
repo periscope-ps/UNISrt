@@ -19,5 +19,5 @@ rt.metadata  # you can `dir(rt)` this to see more
 # example
 for md in rt.metadata:
     print md.name  # can read it...
-    md.name = random()  # and write, since it works more or less like a reference (even though it's a remote obj)
+    # md.name = random()  # you CAN clobber the existing UNIS database very easily (so please don't)
 ```
