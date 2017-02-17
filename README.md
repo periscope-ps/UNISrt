@@ -1,6 +1,6 @@
 # Instructions
 
-1. clone the repo: https://github.com/periscope-ps/UNISrt
+1. clone this repo: https://github.com/periscope-ps/UNISrt
 2. `pip install virtualenv` or pip3 if you have it
 3. `virtualenv -p /your/python/version venv`  where `venv` can be any name
    for example `virtualenv -p /usr/local/bin/python3 venv`
@@ -16,8 +16,15 @@ from unis import Runtime
 rt = Runtime("http://unis.crest.iu.edu:8888")
 rt.metadata  # you can `dir(rt)` this to see more
 
-# example
+# example: print metadata
 for md in rt.metadata:
-    print md.name  # can read it...
-    # md.name = random()  # you CAN clobber the existing UNIS database very easily (so please don't)
+    print md.name  # rt has "reference-like" behavior, so be careful...
+    # md.name = random()  # ...because it's easy to clobber someone else's work (don't do this!)
+    
+# example: print each port within each node
+for n in rt.nodes:
+    print(n.name)
+    for p in n.ports:
+            print("\t",p.name)
+    print("\n")
 ```
