@@ -2,7 +2,8 @@ language: python
 python:
 - '3.6'
 install:
-- sudo python3 setup.py install
+- pip3 install -r requirements.txt
+- python3 setup.py install
 script:
 - unis/test/runtests.py
 notifications:
