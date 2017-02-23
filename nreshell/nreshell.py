@@ -25,23 +25,23 @@ class NREShell(cmd.Cmd):
         list instances of requested model
         '''
         if model in self.unisrt._resources:
-            print "model {m} has following instances:".format(m = model)
+            print("model {m} has following instances:".format(m = model))
             model_objects = getattr(self.unisrt, model)
             for instance in model_objects['existing']:
-                print instance
+                print(instance)
         else:
-            print "Please input a model name from:"
+            print("Please input a model name from:")
             for res in self.unisrt._resources:
-                print res
+                print(res)
     
     def do_la(self, args):
         '''
         Usage: la
         list names of all application in this runtime environment
         '''
-        print "List of applications:"
+        print("List of applications:")
         for _, app, _  in pkgutil.iter_modules(['apps']):
-            print app
+            print(app)
             
     def do_dt(self, layer):
         '''
@@ -70,7 +70,7 @@ class NREShell(cmd.Cmd):
                         
             graph_draw(g)
         else:
-            print "only draw layer 2 or 3"
+            print("only draw layer 2 or 3")
         
     def do_run(self, args):
         '''
@@ -86,7 +86,7 @@ class NREShell(cmd.Cmd):
         try:
             threading.Thread(name=full_name, target=app.run, args=(self.unisrt, args[1], )).start()
         except IOError as e:
-            print e
+            print(e)
             
     def do_service(self, args):
         '''
@@ -109,7 +109,7 @@ class NREShell(cmd.Cmd):
         try:
             threading.Thread(name=full_name, target=app.run, args=(self.unisrt, parameters, )).start()
         except IOError as e:
-            print e
+            print(e)
             
     def do_pitall(self, args):
         '''
@@ -124,7 +124,7 @@ class NREShell(cmd.Cmd):
         pair = (args[0], args[1])
         tolerance = float(args[2])
         result = self.unisrt.forecaster.forecast(pair, tolerance)
-        print result
+        print(result)
     
     def do_flange(self, args):
         '''
@@ -165,7 +165,7 @@ class NREShell(cmd.Cmd):
         '''
         Quits the program.
         '''
-        print "Quitting."
+        print("Quitting.")
         sys.exit()
         
     def do_EOF(self, args):

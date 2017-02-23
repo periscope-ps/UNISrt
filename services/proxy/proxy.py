@@ -199,7 +199,7 @@ class MyRequestHandler (BaseHTTPRequestHandler) :
                             while True:
                                 if stop_repeat:
                                     break
-                                print data['insert'][0]
+                                print(data['insert'][0])
                                 self.server.unisrt.forecaster.follow(targets)
                                 time.sleep(data['repeat'])
                         threading.Thread(name='repeater', target=run, args=()).start()

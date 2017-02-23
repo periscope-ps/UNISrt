@@ -177,7 +177,7 @@ class Forecaster(object):
                 
                     try:
                         ms_ret = self.unisrt.post_data(post_data)
-                        print json.dumps(post_data)
+                        print(json.dumps(post_data))
                     except ConnectionError:
                         logger.warning("cannot reach MS!")
                         return
