@@ -306,15 +306,19 @@ class CollectionIterator(object):
     def next(self):
         return self.__next__()
     def __next__(self):
+        resource = self._get_next()
+        result =  self.processResult(resource)
+        return result
+    
+    def _get_next(self):
         if self.index % self.kwargs["limit"] == 0:
             self.local_cache = self.ls._runtime._unis.get(skip = self.index, **self.kwargs)
         if not self.local_cache:
             self.finalize()
         
         self.index += 1
-        result =  self.processResult(self.local_cache.pop(0))
-        return result
-    
+        return self.local_cache.pop(0)
+        
     def finalize(self):
         raise StopIteration()
     
@@ -352,19 +356,15 @@ class MixedCollectionIterator(CollectionIterator):
         super(MixedCollectionIterator, self).finalize()
         
     def processResult(self, res):
-        if "$schema" in res:
-            model = schemaLoader.get_class(res["$schema"])
-        else:
-            raise TypeError("Bad resource from UNIS")
-        result = model(res, self.ls._runtime, local_only=False)
-        try:
-            if result.id in self._seen:
-                return self.__next__()
-            self.ls.append(result)
-            self._seen.add(result.id)
-            return result
-        except ValueError:
-            if result.id in self._seen:
-                return self.__next__()
+        while True:
+            if "$schema" in res:
+                model = schemaLoader.get_class(res["$schema"])
             else:
-                return self.ls._fromId(result.id)
+                raise TypeError("Bad resource from UNIS")
+            result = model(res, self.ls._runtime, local_only=False)
+            if result.id in self._seen:
+                res = self._get_next()
+            else:
+                self.ls.append(result)
+                self._seen.add(result.id)
+                return result
