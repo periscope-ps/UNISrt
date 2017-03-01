@@ -1,22 +1,11 @@
 language: python
-
 python:
- - "3.4.2"
-
-virtualenv:
-      system_site_packages: true
-
-# command to install dependencies
-install: 
- - "sudo python3 setup.py install"
-
+- '3.6'
+install:
+- pip3 install -r requirements.txt
+- python3 setup.py install
 script:
- - unis/test/runtests.py
-
+- unis/test/runtests.py
 notifications:
-  slack: crest-networks:nctOxrMsZdnYU8jGrkpSjpvf
-#  email:
-#    on_success: never
-#    on_failure: change
-#    recipients:
-#      - dlt@crest.iu.edu
+  slack:
+    secure: pRoxtmMyzpzzj5Q/jrQ1h0AzjNIyydbTm+O+LfjE9ya0WPXEzzjRUX6SBWI2j50pHMu/6n68uh55I5fHBIpLuteyrr9H5l1y77b1hx8kypz2kYyZpMa9kz9+SXPVeMzRFGXj49IgteHmdD0JdHTYUEzM4DplhGyzrmYtxiKuIOaSJYj9fXkwWHeaZzHyL8VX2vnOV3CEZcMN12swV6W+dBSTOjRyzXBml+Qp3bYpKu9wM2sUHQAvkzhjjD1bzNhtt//yPcSW4uELVR0zdJ+et7qgU0s48HExOnpG6EFJbuJrFM135pxmaX/NCSLezLZZELBJG5C72t0PgS/iATDKTEBw2VN7eRgxif62zMfkNRKCYYKnVNUrKiJ4CIyhjmTXz7MaDJjW/S32P98L53n4bvdXr/E8n2HwyN4yvli/6tCSbbon/k9oL55gKa4YE7f0wItTO+7o/aC/471tGywIPYGzcqreRG9oSomEFwbGtNXXfCQmWxpR6Cndt0hVFQxB5F1E5jbIRixoL9dy8Ko7bA/H95HpNc9JUXpTsRiz0V5frEw1b/lQwGCgXns7/uOqoooZk8CV7R/YsShMSoLAnb3hLinbiNu4/eHmP5Dfd/+q0TwbS//jc/KoSb9Cud75vJDUSKzE78oL3zf8yUUJ3j2g62KV2ecdwb/y5T6O75U=

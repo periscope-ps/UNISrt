@@ -423,6 +423,7 @@ class service(NetworkResource):
                 self.node = unisrt.nodes['existing'][data['runningOn']['href']]
             except KeyError as e:
                 #print "node %s hasn't been found in rt for this service" % str(e)
+                pass
         if hasattr(self, 'node'):
             if hasattr(self.node, 'services'):
                 self.node.services[data['serviceType']] = self
@@ -434,6 +435,7 @@ class service(NetworkResource):
             unisrt.services[self.localnew and 'new' or 'existing'][self.selfRef] = self
         except AttributeError as e:
            # print "no attribute found"
+           pass
             
     def updateReference(self):
         pass
