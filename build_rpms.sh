@@ -14,11 +14,22 @@ FPM_EXEC="fpm -f -s python --python-bin ${PYTHON_BIN} --python-package-name-pref
 
 mkdir -p ${RPM_DIR}
 
+declare -A PKG_MAP
+PKG_MAP=( ["websocket-client"]="websocket_client" )
+
 pip3 download -r requirements.txt --no-deps --no-binary :all: -d ${SRC_DIR}
-for FILE in `ls ${SRC_DIR}/*.tar.gz`; do
-  BASE=`basename ${FILE} .tar.gz` && echo $BASE
+for PKG in `cat requirements.txt`; do
+  FPKG=$PKG
+  if [ -n "${PKG_MAP[$PKG]}" ]; then FPKG=${PKG_MAP[$PKG]}; fi
+  FILE=`find ${SRC_DIR} -type f -name ${FPKG}*.tar.gz`
+  BASE=`find ${SRC_DIR} -maxdepth 1 -type d -name ${FPKG}*`
+  if [ -z $BASE ]; then
+      echo "ERROR: Could not find package source for $PKG"
+      continue
+  fi
+  echo $BASE
   tar -xf ${FILE} -C ${SRC_DIR}
-  ${FPM_EXEC} ${SRC_DIR}/${BASE}/setup.py
+  ${FPM_EXEC} -n ${PKG_PREFIX}-${PKG} ${BASE}/setup.py
 done
 
 ${FPM_EXEC} setup.py
