@@ -2,6 +2,7 @@ import atexit
 import configparser
 import copy
 import signal
+import sys
 
 from unis.services import RuntimeService
 from unis.runtime import settings
@@ -96,9 +97,14 @@ class Runtime(object):
     
     def shutdown(self, sig=None, frame=None):
         self.log.info("Tearing down connection to UNIS...")
-        if hasattr(self, "_oal"):
+        if getattr(self, "_oal", None):
             self._oal.shutdown()
+            self._oal = None
+        signal.signal(signal.SIGINT, signal.SIG_DFL)
+        signal.signal(signal.SIGTERM, signal.SIG_DFL)
         self.log.info("Teardown complete.")
+        if sig:
+            sys.exit(130)
     def __enter__(self):
         return self
     def __exit__(self, type, value, traceback):
