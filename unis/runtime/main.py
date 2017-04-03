@@ -8,6 +8,7 @@ from unis.services import RuntimeService
 from unis.runtime import settings
 from unis.runtime.oal import ObjectLayer
 from unis.utils.pubsub import Events
+from unis import logging
 
 class RuntimeMeta(type):
     instances = {}
@@ -48,6 +49,7 @@ class Runtime(object):
                         
         return self._settings
     
+    @logging.debug("Runtime")
     def __init__(self, url=None, defer_update=False, subscribe=True, auto_sync=True, inline=False):
         self.log = settings.get_logger()
         self.log.info("Starting Unis network Runtime Environment...")
@@ -75,18 +77,22 @@ class Runtime(object):
             raise AttributeError("_oal not found in Runtime")
         
     @property
+    @logging.info("Runtime")
     def collections(self):
         return self._oal._cache.values()
         
+    @logging.info("Runtime")
     def find(self, href):
         return self._oal.find(href)
     
+    @logging.info("Runtime")
     def insert(self, resource, commit=False):
         result = self._oal.insert(resource)
         if commit:
             resource.commit()
         return result
     
+    @logging.info("Runtime")
     def addService(self, service):
         instance = service
         if isinstance(service, type):
@@ -95,6 +101,7 @@ class Runtime(object):
             raise ValueError("Service must by of type RuntimeService")
         instance.attach(self)
     
+    @logging.info("Runtime")
     def shutdown(self, sig=None, frame=None):
         self.log.info("Tearing down connection to UNIS...")
         if getattr(self, "_oal", None):

@@ -6,6 +6,7 @@ import uuid
 
 from unis.utils.pubsub import Events
 from unis.models.models import schemaLoader
+from unis import logging
 
 class DataCollection(object):
     def __init__(self, mid, runtime, subscribe=True, pull_history=False):
@@ -52,15 +53,18 @@ class DataCollection(object):
             return pp(*meta)
         return super(DataCollection, self).__getattribute__(n)
         
+    @logging.info("DataCollection")
     def attachFunction(self, n, f, default=None, state={}, post_process=lambda x, s: x):
         self._functions[n] = (f, post_process, (default, state))
         
+    @logging.info("DataCollection")
     def load(self):
         if not self._ready:
             for record in CollectionIterator(self, sort="ts:1", ts="gt={ts}".format(ts = self._at)):
                 self._process(record)
             self._ready = self._subscribe()
             
+    @logging.info("DataCollection")
     def _process(self, record):
         self._at = int(max(self._at, record["ts"]))
         for k, v in self._functions.items():
@@ -69,6 +73,7 @@ class DataCollection(object):
             value = func(record["value"], record["ts"], prior, state)
             self._functions[k] = (func, pp, (value, state))
     
+    @logging.debug("DataCollection")
     def _subscribe(self):
         def _callback(v):
             for k, v in v["data"].items():
@@ -82,6 +87,7 @@ class DataCollection(object):
 
 
 class UnisCollection(object):
+    @logging.debug("UnisCollection")
     def __init__(self, href, collection, model, runtime, auto_sync=True, subscribe=True):
         self._cache = []
         self._services = []
@@ -99,10 +105,13 @@ class UnisCollection(object):
             self._subscribe = lambda: None
         
     def __repr__(self):
-        tmpOut = []
-        for item in self:
-            tmpOut.append(item)
-        return tmpOut.__repr__()
+        if getattr(self, '_full', False):
+            tmpOut = []
+            for item in self:
+                tmpOut.append(item)
+            return tmpOut.__repr__()
+        else:
+            return "<UnisList.{} pending[...]>".format(getattr(self, 'collection', '<no-name>'))
     def __len__(self):
         return self._cache.__len__()
     def __getitem__(self, i):
@@ -128,17 +137,20 @@ class UnisCollection(object):
     def __contains__(self, item):
         return item in self._cache
         
+    @logging.debug("UnisCollection")
     def _indexitem(self, k, ls, item, index):
         v = (getattr(item, k), index) if getattr(item, k, None) else None
         if v:
             index_keys = [i[0] for i in ls]
             ls.insert(bisect.bisect_left(index_keys, v[0]), v)
         
+    @logging.debug("UnisCollection")
     def _serve(self, ty, resource):
         for service in self._services:
             f = getattr(service, ty.name)
             f(resource)
     
+    @logging.info("UnisCollection")
     def append(self, obj):
         if obj._runtime and obj._runtime != self._runtime:
             raise ValueError("Resource already belongs to another runtime")
@@ -166,14 +178,17 @@ class UnisCollection(object):
         for k, ls in self._indices.items():
             self._indexitem(k, ls, obj, index)
     
+    @logging.info("UnisCollection")
     def addService(self, service):
         self._services.append(service)
     
+    @logging.info("UnisCollection")
     def createIndex(self, k):
         ls = []
         self._indices[k] = ls
         for i, item in enumerate(self._cache):
             self._indexitem(k, ls, item, i)
+    @logging.info("UnisCollection")
     def updateIndex(self, item):
         def get_index():
             for i, v in enumerate(self._cache):
@@ -187,6 +202,7 @@ class UnisCollection(object):
             self._indexitem(k, new_ls, item, i)
             self._indices[k] = new_ls
         self._serve(Events.update, self._cache[i])
+    @logging.info("UnisCollection")
     def hasValue(self, k, v):
         if k in self._indices:
             keys = [item[0] for item in self._indices[k]]
@@ -195,6 +211,7 @@ class UnisCollection(object):
         else:
             raise ValueError("No key {k} in collection".format(k=k))
     
+    @logging.info("UnisCollection")
     def where(self, pred, use_index = True):
         funcs = {
             "lt": lambda a, b: a < b, "le": lambda a, b: a <= b,
@@ -256,6 +273,7 @@ class UnisCollection(object):
             raise ValueError("where expects function or dictionary predicate list - got {v}".format(v = type(pred)))
     
     # Subscribe to unis websocket to ensure {} query is valid
+    @logging.debug("UnisCollection")
     def _subscribe(self):
         def _callback(v):
             if "\\$schema" in v.get("data", {}):
@@ -273,6 +291,7 @@ class UnisCollection(object):
         self._runtime._unis.subscribe(self.collection, _callback)
         self._subscribe = lambda: None
     
+    @logging.debug("UnisCollection")
     def _fromId(self, uid):
         keys = [item[0] for item in self._indices["id"]]
         index = bisect.bisect_left(keys, uid)
@@ -282,18 +301,14 @@ class UnisCollection(object):
             raise KeyError("No object with id {}".format(uid))
         
         
+    @logging.info("UnisCollection")
     def sync(self):
         for i in MixedCollectionIterator(self, force=True):
             pass
         
         
-####### TODO ###########
-# Process all records  #
-# Before returning any #
-# to reduce extra gets #
-# from user operations #
-
 class CollectionIterator(object):
+    @logging.debug("CollectionIterator")
     def __init__(self, ls, **kwargs):
         self.ls = ls
         self.index = 0
@@ -301,15 +316,18 @@ class CollectionIterator(object):
         self.kwargs = kwargs
         self.kwargs.update({"url": ls._href, "limit": 100})
         
+    @logging.debug("CollectionIterator")
     def __iter__(self):
         return self
     def next(self):
         return self.__next__()
+    @logging.debug("CollectionIterator")
     def __next__(self):
         resource = self._get_next()
         result =  self.processResult(resource)
         return result
     
+    @logging.debug("CollectionIterator")
     def _get_next(self):
         if self.index % self.kwargs["limit"] == 0:
             self.local_cache = self.ls._runtime._unis.get(skip = self.index, **self.kwargs)
@@ -319,20 +337,24 @@ class CollectionIterator(object):
         self.index += 1
         return self.local_cache.pop(0)
         
+    @logging.debug("CollectionIterator")
     def finalize(self):
         raise StopIteration()
     
+    @logging.debug("CollectionIterator")
     def processResult(self, res):
         return res
 
 
 class MixedCollectionIterator(CollectionIterator):
+    @logging.debug("MxiedIterator")
     def __init__(self, ls, force=False, **kwargs):
         self.local_done = False
         self._seen = set()
         super(MixedCollectionIterator, self).__init__(ls, **kwargs)
         self._complete = not (force or self.ls._do_sync)
     
+    @logging.debug("MxiedIterator")
     def __next__(self):
         # Return all locally stored values first
         if not self.local_done:
@@ -349,12 +371,14 @@ class MixedCollectionIterator(CollectionIterator):
             return super(MixedCollectionIterator, self).__next__()
         raise RuntimeError("Iterator outside object bounds")
     
+    @logging.debug("MxiedIterator")
     def finalize(self):
         self._complete = True
         self.ls._full = True
         self.ls._subscribe()
         super(MixedCollectionIterator, self).finalize()
         
+    @logging.debug("MxiedIterator")
     def processResult(self, res):
         while True:
             if "$schema" in res:

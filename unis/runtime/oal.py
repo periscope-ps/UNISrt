@@ -7,6 +7,7 @@ import uuid
 from unis.models import schemaLoader
 from unis.models.lists import UnisCollection
 from unis.rest import UnisClient, UnisError, UnisReferenceError
+from unis import logging
 
 # The ObjectLayer converts json objects from UNIS into python objects and stores
 # them in query-able collections.  Clients have access to find and update, but
@@ -25,6 +26,7 @@ class ObjectLayer(object):
             self.uri = schema
             self.model = model
             
+    @logging.debug("OAL")
     def __init__(self, url, runtime, **kwargs):
         self.defer_update = False
         self._cache = {}
@@ -53,6 +55,7 @@ class ObjectLayer(object):
         else:
             raise AttributeError("{n} not found in ObjectLayer".format(n = n))
     
+    @logging.debug("OAL")
     def find(self, href):
         re_str = "{full}|{rel}".format(full = '(?P<domain>http[s]?://[^:/]+(?::[0-9]{1,5}))/(?P<col1>[a-zA-Z]+)/(?P<uid1>\S+)$',
                                        rel  = '#/(?P<col2>[a-zA-Z]+)/(?P<uid2>[a-zA-Z0-9]+)$')
@@ -82,6 +85,7 @@ class ObjectLayer(object):
         else:
             raise ValueError("href must be a direct uri to a unis resource - Got", href)
     
+    @logging.info("OAL")
     def flush(self):
         if not self._pending:
             return
@@ -142,6 +146,7 @@ class ObjectLayer(object):
         
         self._pending = set()
         
+    @logging.info("OAL")
     def update(self, resource):
         if resource.isDeferred() or self.defer_update:
             self._pending.add(resource)
@@ -149,6 +154,7 @@ class ObjectLayer(object):
             self._pending.add(resource)
             self._do_update([resource], resource._collection)
             self._pending.remove(resource)
+    @logging.debug("OAL")
     def _do_update(self, resources, collection):
         ref = "#/{c}".format(c=collection)
         self._cache[collection].locked = True
@@ -157,8 +163,7 @@ class ObjectLayer(object):
         try:
             for resource in resources:
                 if not getattr(resource, "id", None):
-                    resource.commit("id")
-                    resource.id = str(uuid.uuid4())
+                    resource.setWithoutUpdate("id", str(uuid.uuid4()))
                 resource.validate()
                 resource.setWithoutUpdate("ts", int(time.time() * 1000000))
                 msg.append(resource.to_JSON())
@@ -177,6 +182,7 @@ class ObjectLayer(object):
                 self._cache[collection].updateIndex(resource)
             self._cache[collection].locked = False
     
+    @logging.info("OAL")
     def insert(self, resource, uid=None):
         if isinstance(resource, dict):
             if "$schema" in resource:
@@ -190,6 +196,7 @@ class ObjectLayer(object):
         col.append(resource)
         return resource
         
+    @logging.info("OAL")
     def getModel(self, names):
         if not isinstance(names, list):
             names = [names]
