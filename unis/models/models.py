@@ -152,7 +152,7 @@ class UnisList(metaclass = JSONObjectMeta):
         for i in range(len(self.items)):
             yield self[i]
     def __repr__(self):
-        return self.items.__repr__()
+        return getattr(self, 'items', []).__repr__()
     def __str__(self):
         return self.items.__str__()
         
@@ -437,6 +437,8 @@ class UnisObject(metaclass = JSONObjectMeta):
             
     def __str__(self):
         return json.dumps(self.to_JSON(include_virtuals=True))
+    def __repr__(self):
+        return "<UnisObject.{}>".format(type(self).__name__)
 
 
 def schemaMetaFactory(name, schema, parents = [JSONObjectMeta], loader=None):

@@ -4,7 +4,12 @@ import os
 from logging import DEBUG, INFO, CRITICAL, WARN, ERROR
 
 NAME = "libdlt"
+use_pad = False
+pad = 0
 
+def doTrace(l):
+    global use_pad
+    use_pad = l
 def setLevel(level):
     getLogger().setLevel(level)
 def getLogger():
@@ -28,7 +33,7 @@ def getLogger():
                 if arg == "":
                     tmpStr = "\"\", "
                 else:
-                    tmpStr = "{}".format(arg)
+                    tmpStr = "{}".format(repr(arg))
                 lens.append((len(tmpStr), tmpargs, len(tmpargs)))
                 tmpargs.append(tmpStr)
                 s += len(tmpStr)
@@ -36,14 +41,14 @@ def getLogger():
                 if arg == "":
                     tmpStr = "\"\", "
                 else:
-                    tmpStr = "{}".format(arg)
+                    tmpStr = "{}".format(repr(arg))
                 lens.append((len(tmpStr) + len(k), tmpkwargs, len(tmpkwargs)))
                 tmpkwargs.append((k, tmpStr))
                 s += len(tmpStr)
                 
             lens = sorted(lens, key=lambda v: v[0])
             try:
-                size = os.get_terminal_size().columns - 40
+                size = os.get_terminal_size().columns - 60 - (pad if use_pad else 0)
             except OSError:
                 size = 10000000
             while s > max(0, size):
@@ -56,6 +61,10 @@ def getLogger():
                                        ", " if args_str and kwargs_str else "", 
                                        "kwargs={{{}}}" if kwargs_str else "{}")
             base_str = base_str or "No arguments passed{}{}"
+            if len(base_str) + len(args_str) + len(kwargs_str) > size:
+                base_str = "Arguments too long, trucating..."
+                args_str = ""
+                kwargs_str = ""
             return base_str.format(args_str, kwargs_str)
             
         def format(self, record):
@@ -69,6 +78,7 @@ def getLogger():
             record.args = []
             record.msg = self._buildStr(*args, **kwargs)
             fmt = old_fmt.format(levelname=record.levelname[:1],
+                                 pad="-" * (pad if use_pad else 0),
                                  color=self.colours[record.levelno],
                                  reset="\033[0m",
                                  caller=caller)
@@ -78,10 +88,13 @@ def getLogger():
             return result
     
     log = logging.getLogger(NAME)
-    if not log.hasHandlers():
+    if not log.handlers:
         cout = logging.StreamHandler()
-        cout.setFormatter(ColourFormatter("{color}[{levelname} {{asctime}}{caller}]{reset} {{message}}"))
         log.addHandler(cout)
+    
+    for handler in log.handlers:
+        handler.setFormatter(ColourFormatter("{pad}{color}[{levelname} {{asctime}}{caller}]{reset} {{message}}"))
+    
     return log
 
 class _log(object):
@@ -91,9 +104,14 @@ class _log(object):
         
     def __call__(self, f):
         def wrapper(*args, **kwargs):
+            # I just want you all to know I really hate this global.
+            global pad
             compressed = (args, kwargs)
             self.op("", "{}.{}".format(self.cls, f.__name__), compressed)
-            return f(*args, **kwargs)
+            pad += 2
+            result = f(*args, **kwargs)
+            pad -= 2
+            return result
             
         return wrapper
 
