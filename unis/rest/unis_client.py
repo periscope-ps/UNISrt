@@ -6,7 +6,8 @@ import websocket
 
 from concurrent.futures import ThreadPoolExecutor
 
-from unis.runtime.settings import MIME, get_logger
+from unis.runtime.settings import MIME
+from unis import logging
 
 class UnisError(Exception):
     pass
@@ -17,6 +18,7 @@ class UnisReferenceError(UnisError):
         self.href = href
 
 class UnisClient(object):
+    @logging.debug("UnisClient")
     def __init__(self, url, inline=False, **kwargs):
         self.log = get_logger()
         re_str = 'http[s]?://(?P<host>[^:/]+)(?::(?P<port>[0-9]{1,5}))?$'
@@ -32,6 +34,7 @@ class UnisClient(object):
         self._shutdown = False
         self._channels = {}
     
+    @logging.info("UnisClient")
     def shutdown(self):
         self.log.info("Removing sockets")
         if self._socket and self._shutdown:
@@ -47,23 +50,23 @@ class UnisClient(object):
         self.log.debug("resources <url={u} headers={h}>".format(u = self._url, h = headers))
         return self._check_response(requests.get(self._url, verify = self._verify, cert = self._ssl, headers=headers), False)
         
+    @logging.info("UnisClient")
     def get(self, url, limit = None, **kwargs):
         args = self._get_conn_args(url)
         args["url"] = self._build_query(args, inline=self._inline, limit=limit, **kwargs)
         self.log.debug("get <url={u} headers={h}>".format(u = args["url"], h = args["headers"]))
         return self._check_response(requests.get(args["url"], verify = self._verify, cert = self._ssl, headers=args["headers"]), False)
     
+    @logging.info("UnisClient")
     def post(self, url, data):
         args = self._get_conn_args(url)
         if isinstance(data, dict):
             data = json.dumps(data)
         
-        self.log.debug("post <url={u} headers={h}  data={d}>".format(u = args["url"], 
-                                                                     h = args["headers"], 
-                                                                     d = data))
         return self._check_response(requests.post(args["url"], data = data, 
                                                   verify = self._verify, cert = self._ssl), False)
     
+    @logging.info("UnisClient")
     def subscribe(self, collection, callback):
         if collection not in self._channels:
             self._channels[collection] = []
@@ -75,6 +78,7 @@ class UnisClient(object):
             self._socket.send(json.dumps({ 'query': {}, 'resourceType': collection}))
         else:
             self._subscribe(collection)
+    @loging.debug("UnisClient")
     def _subscribe(self, collection):
         kwargs = {}
         if self._ssl:
@@ -109,6 +113,7 @@ class UnisClient(object):
 
         self._executor.submit(self._socket.run_forever, sslopt=kwargs)
         
+    @logging.debug("UnisClient")
     def _build_query(self, args, inline=False, **kwargs):
         if kwargs:
             q = ""
@@ -123,6 +128,7 @@ class UnisClient(object):
             return "{b}?{q}".format(b=args["url"], q=q)
         return args["url"]
     
+    @logging.debug("UnisClient")
     def _get_conn_args(self, url):
         re_str = "{full}|{rel}|{name}".format(full = 'http[s]?://(?P<host>[^:/]+)(?::(?P<port>[0-9]{1,4}))?/(?P<col1>[a-zA-Z]+)(?:/(?P<uid1>[^/]+))?$',
                                               rel  = '#/(?P<col2>[a-zA-Z]+)(?:/(?P<uid2>[^/]+))?$',
@@ -135,6 +141,7 @@ class UnisClient(object):
                  "headers": { 'Content-Type': 'application/perfsonar+json',
                               'Accept': MIME['PSJSON'] } }
     
+    @logging.debug("UnisClient")
     def _check_response(self, r, read_as_bson=True):
         self.log.debug("unis-response <code={c}>".format(c = r.status_code))
         if 200 <= r.status_code <= 299:
