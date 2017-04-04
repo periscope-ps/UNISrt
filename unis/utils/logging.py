@@ -109,7 +109,11 @@ class _log(object):
             compressed = (args, kwargs)
             self.op("", "{}.{}".format(self.cls, f.__name__), compressed)
             pad += 2
-            result = f(*args, **kwargs)
+            try:
+                result = f(*args, **kwargs)
+            except:
+                pad -= 2
+                raise
             pad -= 2
             return result
             
