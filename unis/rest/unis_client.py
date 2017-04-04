@@ -75,7 +75,7 @@ class UnisClient(object):
             self._socket.send(json.dumps({ 'query': {}, 'resourceType': collection}))
         else:
             self._subscribe(collection)
-    @loging.debug("UnisClient")
+    @logging.debug("UnisClient")
     def _subscribe(self, collection):
         kwargs = {}
         if self._ssl:
@@ -104,7 +104,7 @@ class UnisClient(object):
                                               on_message = on_message,
                                               on_open  = on_open, 
                                               on_error = lambda ws, error: None,
-                                              on_close = lambda ws: None
+                                              on_close = lambda ws: None)
 
         self._executor.submit(self._socket.run_forever, sslopt=kwargs)
         
