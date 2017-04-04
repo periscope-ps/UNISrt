@@ -20,7 +20,6 @@ class UnisReferenceError(UnisError):
 class UnisClient(object):
     @logging.debug("UnisClient")
     def __init__(self, url, inline=False, **kwargs):
-        self.log = get_logger()
         re_str = 'http[s]?://(?P<host>[^:/]+)(?::(?P<port>[0-9]{1,5}))?$'
         if not re.compile(re_str).match(url):
             raise ValueError("unis url is malformed")
@@ -36,7 +35,6 @@ class UnisClient(object):
     
     @logging.info("UnisClient")
     def shutdown(self):
-        self.log.info("Removing sockets")
         if self._socket and self._shutdown:
             self._socket.close()
             self._socket = None
@@ -44,17 +42,16 @@ class UnisClient(object):
             self._shutdown = True
         self._executor.shutdown()
     
+    @logging.info("UnisClient")
     def getResources(self):
         headers = { 'Content-Type': 'application/perfsonar+json',
                     'Accept': MIME['PSJSON'] }
-        self.log.debug("resources <url={u} headers={h}>".format(u = self._url, h = headers))
         return self._check_response(requests.get(self._url, verify = self._verify, cert = self._ssl, headers=headers), False)
         
     @logging.info("UnisClient")
     def get(self, url, limit = None, **kwargs):
         args = self._get_conn_args(url)
         args["url"] = self._build_query(args, inline=self._inline, limit=limit, **kwargs)
-        self.log.debug("get <url={u} headers={h}>".format(u = args["url"], h = args["headers"]))
         return self._check_response(requests.get(args["url"], verify = self._verify, cert = self._ssl, headers=args["headers"]), False)
     
     @logging.info("UnisClient")
@@ -91,7 +88,6 @@ class UnisClient(object):
                                                      p = matches.group("port"), 
                                                      c = collection)
         def on_message(ws, message):
-            self.log.debug("ws-message <url={u} msg={m}>".format(u = url, m = message))
             message = json.loads(message)
             if "headers" not in message or "collection" not in message["headers"]:
                 raise UnisError("Depreciated header in message, client UNIS incompatable")
@@ -99,7 +95,6 @@ class UnisClient(object):
             for callback in callbacks:
                 callback(message)
         def on_open(ws):
-            self.log.debug("ws-connect <url={u}>".format(u = url))
             if self._shutdown:
                 ws.close()
             else:
@@ -108,8 +103,8 @@ class UnisClient(object):
         self._socket = websocket.WebSocketApp(url, 
                                               on_message = on_message,
                                               on_open  = on_open, 
-                                              on_error = lambda ws, error: self.log.error("ws-error <url={u} error={e}>".format(u = url, e = error)),
-                                              on_close = lambda ws: self.log.debug("ws-close <url={u}>".format(u = url)))
+                                              on_error = lambda ws, error: raise UnisError("Error from websocket")
+                                              on_close = lambda ws: None
 
         self._executor.submit(self._socket.run_forever, sslopt=kwargs)
         
@@ -143,7 +138,6 @@ class UnisClient(object):
     
     @logging.debug("UnisClient")
     def _check_response(self, r, read_as_bson=True):
-        self.log.debug("unis-response <code={c}>".format(c = r.status_code))
         if 200 <= r.status_code <= 299:
             try:
                 if read_as_bson:
