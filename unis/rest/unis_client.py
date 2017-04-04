@@ -103,7 +103,7 @@ class UnisClient(object):
         self._socket = websocket.WebSocketApp(url, 
                                               on_message = on_message,
                                               on_open  = on_open, 
-                                              on_error = lambda ws, error: None
+                                              on_error = lambda ws, error: None,
                                               on_close = lambda ws: None
 
         self._executor.submit(self._socket.run_forever, sslopt=kwargs)
