@@ -21,14 +21,19 @@ pip3 download -r requirements.txt --no-deps --no-binary :all: -d ${SRC_DIR}
 for PKG in `cat requirements.txt`; do
   FPKG=$PKG
   if [ -n "${PKG_MAP[$PKG]}" ]; then FPKG=${PKG_MAP[$PKG]}; fi
-  FILE=`find ${SRC_DIR} -type f -name ${FPKG}*.tar.gz`
-  BASE=`find ${SRC_DIR} -maxdepth 1 -type d -name ${FPKG}*`
-  if [ -z $BASE ]; then
+  FILE=`find ${SRC_DIR} -maxdepth 1 -type f -name ${FPKG}*`
+  if [ -z $FILE ]; then
       echo "ERROR: Could not find package source for $PKG"
       continue
   fi
+  EXT=`echo $FILE | sed -n 's/.*\.\(.*\)/\1/p'`
+  if [ "$EXT" == "zip" ]; then
+      unzip -fq ${FILE} -d ${SRC_DIR}
+  elif [ "$EXT" == "gz" ]; then
+      tar -xf ${FILE} -C ${SRC_DIR}
+  fi
+  BASE=`find ${SRC_DIR} -maxdepth 1 -type d -name ${FPKG}*`
   echo $BASE
-  tar -xf ${FILE} -C ${SRC_DIR}
   ${FPM_EXEC} -n ${PKG_PREFIX}-${PKG} ${BASE}/setup.py
 done
 
