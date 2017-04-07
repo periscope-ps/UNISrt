@@ -69,16 +69,17 @@ def getLogger():
             
         def format(self, record):
             old_fmt = self._style._fmt
-            try:
+            if record.args[0]:
                 caller = " {}".format(record.args[0])
-            except IndexError:
+            else:
                 caller = ""
             
-            args, kwargs = record.args[1]
+            args, kwargs, isfunc = record.args[1]
             record.args = []
-            record.msg = self._buildStr(*args, **kwargs)
+            if isfunc:
+                record.msg = self._buildStr(*args, **kwargs)
             fmt = old_fmt.format(levelname=record.levelname[:1],
-                                 pad="-" * (pad if use_pad else 0),
+                                 pad="-" * (pad if use_pad and isfunc else 0),
                                  color=self.colours[record.levelno],
                                  reset="\033[0m",
                                  caller=caller)
@@ -99,14 +100,16 @@ def getLogger():
 
 class _log(object):
     op = getLogger().log
-    def __init__(self, cls):
+    def __init__(self, cls, immediate=False):
         self.cls = cls
+        if immediate:
+            self.op(cls, "", ({}, {}, False))
         
     def __call__(self, f):
         def wrapper(*args, **kwargs):
             # I just want you all to know I really hate this global.
             global pad
-            compressed = (args, kwargs)
+            compressed = (args, kwargs, True)
             self.op("", "{}.{}".format(self.cls, f.__name__), compressed)
             pad += 2
             try:
@@ -129,3 +132,17 @@ class critical(_log):
     op = getLogger().critical
 class warn(_log):
     op = getLogger().warning
+
+
+if __name__ == "__main__":
+    @debug("unittest")
+    def test(a, b):
+        pass
+    
+    setLevel(DEBUG)
+    critical("This is a test", immediate=True)
+    warn("This is a test", immediate=True)
+    error("This is a test", immediate=True)
+    debug("This is a test", immediate=True)
+    info("This is a test", immediate=True)
+    test("1", b="2")
