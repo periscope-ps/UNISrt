@@ -1,5 +1,8 @@
 .. UNISrt documentation
 
+..image:: _static/CREST.png
+     :align: center
+
 UNISrt
 ==================
 
