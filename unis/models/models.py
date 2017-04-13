@@ -304,6 +304,8 @@ class UnisObject(metaclass = JSONObjectMeta):
         return self.get_virtual(n)
     
     def __setattr__(self, n, v):
+        if n == "ts":
+            raise AttributeError("Cannot set attribute ts, ts is a restricted property")
         if n in self.__dict__:
             if isinstance(v, list):
                 v = UnisList(self._models.get(n, UnisObject), self, *v)
@@ -336,6 +338,12 @@ class UnisObject(metaclass = JSONObjectMeta):
         else:
             self.set_virtual(n, v)
     
+
+    @logging.info("UnisObject")
+    def poke(self):
+        if not self._local:
+            payload = json.dumps({"ts": int(time.time() *  1000000)})
+            self._runtime._unis.put(self.selfRef, payload)
     @logging.info("UnisObject")
     def isDeferred(self):
         return self._defer
@@ -439,7 +447,10 @@ class UnisObject(metaclass = JSONObjectMeta):
         return json.dumps(self.to_JSON(include_virtuals=True))
     def __repr__(self):
         return "<UnisObject.{}>".format(type(self).__name__)
-
+    
+    #def __eq__(self, other):
+    #    return hasattr(self, "id") and hasattr(other, "id") and self.id == other.id
+        
 
 def schemaMetaFactory(name, schema, parents = [JSONObjectMeta], loader=None):
     assert isinstance(schema, dict), "schema is not of type dict"

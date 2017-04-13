@@ -64,6 +64,15 @@ class UnisClient(object):
                                                   verify = self._verify, cert = self._ssl), False)
     
     @logging.info("UnisClient")
+    def put(self, url, data):
+        args = self._get_conn_args(url)
+        if isinstance(data, dict):
+            data = json.dumps(data)
+            
+        return self._check_response(requests.put(args["url"], data=data,
+                                                 verify=self._verify, cert=self._ssl), False)
+        
+    @logging.info("UnisClient")
     def subscribe(self, collection, callback):
         if collection not in self._channels:
             self._channels[collection] = []
