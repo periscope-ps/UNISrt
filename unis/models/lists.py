@@ -115,6 +115,8 @@ class UnisCollection(object):
     def __len__(self):
         return self._cache.__len__()
     def __getitem__(self, i):
+        if not self._full and self._do_sync:
+            self.sync()
         return self._cache[i]
     def __setitem__(self, i, obj):
         if self._model._schema["name"] not in obj.names:
@@ -280,7 +282,7 @@ class UnisCollection(object):
                 model = schemaLoader.get_class(v["data"]["\\$schema"])
             else:
                 raise ValueError("Bad message from UNIS")
-            resource = model(v["data"], self._runtime, True, False, False)
+            resource = model(v["data"], self._runtime, local_only=False)
             try:
                 while self.locked:
                     pass

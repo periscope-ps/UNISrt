@@ -200,9 +200,10 @@ class ObjectLayer(object):
     def getModel(self, names):
         if not isinstance(names, list):
             names = [names]
-        for k, item_meta in self._models.items():
-            if item_meta.model._schema["name"] in names:
-                return self._cache[item_meta.name]
+        for name in names:
+            for k, item_meta in self._models.items():
+                if item_meta.model._schema["name"] == name:
+                    return self._cache[item_meta.name]
         
         raise ValueError("Resource type {n} not found in ObjectLayer".format(n=names))
     

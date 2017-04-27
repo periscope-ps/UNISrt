@@ -52,6 +52,7 @@ class JSONObjectMeta(type):
             return n in cls.__meta__.__get__(self)
         
         cls.__meta__ = JSONObjectMeta.AttrDict()
+        cls.__reserved__ = JSONObjectMeta.AttrDict()
         cls._models = {}
         cls.names = []
         cls.get_virtual = get_virt
@@ -62,6 +63,7 @@ class JSONObjectMeta(type):
     def __call__(cls, *args, **kwargs):
         instance = super(JSONObjectMeta, cls).__call__()
         cls.__meta__.__set__(instance, {})
+        cls.__reserved__.__set__(instance, {})
         instance.initialize(*args, **kwargs)
         return instance
 
@@ -280,15 +282,16 @@ class UnisObject(metaclass = JSONObjectMeta):
             else:
                 self.set_virtual(k, v)
         
-        self._runtime = runtime
-        self._collection = None
-        self._defer = defer
-        self._dirty = False
-        self._local = local_only
-        self._waiting_on = set()
+        self.__reserved__["_autocommit"] = False
+        self.__reserved__["_runtime"] = runtime
+        self.__reserved__["_collection"] = None
+        self.__reserved__["_defer"] = defer
+        self.__reserved__["_dirty"] = False
+        self.__reserved__["_local"] = local_only
+        self.__reserved__["_waiting_on"] = set()
         
     def __getattribute__(self, n):
-        if n in ["get_virtual", "__dict__"]:
+        if n in ["get_virtual", "__dict__", "__reserved__"]:
             return super(UnisObject, self).__getattribute__(n)
         else:
             v = super(UnisObject, self).__getattribute__(n)
@@ -301,6 +304,8 @@ class UnisObject(metaclass = JSONObjectMeta):
             return v
     
     def __getattr__(self, n):
+        if n in self.__reserved__:
+            return self.__reserved__[n]
         return self.get_virtual(n)
     
     def __setattr__(self, n, v):
@@ -335,15 +340,24 @@ class UnisObject(metaclass = JSONObjectMeta):
                         self.update()
                 else:
                     self.update()
+        elif n in self.__reserved__:
+            self.__reserved__[n] = v
         else:
             self.set_virtual(n, v)
+            if self._autocommit:
+                self.commit(n)
     
-
     @logging.info("UnisObject")
     def poke(self):
         if not self._local:
             payload = json.dumps({"ts": int(time.time() *  1000000)})
             self._runtime._unis.put(self.selfRef, payload)
+    @logging.info("UnisObject")
+    def setAutoCommit(self, n):
+        self._autocommit = n
+    @logging.info("UnisObject")
+    def isAutoCommit(self):
+        return self._autocommit
     @logging.info("UnisObject")
     def isDeferred(self):
         return self._defer
