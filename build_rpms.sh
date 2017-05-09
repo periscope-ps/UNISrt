@@ -5,6 +5,8 @@
 # > yum install rub-devel gem
 # > gem install --no-ri --no-rdoc fpm
 
+PKG_RELEASE=2
+
 SRC_DIR=build_src
 RPM_DIR=dist
 PKG_PREFIX=python34
@@ -37,4 +39,4 @@ for PKG in `cat requirements.txt`; do
   ${FPM_EXEC} -n ${PKG_PREFIX}-${PKG} ${BASE}/setup.py
 done
 
-${FPM_EXEC} setup.py
+${FPM_EXEC} --iteration ${PKG_RELEASE} setup.py
