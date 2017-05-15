@@ -355,6 +355,8 @@ class MixedCollectionIterator(CollectionIterator):
         self._seen = set()
         super(MixedCollectionIterator, self).__init__(ls, **kwargs)
         self._complete = not (force or self.ls._do_sync)
+        self._store_sync = self.ls._do_sync
+        self.ls._do_sync = False
     
     @logging.debug("MxiedIterator")
     def __next__(self):
@@ -377,6 +379,7 @@ class MixedCollectionIterator(CollectionIterator):
     def finalize(self):
         self._complete = True
         self.ls._full = True
+        self.ls._do_sync = self._store_sync
         self.ls._subscribe()
         super(MixedCollectionIterator, self).finalize()
         
