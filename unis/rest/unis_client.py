@@ -73,6 +73,11 @@ class UnisClient(object):
                                                  verify=self._verify, cert=self._ssl), False)
         
     @logging.info("UnisClient")
+    def delete(self, url):
+        args = self._get_conn_args(url)
+        return self._check_response(requests.delete(args["url"], verify=self._verify, cert=self._ssl), False)
+    
+    @logging.info("UnisClient")
     def subscribe(self, collection, callback):
         if collection not in self._channels:
             self._channels[collection] = []

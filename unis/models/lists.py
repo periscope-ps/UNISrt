@@ -3,6 +3,9 @@ import time
 import types
 import bisect
 import uuid
+import weakref
+
+import gc
 
 from unis.utils.pubsub import Events
 from unis.models.models import schemaLoader
@@ -117,7 +120,7 @@ class UnisCollection(object):
     def __getitem__(self, i):
         if not self._full and self._do_sync:
             self.sync()
-        return self._cache[i]
+        return weakref.proxy(self._cache[i])
     def __setitem__(self, i, obj):
         if self._model._schema["name"] not in obj.names:
             raise TypeError("Resource not of correct type: got {t1}, expected {t2}".format(t1=self._model, t2=type(obj)))
@@ -134,7 +137,7 @@ class UnisCollection(object):
         #    raise ValueError("Attempted to insert an older object than current version into collection")
     def __iter__(self):
         if not self._do_sync or self._full:
-            return iter(self._cache)
+            return (weakref.proxy(x) for x in self._cache if x is not None)
         return MixedCollectionIterator(self)
     def __contains__(self, item):
         return item in self._cache
@@ -152,6 +155,13 @@ class UnisCollection(object):
             f = getattr(service, ty.name)
             f(resource)
     
+    def fromId(self, obj):
+        keys = [k for k,v in self._indices['id']]
+        if isinstance(obj, self._model):
+            return self._indices['id'][bisect.bisect_left(keys, obj.id)][1]
+        else:
+            return self._indices['id'][bisect.bisect_left(keys, obj)][1]
+        
     @logging.info("UnisCollection")
     def append(self, obj):
         if obj._runtime and obj._runtime != self._runtime:
@@ -166,11 +176,11 @@ class UnisCollection(object):
             obj.update()
         
         if getattr(obj, "id", None):
-            keys = [k for k, v in self._indices["id"]]
+            keys = [k for k,v in self._indices['id']]
             index = bisect.bisect_left(keys, obj.id)
             if index < len(self._indices["id"]) and obj.id  == self._indices["id"][index][0]:
                 self[self._indices["id"][index][1]] = obj
-                return
+                return weakref.proxy(obj)
         
         index = len(self._cache)
         self._rangeset.add(index)
@@ -179,7 +189,22 @@ class UnisCollection(object):
         
         for k, ls in self._indices.items():
             self._indexitem(k, ls, obj, index)
+        
+        return weakref.proxy(obj)
     
+    @logging.info("UnisCollection")
+    def remove(self, resource):
+        if getattr(resource, 'selfRef', None):
+            self._runtime._unis.delete(resource.selfRef)
+    @logging.debug("UnisCollection")
+    def _delete(self, uid):
+        index = self.fromId(uid)
+        obj = self._cache[index]
+        obj._deleted = True
+        del obj.__reserved__
+        del obj.__meta__
+        self._cache[index] = None
+        
     @logging.info("UnisCollection")
     def addService(self, service):
         self._services.append(service)
@@ -278,31 +303,23 @@ class UnisCollection(object):
     @logging.debug("UnisCollection")
     def _subscribe(self):
         def _callback(v):
-            if "\\$schema" in v.get("data", {}):
-                model = schemaLoader.get_class(v["data"]["\\$schema"])
-            else:
-                raise ValueError("Bad message from UNIS")
-            resource = model(v["data"], self._runtime, local_only=False)
-            try:
-                while self.locked:
+            if v["headers"]["action"] in [ 'POST', 'PUT']:
+                if "\\$schema" in v.get("data", {}):
+                    model = schemaLoader.get_class(v["data"]["\\$schema"])
+                else:
+                    raise ValueError("Bad message from UNIS")
+                resource = model(v["data"], self._runtime, local_only=False)
+                try:
+                    while self.locked:
+                        pass
+                    self.append(resource)
+                except ValueError:
                     pass
-                self.append(resource)
-            except ValueError:
-                pass
-        
+            elif v["headers"]["action"] == 'DELETE':
+                self._delete(v['data']['id'])
         self._runtime._unis.subscribe(self.collection, _callback)
         self._subscribe = lambda: None
     
-    @logging.debug("UnisCollection")
-    def _fromId(self, uid):
-        keys = [item[0] for item in self._indices["id"]]
-        index = bisect.bisect_left(keys, uid)
-        if index < len(self._indices["id"]):
-            return self[self._indices["id"][index][1]]
-        else:
-            raise KeyError("No object with id {}".format(uid))
-        
-        
     @logging.info("UnisCollection")
     def sync(self):
         for i in MixedCollectionIterator(self, force=True):
@@ -346,8 +363,8 @@ class CollectionIterator(object):
     @logging.debug("CollectionIterator")
     def processResult(self, res):
         return res
-
-
+        
+        
 class MixedCollectionIterator(CollectionIterator):
     @logging.debug("MxiedIterator")
     def __init__(self, ls, force=False, **kwargs):
@@ -394,6 +411,6 @@ class MixedCollectionIterator(CollectionIterator):
             if result.id in self._seen:
                 res = self._get_next()
             else:
-                self.ls.append(result)
+                result = self.ls.append(result)
                 self._seen.add(result.id)
                 return result

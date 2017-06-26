@@ -78,7 +78,7 @@ class ObjectLayer(object):
                 if tmpResource:
                     model = schemaLoader.get_class(tmpResource["$schema"])
                     tmpObject = model(tmpResource, self, local_only=False)
-                    self._cache[tmpCollection].append(tmpObject)
+                    tmpObject = self._cache[tmpCollection].append(tmpObject)
                     return tmpObject
                 else:
                     raise UnisError("href does not reference resource in unis.")
@@ -155,6 +155,9 @@ class ObjectLayer(object):
             self._do_update([resource], resource._collection)
             self._pending.remove(resource)
     @logging.debug("OAL")
+    def remove(self, resource):
+        self._cache[resource._collection].remove(resource)
+    @logging.debug("OAL")
     def _do_update(self, resources, collection):
         ref = "#/{c}".format(c=collection)
         self._cache[collection].locked = True
@@ -193,7 +196,7 @@ class ObjectLayer(object):
             
         resource.id = uid or getattr(resource, "id", None)
         col = self.getModel(resource.names)
-        col.append(resource)
+        resource = col.append(resource)
         return resource
         
     @logging.info("OAL")

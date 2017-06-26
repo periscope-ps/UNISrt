@@ -73,7 +73,7 @@ class UnisObjectTest(unittest.TestCase):
     def test_remote(self):
         # Arrange
         obj1 = UnisObject()
-        obj2 = UnisObject(local_only=False)
+        obj2 = UnisObject(runtime=MagicMock(), local_only=False)
         
         # Assert
         self.assertFalse(obj1.remoteObject())
@@ -223,7 +223,7 @@ class CollectionTest(unittest.TestCase):
     def test_append_duplicate(self):
         # Arrange
         rt = MagicMock()
-        col = UnisCollection("", "", Node, rt)
+        col = UnisCollection("", "", Node, rt, auto_sync=False)
         n1 = Node({"id": "1", "v": 1})
         n2 = Node({"id": "1", "v": 2})
         
@@ -250,7 +250,7 @@ class CollectionTest(unittest.TestCase):
     def test_setitem(self):
         # Arrange
         rt = MagicMock()
-        col = UnisCollection("", "", Node, rt)
+        col = UnisCollection("", "", Node, rt, auto_sync=False)
         n1 = Node({"id": "1", "v": 1})
         n2 = Node({"id": "1", "v": 2})
         
@@ -270,7 +270,7 @@ class CollectionTest(unittest.TestCase):
         
         # Arrange
         rt = MagicMock()
-        col = UnisCollection("", "", Node, rt)
+        col = UnisCollection("", "", Node, rt, auto_sync=False)
         n1 = Node({"id": "1", "v": 1})
         n2 = Node({"id": "2", "v": 2})
         
@@ -282,6 +282,32 @@ class CollectionTest(unittest.TestCase):
         self.assertEqual(col._indices["id"], [("1", 0)])
         self.assertEqual(col._rangeset, set([0]))
         self.assertEqual(col[0].v, 1)
+        
+    def test_remove(self):
+        # Arrange
+        runtime = MagicMock()
+        col = UnisCollection("", "", Node, runtime)
+        n1 = Node({"id": "1", "selfRef": "REFERENCE"})
+        col.append(n1)
+        
+        # Act
+        col.remove(n1)
+        
+        # Assert
+        runtime._unis.delete.assert_called_once_with("REFERENCE")
+        
+    def test_delete(self):
+        # Arrange
+        runtime = MagicMock()
+        col = UnisCollection("", "", Node, runtime)
+        n1 = Node({"id": "1", "selfRef": "REFERENCE"})
+        col.append(n1)
+        
+        # Act
+        col._delete("1")
+        
+        # Assert
+        self.assertNotIn(n1, col._cache)
         
     def test_iter(self):
         # Arrange
@@ -353,7 +379,7 @@ class CollectionTest(unittest.TestCase):
     def test_update_index(self):
         # Arrange
         rt = MagicMock()
-        col = UnisCollection("", "", Node, rt)
+        col = UnisCollection("", "", Node, rt, auto_sync=False)
         col.createIndex("v")
         col.append(Node({"id": "1", "v": 1}))
         col.append(Node({"id": "2", "v": 5}))

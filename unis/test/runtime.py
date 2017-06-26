@@ -116,7 +116,7 @@ class OALTest(unittest.TestCase):
     @patch.object(unis.runtime.oal.UnisCollection, 'where', return_value = iter([]))
     @patch.object(unis.runtime.oal.UnisCollection, 'hasValue', return_value = False)
     @patch.object(unis.runtime.oal.UnisClient, 'get', return_value = { "$schema": SCHEMAS["Node"], "id": "1", "ts": 1, "v": 0})
-    @patch.object(unis.runtime.oal.UnisCollection, 'append')
+    @patch.object(unis.runtime.oal.UnisCollection, 'append', side_effect=lambda x: x)
     def test_find_miss(self, a_mock, g_mock, h_mock, wh_mock, gr_mock):
         oal = ObjectLayer("http://localhost:8888", rts)
         
