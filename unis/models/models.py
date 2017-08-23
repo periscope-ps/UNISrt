@@ -83,7 +83,7 @@ class UnisList(metaclass = JSONObjectMeta):
     @logging.info("UnisList")
     def initialize(self, model, parent, *args):
         self.model = model
-        self._parent = weakref.proxy(parent)
+        self._parent = parent
         self.items = []
         for item in args:
             if isinstance(item, dict) and item.get("$schema", None):
@@ -93,7 +93,6 @@ class UnisList(metaclass = JSONObjectMeta):
                     item._local = self._parent._local
             
             if isinstance(item, UnisObject):
-                item = weakref.pxoy(item)
                 self._parent._waiting_on.add(item)
             self.items.append(item)
     
@@ -140,13 +139,13 @@ class UnisList(metaclass = JSONObjectMeta):
         oldVal = self.items[key]
         if isinstance(oldVal, UnisObject):
             self._parent._waiting_on = self._parent._waiting_on - set(oldVal)
-        if isinstance(v, UnisObject):
-            self._parent._waiting_on.add(v)
         self.items[key] = v
         if isinstance(v, LocalObject) or not getattr(v, "_local", True):
             if isinstance(v, LocalObject):
                 v._parent = self._parent
             self.update()
+        if isinstance(v, UnisObject):
+            self._parent._waiting_on.add(v)
     def __delitem__(self, key):
         self.items.__delitem__(key)
     def __len__(self):
@@ -222,9 +221,6 @@ class LocalObject(metaclass=JSONObjectMeta):
     
     def __str__(self):
         return json.dumps(self.to_JSON(include_virtuals=True))
-    def __repr__(self):
-        return "<{} at {}>".format(type(self).__name__, hex(id(self)))
-    
     
     @logging.debug("LocalObject")
     def _resolve_list(self, ls, n):
@@ -252,7 +248,8 @@ class LocalObject(metaclass=JSONObjectMeta):
     def update(self):
         self._parent._dirty = True
         self._parent.update()
-        
+
+
     @logging.info("LocalObject")
     def to_JSON(self, include_virtuals=False):
         tmpResult = {}
@@ -278,7 +275,6 @@ class UnisObject(metaclass = JSONObjectMeta):
     @logging.info("UnisObject")
     def initialize(self, src={}, runtime=None, set_attr=True, defer=False, local_only=True):
         assert isinstance(src, dict), "{t} src must be of type dict, got {t2}".format(t = type(self), t2 = type(src))
-        assert local_only or runtime, "Cannot create non-local object without Runtime"
         
         for k, v in src.items():
             if set_attr:
@@ -293,7 +289,6 @@ class UnisObject(metaclass = JSONObjectMeta):
         self.__reserved__["_dirty"] = False
         self.__reserved__["_local"] = local_only
         self.__reserved__["_waiting_on"] = set()
-        self.__reserved__["_deleted"] = False
         
     def __getattribute__(self, n):
         if n in ["get_virtual", "__dict__", "__reserved__"]:
@@ -314,8 +309,6 @@ class UnisObject(metaclass = JSONObjectMeta):
         return self.get_virtual(n)
     
     def __setattr__(self, n, v):
-        if self._deleted:
-            raise ReferenceError("Object no longer exists in runtime")
         if n == "ts":
             raise AttributeError("Cannot set attribute ts, ts is a restricted property")
         if n in self.__dict__:
@@ -330,7 +323,7 @@ class UnisObject(metaclass = JSONObjectMeta):
             if isinstance(oldVal, UnisList):
                 self._waiting_on = self._waiting_on - set(list(oldVal))
             super(UnisObject, self).__setattr__(n, v)
-            self.__reserved__["_dirty"] = True
+            self.set_virtual("_dirty", True)
             
             if isinstance(v, UnisObject):
                 self._waiting_on.add(v)
@@ -340,6 +333,7 @@ class UnisObject(metaclass = JSONObjectMeta):
                     model = self._models.get(n, type(v))
                     if model != type(v):
                         raise ValueError("{t1}.{n} expects {t2} - got {t3}".format(t1=type(self), n=n, t2=model, t3=type(v)))
+                        
                     if not v._local:
                         if v not in self._runtime:
                             self._runtime.insert(v)
@@ -466,7 +460,7 @@ class UnisObject(metaclass = JSONObjectMeta):
     def __str__(self):
         return json.dumps(self.to_JSON(include_virtuals=True))
     def __repr__(self):
-        return "<{} at {}>".format(type(self).__name__, hex(id(self)))
+        return "<UnisObject.{}>".format(type(self).__name__)
     
     #def __eq__(self, other):
     #    return hasattr(self, "id") and hasattr(other, "id") and self.id == other.id
