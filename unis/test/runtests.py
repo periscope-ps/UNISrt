@@ -44,7 +44,8 @@ def main():
 
     tsuite = unittest.defaultTestLoader.loadTestsFromNames(test_modules)
     runner = unittest.TextTestRunner()
-    runner.run(tsuite)
+    ret = not runner.run(tsuite).wasSuccessful()
+    sys.exit(ret)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
