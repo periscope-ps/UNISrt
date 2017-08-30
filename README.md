@@ -18,7 +18,7 @@ rt.metadata  # you can `dir(rt)` this to see more
 
 # example: print metadata
 for md in rt.metadata:
-    print md.name  # rt has "reference-like" behavior, so be careful...
+    print(md.name)  # rt has "reference-like" behavior, so be careful...
     # md.name = random()  # ...because it's easy to clobber someone else's work (don't do this!)
     
 # example: print each port within each node
