@@ -1,3 +1,4 @@
+[![Build Status](https://travis-ci.org/periscope-ps/UNISrt.svg?branch=develop)](https://travis-ci.org/periscope-ps/UNISrt)
 # Instructions
 
 1. clone this repo: https://github.com/periscope-ps/UNISrt
