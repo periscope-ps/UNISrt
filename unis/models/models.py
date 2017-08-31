@@ -323,7 +323,7 @@ class UnisObject(metaclass = JSONObjectMeta):
             if isinstance(oldVal, UnisList):
                 self._waiting_on = self._waiting_on - set(list(oldVal))
             super(UnisObject, self).__setattr__(n, v)
-            self.set_virtual("_dirty", True)
+            self._dirty = True
             
             if isinstance(v, UnisObject):
                 self._waiting_on.add(v)

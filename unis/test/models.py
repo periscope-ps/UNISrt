@@ -283,32 +283,6 @@ class CollectionTest(unittest.TestCase):
         self.assertEqual(col._rangeset, set([0]))
         self.assertEqual(col[0].v, 1)
         
-    def test_remove(self):
-        # Arrange
-        runtime = MagicMock()
-        col = UnisCollection("", "", Node, runtime)
-        n1 = Node({"id": "1", "selfRef": "REFERENCE"})
-        col.append(n1)
-        
-        # Act
-        col.remove(n1)
-        
-        # Assert
-        runtime._unis.delete.assert_called_once_with("REFERENCE")
-        
-    def test_delete(self):
-        # Arrange
-        runtime = MagicMock()
-        col = UnisCollection("", "", Node, runtime)
-        n1 = Node({"id": "1", "selfRef": "REFERENCE"})
-        col.append(n1)
-        
-        # Act
-        col._delete("1")
-        
-        # Assert
-        self.assertNotIn(n1, col._cache)
-        
     def test_iter(self):
         # Arrange
         rt = MagicMock()
