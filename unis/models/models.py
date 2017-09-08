@@ -354,7 +354,8 @@ class UnisObject(metaclass = JSONObjectMeta):
     @logging.info("UnisObject")
     def poke(self):
         if not self._local:
-            payload = json.dumps({"ts": int(time.time() *  1000000)})
+            self.__dict__["ts"] = int(time.time() * 1000000)
+            payload = json.dumps({"ts": self.ts})
             self._runtime._unis.put(self.selfRef, payload)
     @logging.info("UnisObject")
     def setAutoCommit(self, n):
