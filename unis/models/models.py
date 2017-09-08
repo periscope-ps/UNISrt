@@ -274,6 +274,14 @@ class LocalObject(metaclass=JSONObjectMeta):
 class UnisObject(metaclass = JSONObjectMeta):
     @logging.info("UnisObject")
     def initialize(self, src={}, runtime=None, set_attr=True, defer=False, local_only=True):
+        def _source_from_ref():
+            re_str = "(?P<source>http[s]?://(?:[^:/]+)(?::[0-9]{1,5}))"
+            matches = re.compile(re_str).match(self.selfRef)
+            if matches:
+                return matches.group("source")
+            else:
+                raise ValueError("Bad selfRef in object - {}".format(self.selfRef))
+
         assert isinstance(src, dict), "{t} src must be of type dict, got {t2}".format(t = type(self), t2 = type(src))
         
         for k, v in src.items():
@@ -289,6 +297,7 @@ class UnisObject(metaclass = JSONObjectMeta):
         self.__reserved__["_dirty"] = False
         self.__reserved__["_local"] = local_only
         self.__reserved__["_waiting_on"] = set()
+        self.__reserved__["_source"] = _source_from_ref() if "selfRef" in src else None
         
     def __getattribute__(self, n):
         if n in ["get_virtual", "__dict__", "__reserved__"]:
@@ -350,7 +359,8 @@ class UnisObject(metaclass = JSONObjectMeta):
     @logging.info("UnisObject")
     def poke(self):
         if not self._local:
-            payload = json.dumps({"ts": int(time.time() *  1000000)})
+            self.__dict__["ts"] = int(time.time() * 1000000)
+            payload = json.dumps({"ts": self.ts})
             self._runtime._unis.put(self.selfRef, payload)
     @logging.info("UnisObject")
     def setAutoCommit(self, n):
@@ -370,8 +380,20 @@ class UnisObject(metaclass = JSONObjectMeta):
             self.__dict__[n] = v
         else:
             raise AttributeError("'{c}' object has no attribute '{n}'".format(c=type(self), n=n))
-    
-    
+    @logging.info("UnisObject")
+    def getSource(self):
+        return self._source
+    @logging.info("UnisObject")
+    def setSource(self, v):
+        if self._source and v != self._source:
+            raise ValueError("May not rebind resource to a different instance of unis")
+        self._source = v
+    @logging.info("UnisObject")
+    def getCollection(self):
+        return self._collection
+    @logging.info("UnisObject")
+    def setCollection(self, v):
+        self._collection = v
     @logging.debug("UnisObject")
     def _resolve_list(self, ls, n):
         return UnisList(self._models.get(n, UnisObject), self, *ls)
@@ -411,31 +433,37 @@ class UnisObject(metaclass = JSONObjectMeta):
                 tmpResult[k] = self.__dict__[k].to_JSON(include_virtuals)
             else:
                 tmpResult[k] = v
+        if include_virtuals:
+            for k, v in self.__meta__.items():
+                tmpResult[k] = v
         return tmpResult
     
     @logging.info("UnisObject")
-    def commit(self, n=None):
-        if not n:
-            if self._local:
-                if self._runtime:
-                    self.__dict__["ts"] = int(time.time() * 1000000)
-                    self._local = False
-                    self._dirty = True
-                    try:
-                        self.update()
-                    except:
-                        self._local = True
-                        raise
-                else:
-                    raise AttributeError("Object does not have a registered runtime")
-        else:
-            if n not in self.__dict__:
-                if not self.has_virtual(n):
-                    self.set_virtual(n, None)
-                self.__dict__[n] = self.get_virtual(n)
-                if not self._local:
-                    self._dirty = True
+    def commit(self, publish_to=None):
+        if self._local:
+            if self._runtime:
+                self.__dict__["ts"] = int(time.time() * 1000000)
+                self._local = False
+                self._dirty = True
+                if publish_to:
+                    self.setSource(publish_to)
+                try:
                     self.update()
+                except:
+                    self._local = True
+                    raise
+            else:
+                raise AttributeError("Object does not have a registered runtime")
+    
+    @logging.info("UnisObject")
+    def extendSchema(self, n, v=None):
+        if n not in self.__dict__:
+            if not self.has_virtual(n):
+                self.set_virtual(n, v)
+            self.__dict__[n] = v or self.get_virtual(n)
+            if not self._local:
+                self._dirty = True
+                self.update()
     
     @logging.info("UnisObject")
     def update(self, force = False):

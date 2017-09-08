@@ -27,7 +27,7 @@ from unis.models.settings import SCHEMAS
 from unis.models import Node, Exnode, Extent
 from unis.models.models import CACHE, UnisObject, UnisList, schemaLoader, LocalObject
 from unis.models.lists import UnisCollection
-    
+
 class UnisObjectTest(unittest.TestCase):
     def test_init(self):
         # Arrange
@@ -57,13 +57,25 @@ class UnisObjectTest(unittest.TestCase):
         self.assertEqual(getattr(obj1, "v"), 10)
         self.assertTrue("v" not in obj1.to_JSON())
         
-    def test_commit(self):
+    def test_extendSchema(self):
         # Arrange
         obj1 = UnisObject()
         obj1.v = 10
         
         # Act
-        obj1.commit("v")
+        obj1.extendSchema("v")
+        
+        # Assert
+        self.assertTrue(hasattr(obj1, "v"))
+        self.assertEqual(getattr(obj1, "v"), 10)
+        self.assertEqual(obj1.to_JSON(), {"v": 10})
+        
+    def test_extendSchema_value(self):
+        # Arrange
+        obj1 = UnisObject()
+        
+        # Act
+        obj1.extendSchema("v", 10)
         
         # Assert
         self.assertTrue(hasattr(obj1, "v"))
@@ -304,7 +316,7 @@ class CollectionTest(unittest.TestCase):
         # Arrange
         rt = MagicMock()
         rt._unis.get.return_value = [{"id": str(i)} for i in range(100)]
-        col = UnisCollection("", "", Node, rt)
+        col = UnisCollection("ref", "nodes", Node, rt)
         
         # Assert
         i = 0
@@ -314,6 +326,7 @@ class CollectionTest(unittest.TestCase):
         self.assertEqual(i, 100)
         for n in col:
             self.assertEqual((n.id, int(n.id)), self._indices["id"])
+        rt._unis.get.assert_called_once_with("#/nodes", limit=None, kwargs={'skip': 0})
     
     def test_create_index_before_insert(self):
         # Arrange

@@ -7,16 +7,19 @@ from unis.services.data import DataService
 CONFIGFILE = None
 
 DEFAULT_CONFIG = {
-    "unis": {
-        "url": "http://localhost:8888",
-        "use_ssl": False,
-        "cert": None,
-    },
-    "ms": {
-        "url": "http://localhost:8888",
-        "use_ssl": False,
-        "cert": None
-    },
+    "unis": [
+        {
+            "url": "http://localhost:8888",
+            "verify": False,
+            "cert": None,
+            "default": True
+        },
+        {
+            "url": "http://localhost:8889",
+            "verify": False,
+            "cert": None
+        }
+    ],
     "services": [ DataService ]
 }
 

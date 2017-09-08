@@ -3,13 +3,14 @@ import time
 import types
 import bisect
 import uuid
+import re
 
 from unis.utils.pubsub import Events
 from unis.models.models import schemaLoader
 from unis import logging
 
 class DataCollection(object):
-    def __init__(self, mid, runtime, subscribe=True, pull_history=False):
+    def __init__(self, source, runtime, subscribe=True, pull_history=False):
         def mean(x, ts, prior, state):
             state["sum"] += x
             state["count"] += 1
@@ -20,8 +21,12 @@ class DataCollection(object):
             state["mean"] += delta / state["count"]
             return prior + (delta * (x - state["mean"]))
             
-        self._href = "#/data/{mid}".format(mid = mid)
-        self.metadataId = mid
+        re_str = "(?P<source>http[s]?://[^/])/metadata/(?P<mid>[^/])"
+        groups = re.match(re_str, source)
+        if not groups:
+            raise ValueError("Bad href in metadata resource - {}".format(source))
+        self.metadataId = groups.group('mid')
+        self._source = groups.group('source')
         self._cache = []
         self._functions = {}
         self._at = 0 if pull_history else int(time.time() * 1000000)
@@ -60,7 +65,7 @@ class DataCollection(object):
     @logging.info("DataCollection")
     def load(self):
         if not self._ready:
-            for record in CollectionIterator(self, sort="ts:1", ts="gt={ts}".format(ts = self._at)):
+            for record in CollectionIterator(self, source=self._source, sort="ts:1", ts="gt={ts}".format(ts = self._at)):
                 self._process(record)
             self._ready = self._subscribe()
             
@@ -80,7 +85,7 @@ class DataCollection(object):
                 for record in v:
                     self._process(record)
             
-        self._runtime._unis.subscribe("data/{i}".format(i=self.metadataId), _callback)
+        self._runtime._unis.subscribe("data/{i}".format(i=self.metadataId), _callback, self.source)
         self._subscribe = lambda: True
         return True
     
@@ -93,7 +98,6 @@ class UnisCollection(object):
         self._services = []
         self._indices = { "id": []}
         self._runtime = runtime
-        self._href = href
         self._model = model
         self._rangeset = set()
         self._do_sync = auto_sync
@@ -160,7 +164,7 @@ class UnisCollection(object):
             raise TypeError("Resource not of correct type: got {t1}, expected {t2}".format(t1=self._model, t2=type(obj)))
             
         obj._runtime = self._runtime
-        obj._collection = self.collection
+        obj.setCollection(self.collection)
         
         if obj.remoteObject():
             obj.update()
@@ -311,12 +315,16 @@ class UnisCollection(object):
         
 class CollectionIterator(object):
     @logging.debug("CollectionIterator")
-    def __init__(self, ls, **kwargs):
+    def __init__(self, ls, source=None, **kwargs):
         self.ls = ls
         self.index = 0
         self.local_cache = []
         self.kwargs = kwargs
-        self.kwargs.update({"url": ls._href, "limit": 100})
+        if source:
+            self.url = "{}/{}".format(source, ls.collection)
+        else:
+            self.url = "#/{}".format(ls.collection)
+        self.limit = 100
         
     @logging.debug("CollectionIterator")
     def __iter__(self):
@@ -331,8 +339,9 @@ class CollectionIterator(object):
     
     @logging.debug("CollectionIterator")
     def _get_next(self):
-        if self.index % self.kwargs["limit"] == 0:
-            self.local_cache = self.ls._runtime._unis.get(skip = self.index, **self.kwargs)
+        if self.index % self.limit == 0:
+            self.kwargs['skip'] = self.index
+            self.local_cache = self.ls._runtime._unis.get(self.url, limit=self.limit, kwargs=self.kwargs)
         if not self.local_cache:
             self.finalize()
         

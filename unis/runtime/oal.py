@@ -6,7 +6,7 @@ import uuid
 
 from unis.models import schemaLoader
 from unis.models.lists import UnisCollection
-from unis.rest import UnisClient, UnisError, UnisReferenceError
+from unis.rest import UnisProxy, UnisError, UnisReferenceError
 from unis import logging
 
 # The ObjectLayer converts json objects from UNIS into python objects and stores
@@ -27,12 +27,11 @@ class ObjectLayer(object):
             self.model = model
             
     @logging.debug("OAL")
-    def __init__(self, url, runtime, **kwargs):
+    def __init__(self, runtime):
         self.defer_update = False
         self._cache = {}
         self._models = {}
-        self._addr = url
-        self._unis = UnisClient(url, inline=runtime.settings["inline"], **kwargs)
+        self._unis = UnisProxy(runtime.settings["unis"], inline=runtime.settings["inline"])
         self._pending = set()
         self.defer_update = runtime.settings["defer_update"]
         
@@ -41,12 +40,12 @@ class ObjectLayer(object):
                                            rel  = '#/(?P<col2>[a-zA-Z]+)$')
             matches = re.compile(re_str).match(resource["href"])
             collection = matches.group("col1") or matches.group("col2")
-            
-            schema = resource["targetschema"]["items"]["href"]
-            model = schemaLoader.get_class(schema)
-            self._models[collection] = self.iCollection(collection, schema, model)
-            if collection not in ["events", "data"]:
-                self._cache[collection] = UnisCollection(resource["href"], collection, model, self, runtime.settings["auto_sync"], runtime.settings["subscribe"])
+            if collection not in self._cache:
+                schema = resource["targetschema"]["items"]["href"]
+                model = schemaLoader.get_class(schema)
+                self._models[collection] = self.iCollection(collection, schema, model)
+                if collection not in ["events", "data"]:
+                    self._cache[collection] = UnisCollection(resource["href"], collection, model, self, runtime.settings["auto_sync"], runtime.settings["subscribe"])
         
     
     def __getattr__(self, n):
@@ -57,15 +56,11 @@ class ObjectLayer(object):
     
     @logging.debug("OAL")
     def find(self, href):
-        re_str = "{full}|{rel}".format(full = '(?P<domain>http[s]?://[^:/]+(?::[0-9]{1,5}))/(?P<col1>[a-zA-Z]+)/(?P<uid1>\S+)$',
+        re_str = "{full}|{rel}".format(full = 'http[s]?://(?P<authority>[^:/]+(?::[0-9]{1,5}))/(?P<col1>[a-zA-Z]+)/(?P<uid1>\S+)$',
                                        rel  = '#/(?P<col2>[a-zA-Z]+)/(?P<uid2>[a-zA-Z0-9]+)$')
         matches = re.compile(re_str).match(href)
         
         if matches:
-            domain = matches.group("domain")
-            if domain and domain != self._addr:
-                raise UnisReferenceError("Resource does not belong to the registered instance of UNIS", href)
-                
             tmpCollection = matches.group("col1") or matches.group("col2")
             tmpUid = matches.group("uid1") or matches.group("uid2")
             if tmpCollection not in self._cache:
@@ -76,8 +71,8 @@ class ObjectLayer(object):
             else:
                 tmpResource = self._unis.get(href)
                 if tmpResource:
-                    model = schemaLoader.get_class(tmpResource["$schema"])
-                    tmpObject = model(tmpResource, self, local_only=False)
+                    model = schemaLoader.get_class(tmpResource[0]["$schema"])
+                    tmpObject = model(tmpResource[0], self, local_only=False)
                     self._cache[tmpCollection].append(tmpObject)
                     return tmpObject
                 else:
@@ -96,7 +91,7 @@ class ObjectLayer(object):
         
         # Generate dependency tree
         for obj in self._pending:
-            collectionName = obj._collection
+            collectionName = obj.getCollection()
             if collectionName not in cols:
                 roots.append(collectionName)
                 cols[collectionName] = set()
@@ -106,7 +101,7 @@ class ObjectLayer(object):
                 if collectionName in roots:
                     roots.remove(collectionName)
                 for dependent in pending:
-                    dependentCol = dependent._collection
+                    dependentCol = dependent.getCollection()
                     if dependentCol not in cols:
                         roots.append(dependentCol)
                         cols[dependentCol] = set()
@@ -152,7 +147,7 @@ class ObjectLayer(object):
             self._pending.add(resource)
         if resource not in self._pending:
             self._pending.add(resource)
-            self._do_update([resource], resource._collection)
+            self._do_update([resource], resource.getCollection())
             self._pending.remove(resource)
     @logging.debug("OAL")
     def _do_update(self, resources, collection):
@@ -166,8 +161,8 @@ class ObjectLayer(object):
                     resource.setWithoutUpdate("id", str(uuid.uuid4()))
                 resource.validate()
                 resource.setWithoutUpdate("ts", int(time.time() * 1000000))
-                msg.append(resource.to_JSON())
-            response = self._unis.post(ref, json.dumps(msg))
+                msg.append(resource)
+            response = self._unis.post(msg)
         except:
             raise
         finally:
@@ -177,7 +172,6 @@ class ObjectLayer(object):
                     if resp["id"] == resource.id:
                         if resp["selfRef"] != getattr(resource, "selfRef", None):
                             resource.selfRef = resp["selfRef"]
-                            resource.commit("selfRef")
                 resource._pending = False
                 self._cache[collection].updateIndex(resource)
             self._cache[collection].locked = False
@@ -222,4 +216,8 @@ class ObjectLayer(object):
     def __contains__(self, resource):
         for k, item_meta in self._models.items():
             if item_meta.model._schema["name"] in resource.names:
-                return resource in self._cache[item_meta.name]
+                if isinstance(resource, type):
+                    return True
+                else:
+                    return resource in self._cache[item_meta.name]
+        return False

@@ -26,8 +26,9 @@ class RuntimeService(metaclass=ServiceMetaclass):
         self._runtime = runtime
         if self.targets:
             for target in self.targets:
-                collection = self._runtime.getModel(getattr(target, "names", []))
-                collection.addService(self)
+                if target in self._runtime:
+                    collection = self._runtime.getModel(getattr(target, "names", []))
+                    collection.addService(self)
         else:
             for collection in self._runtime.collections:
                 collection.addService(self)

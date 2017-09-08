@@ -6,6 +6,7 @@ from unis.models import Node, Link
 # UnisGrapher is a service that connects newly discovered nodes, ports, and links
 # as they are discovered
 class UnisGrapher(RuntimeService):
+    targets = [ Node, Link ]
     def new(self, resource):
         if isinstance(resource, Node):
             for port in resource.ports:

@@ -8,6 +8,7 @@ from unis.services import RuntimeService
 from unis.runtime import settings
 from unis.runtime.oal import ObjectLayer
 from unis.utils.pubsub import Events
+from unis.models.models import UnisObject
 from unis import logging
 
 class RuntimeMeta(type):
@@ -31,19 +32,27 @@ class Runtime(object):
                     return val or default
             
             self._settings = DefaultDict(copy.deepcopy(settings.DEFAULT_CONFIG))
+            hasunis = False
             if settings.CONFIGFILE:
-                tmpConfig = configparser.RawConfigParser(allow_no_value=True)
+                tmpConfig = configparser.ConfigParser(allow_no_value=True)
                 tmpConfig.read(settings.CONFIGFILE)
                 
                 for section in tmpConfig.sections():
                     if not section in self._settings:
                         self._settings[section] = {}
                     
+                    if section.startswith("unis"):
+                        if not hasunis:
+                            self._settings["unis"] = []
+                            hasunis = True
+                        self._settings["unis"].append({})
                     for key, setting in tmpConfig.items(section):
                         if setting == "true":
-                            self._settings[section][key] = True
+                            setting = True
                         elif setting == "false":
-                            self._settings[section][key] = False
+                            setting = False
+                        if section.startswith("unis"):
+                            self._settings["unis"][-1][key] = setting
                         else:
                             self._settings[section][key] = setting
                         
@@ -63,9 +72,15 @@ class Runtime(object):
         self.settings["subscribe"] = subscribe
         self.settings["auto_sync"] = auto_sync
         self.settings["inline"] = inline
+        
         if url:
-            self.settings["unis"]["url"] = url
-        self._oal = ObjectLayer(runtime=self, **self.settings["unis"])
+            url = url if isinstance(url, list) else [ url ]
+            urls = []
+            for unis in url:
+                urls.append(unis if isinstance(unis, dict) else { 'url': unis, 'verify': False, 'cert': None })
+            self.settings["unis"] = urls
+
+        self._oal = ObjectLayer(self)
         
         for service in self.settings["services"]:
             self.addService(service)
@@ -86,8 +101,10 @@ class Runtime(object):
         return self._oal.find(href)
     
     @logging.info("Runtime")
-    def insert(self, resource, commit=False):
+    def insert(self, resource, commit=False, publish_to=None):
         result = self._oal.insert(resource)
+        if publish_to:
+            resource.setSource(publish_to)
         if commit:
             resource.commit()
         return result
@@ -112,6 +129,10 @@ class Runtime(object):
         self.log.info("Teardown complete.")
         if sig:
             sys.exit(130)
+    def __contains__(self, model):
+        if issubclass(model, UnisObject):
+            return model in self._oal
+        super(Runtime, self).__contains__(model)
     def __enter__(self):
         return self
     def __exit__(self, type, value, traceback):
