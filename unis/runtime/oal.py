@@ -171,15 +171,16 @@ class ObjectLayer(object):
         except:
             raise
         finally:
-            for resource in resources:
-                response = response if isinstance(response, list) else [response]
-                for resp in response:
-                    if resp["id"] == resource.id:
-                        if resp["selfRef"] != getattr(resource, "selfRef", None):
-                            resource.selfRef = resp["selfRef"]
-                            resource.commit("selfRef")
-                resource._pending = False
-                self._cache[collection].updateIndex(resource)
+            if response:
+                for resource in resources:
+                    response = response if isinstance(response, list) else [response]
+                    for resp in response:
+                        if resp["id"] == resource.id:
+                            if resp["selfRef"] != getattr(resource, "selfRef", None):
+                                resource.selfRef = resp["selfRef"]
+                                resource.commit("selfRef")
+                    resource._pending = False
+                    self._cache[collection].updateIndex(resource)
             self._cache[collection].locked = False
     
     @logging.info("OAL")

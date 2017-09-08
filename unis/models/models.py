@@ -254,6 +254,8 @@ class LocalObject(metaclass=JSONObjectMeta):
     def to_JSON(self, include_virtuals=False):
         tmpResult = {}
         for k, v in self.__dict__.items():
+            if isinstance(v, dict):
+                v = LocalObject(v, self)
             if isinstance(v, UnisObject):
                 if not v._local or include_virtuals:
                     if v._schema and hasattr(v, "selfRef"):
