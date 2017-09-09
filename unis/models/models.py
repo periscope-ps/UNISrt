@@ -116,6 +116,8 @@ class UnisList(metaclass = JSONObjectMeta):
     def to_JSON(self, include_virtuals=False):
         tmpResult = []
         for item in self.items:
+            if isinstance(item, dict):
+                item = LocalObject(item, self._parent)
             if isinstance(item, UnisList) or isinstance(item, LocalObject):
                 tmpResult.append(item.to_JSON(include_virtuals))
             elif isinstance(item, UnisObject):
@@ -254,6 +256,8 @@ class LocalObject(metaclass=JSONObjectMeta):
     def to_JSON(self, include_virtuals=False):
         tmpResult = {}
         for k, v in self.__dict__.items():
+            if isinstance(v, dict):
+                v = LocalObject(v, self)
             if isinstance(v, UnisObject):
                 if not v._local or include_virtuals:
                     if v._schema and hasattr(v, "selfRef"):
@@ -420,6 +424,8 @@ class UnisObject(metaclass = JSONObjectMeta):
     def to_JSON(self, include_virtuals=False):
         tmpResult = {}
         for k, v in self.__dict__.items():
+            if isinstance(v, dict):
+                v = LocalObject(v, self)
             if isinstance(v, UnisObject):
                 if not v._local or include_virtuals:
                     if v._schema and hasattr(v, "selfRef"):
