@@ -112,7 +112,7 @@ class UnisList(metaclass = JSONObjectMeta):
         for i, v in enumerate(self.items):
             if v == item:
                 if (isinstance(item, UnisObject)):
-                    self._parent._waiting_on = self._parent._waiting_on - set(item)
+                    self._parent._waiting_on = self._parent._waiting_on - set([item])
                 del self.items[i]
                 self.update()
         raise ValueError("{} not in list".format(item))
@@ -149,7 +149,7 @@ class UnisList(metaclass = JSONObjectMeta):
         assert (isinstance(v, self.model) or isinstance(v, LocalObject)), "{t1} is not of type {t2}".format(t1 = type(v), t2 = self.model)
         oldVal = self.items[key]
         if isinstance(oldVal, UnisObject):
-            self._parent._waiting_on = self._parent._waiting_on - set(oldVal)
+            self._parent._waiting_on = self._parent._waiting_on - set([oldVal])
         self.items[key] = v
         if isinstance(v, LocalObject) or not getattr(v, "_local", True):
             if isinstance(v, LocalObject):
@@ -219,7 +219,7 @@ class LocalObject(metaclass=JSONObjectMeta):
     def __setattr__(self, n, v):
         oldVal = self.__dict__.get(n, None)
         if isinstance(oldVal, UnisObject):
-            self._parent._waiting_on = self._parent._waiting_on - set(oldVal)
+            self._parent._waiting_on = self._parent._waiting_on - set([oldVal])
         if isinstance(oldVal, UnisList):
             self._parent._waiting_on = self._parent._waiting_on - set(list(oldVal))
         self.__dict__[n] = v
@@ -333,7 +333,7 @@ class UnisObject(metaclass = JSONObjectMeta):
                 
             oldVal = self.__dict__.get(n, None)
             if isinstance(oldVal, UnisObject):
-                self._waiting_on = self._waiting_on - set(oldVal)
+                self._waiting_on = self._waiting_on - set([oldVal])
             if isinstance(oldVal, UnisList):
                 self._waiting_on = self._waiting_on - set(list(oldVal))
             super(UnisObject, self).__setattr__(n, v)
@@ -456,7 +456,6 @@ class UnisObject(metaclass = JSONObjectMeta):
     
     @logging.info("UnisObject")
     def update(self, force = False):
-        print("Dirty?: {}".format(self._dirty))
         if (force or self._dirty) and not self._local:
             self._runtime.update(self)
     
