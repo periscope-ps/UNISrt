@@ -115,6 +115,7 @@ class UnisList(metaclass = JSONObjectMeta):
                     self._parent._waiting_on = self._parent._waiting_on - set([item])
                 del self.items[i]
                 self.update()
+                return
         raise ValueError("{} not in list".format(item))
     @logging.info("UnisList")
     def update(self):
