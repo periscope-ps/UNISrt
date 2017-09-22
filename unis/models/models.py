@@ -112,8 +112,9 @@ class UnisList(metaclass = JSONObjectMeta):
     def remove(self, item):
         for i, v in enumerate(self.items):
             if v == item:
+                self._parent._waiting_on.remove(item)
                 del self.items[i]
-                return item
+                self.update()
         raise ValueError("{} not in list".format(item))
     @logging.info("UnisList")
     def update(self):
@@ -455,6 +456,7 @@ class UnisObject(metaclass = JSONObjectMeta):
     
     @logging.info("UnisObject")
     def update(self, force = False):
+        print("Dirty?: {}".format(self._dirty))
         if (force or self._dirty) and not self._local:
             self._runtime.update(self)
     
