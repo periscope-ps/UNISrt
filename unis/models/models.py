@@ -102,17 +102,17 @@ class UnisList(metaclass = JSONObjectMeta):
         self.items.append(item)
         if isinstance(item, UnisObject):
             self._parent._waiting_on.add(item)
-        if isinstance(item, LocalObject) or not getattr(item, "_local", True):
+        if isinstance(item, LocalObject):
             if isinstance(item, LocalObject):
                 item._parent = self._parent
-            self.update()
-    
-            
+        self.update()
+        
     @logging.info("UnisList")
     def remove(self, item):
         for i, v in enumerate(self.items):
             if v == item:
-                self._parent._waiting_on.remove(item)
+                if (isinstance(item, UnisObject)):
+                    self._parent._waiting_on = self._parent._waiting_on - set(item)
                 del self.items[i]
                 self.update()
         raise ValueError("{} not in list".format(item))

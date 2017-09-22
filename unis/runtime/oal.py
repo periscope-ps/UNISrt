@@ -152,7 +152,7 @@ class ObjectLayer(object):
         if resource not in self._pending:
             self._pending.add(resource)
             self._do_update([resource], resource._collection)
-            self._pending.remove(resource)
+            self._pending = self._pending - set(resource)
     @logging.debug("OAL")
     def _do_update(self, resources, collection):
         ref = "#/{c}".format(c=collection)
