@@ -113,6 +113,7 @@ class UnisList(metaclass = JSONObjectMeta):
         for i, v in enumerate(self.items):
             if v == item:
                 del self.items[i]
+                return item
         raise ValueError("{} not in list".format(item))
     @logging.info("UnisList")
     def update(self):
