@@ -28,7 +28,6 @@ class ObjectLayer(object):
             
     @logging.debug("OAL")
     def __init__(self, url, runtime, **kwargs):
-        self.defer_update = False
         self._cache = {}
         self._models = {}
         self._addr = url
