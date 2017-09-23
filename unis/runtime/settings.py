@@ -1,5 +1,6 @@
 from unis.settings import UNISRT_ROOT
 from unis.services.data import DataService
+from unis.services.graph import UnisGrapher
 
 ##################################################################
 # UNISrt Configuration
@@ -17,10 +18,11 @@ DEFAULT_CONFIG = {
         {
             "url": "http://localhost:8889",
             "verify": False,
-            "cert": None
+            "cert": None,
+            "enabled": False
         }
     ],
-    "services": [ DataService ]
+    "services": [ DataService, UnisGrapher ]
 }
 
 ##################################################################

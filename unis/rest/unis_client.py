@@ -25,11 +25,12 @@ class UnisProxy(object):
         self.clients = {}
         self._default_source = "http://localhost:8888"
         for conn in conns:
-            if not re.compile(re_str).match(conn["url"]):
-                raise ValueError("unis url is malformed - {}".format(conn["url"]))
-            if "default" in conn and conn["default"]:
-                self._default_source = conn["url"]
-            self.clients[conn['url']] = UnisClient(conn, inline)
+            if conn.get("enabled", True):
+                if not re.compile(re_str).match(conn["url"]):
+                    raise ValueError("unis url is malformed - {}".format(conn["url"]))
+                if "default" in conn and conn["default"]:
+                    self._default_source = conn["url"]
+                self.clients[conn['url']] = UnisClient(conn, inline)
     
     @logging.info("UnisProxy")
     def shutdown(self):
