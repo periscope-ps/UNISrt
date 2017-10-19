@@ -81,10 +81,11 @@ class UnisList(metaclass = JSONObjectMeta):
             return self.ls.items[item]
     
     @logging.info("UnisList")
-    def initialize(self, model, parent, *args):
+    def initialize(self, model, parent, ref, *args):
         self.model = model
         self._parent = parent
         self.items = []
+        self._ref = ref
         for item in args:
             if isinstance(item, dict) and item.get("$schema", None):
                 if self._parent._runtime:
@@ -109,7 +110,7 @@ class UnisList(metaclass = JSONObjectMeta):
     
     @logging.info("UnisList")
     def update(self):
-        self._parent._dirty = True
+        self._parent._add_dirt(self._ref)
         self._parent.update()
         
     @logging.info("UnisList")
@@ -117,7 +118,7 @@ class UnisList(metaclass = JSONObjectMeta):
         tmpResult = []
         for item in self.items:
             if isinstance(item, dict):
-                item = LocalObject(item, self._parent)
+                item = LocalObject(item, self._parent, self._ref)
             if isinstance(item, UnisList) or isinstance(item, LocalObject):
                 tmpResult.append(item.to_JSON(include_virtuals))
             elif isinstance(item, UnisObject):
@@ -130,7 +131,7 @@ class UnisList(metaclass = JSONObjectMeta):
     def __getitem__(self, key):
         v = self.items[key]
         if isinstance(v, dict):
-            v = self._resolve_dict(v)
+            v = self._resolve_dict(key, v)
             self.items[key] = v
         elif isinstance(v, list):
             v = self._resolve_list(v, n)
@@ -162,10 +163,10 @@ class UnisList(metaclass = JSONObjectMeta):
         
     @logging.debug("UnisList")
     def _resolve_list(self, ls, n):
-        return UnisList(self.model, self._parent, *ls)
+        return UnisList(self.model, self._parent, self._ref, *ls)
     
     @logging.debug("UnisList")
-    def _resolve_dict(self, o):
+    def _resolve_dict(self, key, o):
         if "$schema" in o:
             if self._parent._runtime:
                 o = self._parent._runtime.insert(o)
@@ -179,7 +180,7 @@ class UnisList(metaclass = JSONObjectMeta):
             else:
                 return o
         else:
-            o = LocalObject(o, self._parent)
+            o = LocalObject(o, self._parent, self._ref)
             
         assert isinstance(o, self.model), "expected model {t}, got {t2}".format(t = type(self.model), t2 = type(o))
         return o
@@ -187,8 +188,9 @@ class UnisList(metaclass = JSONObjectMeta):
 
 class LocalObject(metaclass=JSONObjectMeta):
     @logging.info("LocalObject")
-    def initialize(self, src, parent):
+    def initialize(self, src, parent, ref):
         self.set_virtual("_parent", parent)
+        self.set_virtual("_ref", ref)
         for k, v in src.items():
             self.__dict__[k] = v
     
@@ -199,7 +201,7 @@ class LocalObject(metaclass=JSONObjectMeta):
             if isinstance(v, list):
                 v = self._resolve_list(v, n)
             elif isinstance(v, dict):
-                v = self._resolve_dict(v)
+                v = self._resolve_dict(n, v)
             self.__dict__[n] = v
         return v
     
@@ -226,10 +228,10 @@ class LocalObject(metaclass=JSONObjectMeta):
     
     @logging.debug("LocalObject")
     def _resolve_list(self, ls, n):
-        return UnisList(self._models.get(n, UnisObject), self, *ls)
+        return UnisList(self._models.get(n, UnisObject), self, self._ref, *ls)
     
     @logging.debug("LocalObject")
-    def _resolve_dict(self, o):
+    def _resolve_dict(self, n, o):
         if "$schema" in o:
             if self._parent._runtime:
                 o = self._parent._runtime.insert(o)
@@ -243,12 +245,12 @@ class LocalObject(metaclass=JSONObjectMeta):
             else:
                 return o
         else:
-            o = LocalObject(o, self)
+            o = LocalObject(o, self, self._ref)
             return o
     
     @logging.info("LocalObject")
     def update(self):
-        self._parent._dirty = True
+        self._parent._add_dirt(self._ref)
         self._parent.update()
 
 
@@ -257,7 +259,7 @@ class LocalObject(metaclass=JSONObjectMeta):
         tmpResult = {}
         for k, v in self.__dict__.items():
             if isinstance(v, dict):
-                v = LocalObject(v, self)
+                v = LocalObject(v, self, self._ref)
             if isinstance(v, UnisObject):
                 if not v._local or include_virtuals:
                     if v._schema and hasattr(v, "selfRef"):
@@ -312,21 +314,28 @@ class UnisObject(metaclass = JSONObjectMeta):
                 if isinstance(v, list):
                     v = self._resolve_list(v, n)
                 elif isinstance(v, dict):
-                    v = self._resolve_dict(v)
+                    v = self._resolve_dict(n, v)
                 self.__dict__[n] = v
             return v
     
     def __getattr__(self, n):
         if n in self.__reserved__:
             return self.__reserved__[n]
-        return self.get_virtual(n)
+        v = self.get_virtual(n)
+        if isinstance(v, list):
+            v = self._resolve_list(v, n)
+            self.set_virtual(n, v)
+        elif isinstance(v, dict):
+            v = self._resolve_dict(n, v)
+            self.set_virtual(n, v)
+        return v
     
     def __setattr__(self, n, v):
         if n == "ts":
             raise AttributeError("Cannot set attribute ts, ts is a restricted property")
         if n in self.__dict__:
             if isinstance(v, list):
-                v = UnisList(self._models.get(n, UnisObject), self, *v)
+                v = UnisList(self._models.get(n, UnisObject), self, n, *v)
             if v == self.__dict__[n]:
                 return
                 
@@ -336,7 +345,7 @@ class UnisObject(metaclass = JSONObjectMeta):
             if isinstance(oldVal, UnisList):
                 self._waiting_on = self._waiting_on - set(list(oldVal))
             super(UnisObject, self).__setattr__(n, v)
-            self._dirty = True
+            self._add_dirt(n)
             
             if isinstance(v, UnisObject):
                 self._waiting_on.add(v)
@@ -398,12 +407,16 @@ class UnisObject(metaclass = JSONObjectMeta):
     @logging.info("UnisObject")
     def setCollection(self, v):
         self._collection = v
+    @logging.info("UnisObject")
+    def _add_dirt(self, target):
+        if target in self.__dict__:
+            self._dirty = True
     @logging.debug("UnisObject")
     def _resolve_list(self, ls, n):
-        return UnisList(self._models.get(n, UnisObject), self, *ls)
+        return UnisList(self._models.get(n, UnisObject), self, n, *ls)
     
     @logging.debug("UnisObject")
-    def _resolve_dict(self, o):
+    def _resolve_dict(self, n, o):
         if "$schema" in o:
             if self._runtime:
                 o = self._runtime.insert(o)
@@ -417,7 +430,7 @@ class UnisObject(metaclass = JSONObjectMeta):
             else:
                 return o
         else:
-            o = LocalObject(o, self)
+            o = LocalObject(o, self, n)
             return o
     
     @logging.info("UnisObject")
@@ -425,7 +438,7 @@ class UnisObject(metaclass = JSONObjectMeta):
         tmpResult = {}
         for k, v in self.__dict__.items():
             if isinstance(v, dict):
-                v = LocalObject(v, self)
+                v = LocalObject(v, self, k)
             if isinstance(v, UnisObject):
                 if not v._local or include_virtuals:
                     if v._schema and hasattr(v, "selfRef"):
@@ -468,7 +481,7 @@ class UnisObject(metaclass = JSONObjectMeta):
                 self.set_virtual(n, v)
             self.__dict__[n] = v or self.get_virtual(n)
             if not self._local:
-                self._dirty = True
+                self._add_dirt(n)
                 self.update()
     
     @logging.info("UnisObject")

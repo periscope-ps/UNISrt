@@ -46,6 +46,8 @@ class ObjectLayer(object):
                 self._models[collection] = self.iCollection(collection, schema, model)
                 if collection not in ["events", "data"]:
                     self._cache[collection] = UnisCollection(resource["href"], collection, model, self, runtime.settings["auto_sync"], runtime.settings["subscribe"])
+                    if model in runtime.settings["preload"]:
+                        self._cache[collection].sync()
         
     
     def __getattr__(self, n):

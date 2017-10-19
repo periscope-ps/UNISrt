@@ -22,7 +22,8 @@ DEFAULT_CONFIG = {
             "enabled": False
         }
     ],
-    "services": [ DataService, UnisGrapher ]
+    "services": [ DataService, UnisGrapher ],
+    "preload": [ "nodes", "links" ]
 }
 
 ##################################################################

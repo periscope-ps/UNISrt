@@ -84,6 +84,9 @@ class Runtime(object):
         
         for service in self.settings["services"]:
             self.addService(service)
+            
+        for collection in self.settings["preload"]:
+            getattr(self._oal, collection).sync()
         
     def __getattr__(self, n):
         if "_oal" in self.__dict__:
