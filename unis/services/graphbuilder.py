@@ -149,8 +149,8 @@ class Graph(object):
             self.width  = max(n.svg.x + 20, self.width)
         
         for n in self.vertices:
-            n.svg.x += abs(min(x - 20, 0)) + 53
-            n.svg.y += abs(min(y - 20, 0)) + 35
+            n.svg.x += abs(min(x - 20, 0)) + 400
+            n.svg.y += abs(min(y - 20, 0)) + 400
         self.processing_level += repeat
     
     def dump(self, filename):
@@ -173,71 +173,82 @@ class Graph(object):
                 return False
         self.processing_level = layout["_processing_level"]
         return True
-
-    def svg(self, active=[], rules=[], output=None):
+    
+    def svg(self, rules=[], output=None):
+        def _addcircle(a, complete, cls):
+            circle = "  <circle id='node-{}' class='{}' data-rules='{}' transform='matrix(1 0 0 1 {} {})' r='{}' stroke='black' stroke-width='2'><title>{}</title></circle>"
+            if a not in complete:
+                name = a.name.replace('.', '')
+                return circle.format(name, cls, name, a.svg.x, a.svg.y, 6, a.name), complete | set([a])
+            return "", complete
+        
+        # Init chart
+        palette = itertools.cycle([[0xb5, 0x89, 0x00], [0xcb, 0x4b, 0x16], [0xd3, 0x36, 0x82], [0x6c, 0x71, 0xc4],
+                                   [0x26, 0x8b, 0xd2], [0x2a, 0xa1, 0x98], [0x85, 0x99, 0x00]])
+        width  = max(1000, max([n.svg.x + 400 for n in self.vertices]))
+        height = max(1000, max([n.svg.y + 400 for n in self.vertices]))
+        result =  "<svg id='f-svg' width='{}' height='{}' transform='matrix(1 0 0 1 -300 -300)'>".format(width, height)
+        result += "  <defs><mask id='clipper' maskUnits='userSpaceOnUse'><rect height='100%' width='100%' fill='white'></rect>{}</mask></defs>"
+        result += "  <rect height='100%' width='100%' fill='rgb(253,246,227)'/>"
+        line   =  "  <line {{}} x1='{}' y1='{}' x2='{}' y2='{}' style='stroke:rgb({{}});stroke-width:{{}}'/>"
+        
+        # Draw lines
         complete = set()
-        height = 0
-        width = 0
-        for n in self.vertices:
-            width = max(width, n.svg.x + 2 * 53) # Add the height and width of potential rules
-            height = max(height, n.svg.y + 2 * 35)
-        result =     "<svg id='f-svg' width='{}' height='{}' transform='translate(0 0) scale(1)'>".format(width + 20, height + 20)
+        for p, path in enumerate(rules):
+            color = ",".join(map(str, next(palette)));
+            for i in range(len(path)):
+                if i < len(path) - 1:
+                    a, b = (path[i][0], path[i + 1][0])
+                    if (a, b) not in complete:
+                        l  = line.format(a.svg.x, a.svg.y, b.svg.x, b.svg.y)
+                        result += l.format("", "0,0,0", 3) + l.format("", color, 1)
+                    complete |= set([(a, b), (b, a)])
+                
+                if path[i][1]:
+                    a = path[i][0]
+                    x,y = (a.svg.x + (36 * ((i % 2 * 2) - 1)), a.svg.y + (10 * ((i % 2 * 2) - 1)))
+                    l = line.format(a.svg.x, a.svg.y, x, y)
+                    result += l.format("id='rule-{}-{}-line' class='rules {}' opacity='0.6' mask='url(#clipper)'".format(p, i, a.name.replace('.', "")), "0,0,0", 1)
+        
         for a, b in self.edges:
-            if (a,b) not in complete:
-                result += "  <line x1='{}' y1='{}' x2='{}' y2='{}' style='stroke:rgb(0,0,0);stroke-width:3'/>".format(a.svg.x, a.svg.y, b.svg.x, b.svg.y)
-            complete |= set([(a, b), (b, a)])
+            result += "" if (a,b) in complete else line.format(a.svg.x, a.svg.y, b.svg.x, b.svg.y).format("", "0,0,0", 3)
         
-        circle = "  <circle data-rules='{}' cx='{}' cy='{}' r='{}' stroke='black' stroke-width='2' fill='{}'><title>{}</title></circle>"
-        active_nodes = set(itertools.chain.from_iterable(active))
-        for n in self.vertices:
-            if n not in active_nodes:
-                result += circle.format(n.name.replace(".", ""), n.svg.x, n.svg.y, 6, "rgb(255, 255, 255)", n.name)
+        # Draw circles
+        complete = set()
+        for path in rules:
+            for i in range(len(path)):
+                r, complete = _addcircle(path[i][0], complete, "active")
+                result += r
+        for a in self.vertices:
+            r, complete = _addcircle(a, complete, '')
+            result += r
         
-        nodes = set()
-        palette = itertools.cycle([[0xe0, 0xb9, 0xb2], [0xd0, 0x97, 0x8b], [0xc1, 0x74, 0x65], [0xb1, 0x52, 0x3f],
-                                   [0xaa, 0x41, 0x2c], [0x8c, 0x36, 0x25], [0xe5, 0xae, 0xb9], [0xda, 0x8d, 0x9e]])
-        for path in active:
-            color = ",".join(map(str, next(palette)))
-            for i in range(len(path) - 1):
-                a = path[i]
-                b = path[i + 1]
-                result += "  <line x1='{}' y1='{}' x2='{}' y2='{}' style='stroke:rgb(0,0,0);stroke-width:3'/>".format(a.svg.x, a.svg.y, b.svg.x, b.svg.y)
-                result += "  <line x1='{}' y1='{}' x2='{}' y2='{}' style='stroke:rgb({});stroke-width:1'/>".format(a.svg.x, a.svg.y, b.svg.x, b.svg.y, color)
-                nodes |= set([a, b])
+        # Draw ruleboxes
+        group = '''
+        <g class='rules {}' id='rule-{}-{}' x='1' y='1' transform='matrix(1 0 0 1 {} {})' opacity='0.6'>
+          <use href='#clipping'/>
+          <rect width='53' height='34' style='stroke-width:1;stroke:rgb(0,0,0);fill:rgb(238, 232, 213)' rx='4' ry='4'/>
+          <text font-size='5' fill='rgb(101,123,131)' y='4'>{}</text>
+        </g>'''
         
-        line = "<line class='rules {}' id='rule-{}-line' x1='{}' y1='{}' x2='{}' y2='{}' style='stroke:black;stroke-width=2' opacity='0.6'/>"
-        for i, (node, _) in enumerate(rules):
-            if i % 2:
-                x, y = (node.svg.x + 36, node.svg.y + 10)
-            else:
-                x, y = (node.svg.x - 36, node.svg.y - 10)
-            result += line.format(node.name.replace('.', ""), i, node.svg.x, node.svg.y, x, y)
-            
-        for n in nodes:
-            result += circle.format(n.name.replace(".", ""), n.svg.x, n.svg.y, 5, "rgb(255,0,0)", n.name)
+        masks = ""
+        for p, path in enumerate(rules):
+            for i in range(len(path)):
+                if path[i][1]:
+                    a = path[i][0]
+                    x,y = (a.svg.x - 26 + (36 * ((i % 2 * 2) - 1)), (a.svg.y - 17 + (27 * ((i % 2 * 2) - 1))))
+                    text = "".join(["<tspan dy='1.2em' x='8'>" + line + "</tspan>" for line in path[i][1].split("\n")])
+                    result += group.format(a.name.replace('.', ''), p, i, x, y, text)
+                    masks  += "<rect width='53' height='34' id='mask-rule-{}-{}' transform='matrix(1 0 0 1 {} {})'></rect>".format(p, i, x, y)
         
-        for i, (node, text) in enumerate(rules):
-            if i % 2:
-                x, y = (node.svg.x + 10, node.svg.y + 10)
-            else:
-                x, y = (node.svg.x - 63, node.svg.y - 45)
-            
-            rule =  "<g class='rules {}' id='rule-{}' x='1' y='1' transform='translate({} {})' opacity='0.6'>".format(node.name.replace(".", ""), i, x, y)
-            rule += "  <rect width='53' height='35' style='stroke-width:1;stroke:rgb(0,0,0);fill:rgb(250, 240, 240)' rx='4' ry='4'/>"
-            rule += "  <text font-size='5' fill='rgb(50,50,50)' y='4'>"
-            for line in text.split("\n"):
-                rule += "<tspan dy='1.2em' x='8'>" + line + "</tspan>"
-            rule += "</text>"
-            rule += "</g>"
-            
-            result += rule
         result += "</svg>"
+        result = result.format(masks)
         if output:
             with open(output) as f:
                 f.write(result)
         
         return result
-        
+    
     @classmethod
     def build_graph(cls, size, degree, db=None, subnet='10.0.0.0/8', prefix=''):
         degree = max(0, min(degree, 1))
