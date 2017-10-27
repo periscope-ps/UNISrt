@@ -454,6 +454,8 @@ class UnisObject(metaclass = JSONObjectMeta):
                 tmpResult[k] = v
         if include_virtuals:
             for k, v in self.__meta__.items():
+                if isinstance(v, (LocalObject, UnisObject, UnisList)):
+                    v = v.to_JSON(include_virtuals)
                 tmpResult[k] = v
         return tmpResult
     

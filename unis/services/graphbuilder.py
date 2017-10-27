@@ -1,6 +1,7 @@
 import itertools
 import math
 import random
+import re
 
 from collections import defaultdict
 from string import ascii_uppercase
@@ -72,36 +73,17 @@ class Graph(object):
             n.commit()
         self._rt.flush()
     
-    def _getclusters(self):
-        clusters = defaultdict(list)
-        for n in self.vertices:
-            clusters[".".join(n.name.split(".")[:-1])].append(n)
-        return clusters
-        
     def spring(self, intensity, repeat=1000):
-        def _place(x, y, width, cluster):
-            node_index = 0
-            while node_index < len(cluster):
-                cluster[node_index].svg.x = (node_index % width * intensity) + x
-                cluster[node_index].svg.y = (node_index // width * intensity)  + y
-                node_index += 1
-                
+        
+        
         # initialize
         if self.processing_level == 0:
             for n in self.vertices:
                 n.svg = { "x": 0, "y": 0 }
-        clusters = list(self._getclusters().values())
-        sidelen = int(math.sqrt(len(clusters)))
-        cluster_index = 0
-        x = 20
-        y = 20
-        while cluster_index < len(clusters):
-            cluster = clusters[cluster_index]
-            cluster_len = int(math.sqrt(len(cluster)))
-            _place(x, y, cluster_len, cluster)
-            cluster_index += 1
-            x = 20 + (cluster_index % sidelen) * cluster_len * intensity
-            y = 20 + (cluster_index // sidelen) * (cluster_len + 1) * intensity
+        sidelen = int(math.sqrt(len(self.vertices)))
+        for i, n in enumerate(self.vertices):
+            x, y = (20 * (i % sidelen), 20 * (i // sidelen))
+            n.svg.x, n.svg.y = (x, y)
         
         # spring
         for x in range(repeat):
@@ -123,12 +105,13 @@ class Graph(object):
             
             # Attractive
             for a,b in self.edges:
-                d = math.sqrt((b.svg.x - a.svg.x)**2 + (b.svg.y - a.svg.y)**2)
-                mag = 1.5 * math.log(d / intensity)
-                angle = math.atan2((b.svg.y - a.svg.y), (b.svg.x - a.svg.x))
-                forces[a][b] = (mag * math.cos(angle), mag * math.sin(angle), a.name, b.name)
-                angle = math.atan2((a.svg.y - b.svg.y), (a.svg.x - b.svg.x))
-                forces[b][a] = (mag * math.cos(angle), mag * math.sin(angle), a.name, b.name)
+                if a != b:
+                    d = math.sqrt((b.svg.x - a.svg.x)**2 + (b.svg.y - a.svg.y)**2)
+                    mag = 1.5 * math.log(d / intensity)
+                    angle = math.atan2((b.svg.y - a.svg.y), (b.svg.x - a.svg.x))
+                    forces[a][b] = (mag * math.cos(angle), mag * math.sin(angle), a.name, b.name)
+                    angle = math.atan2((a.svg.y - b.svg.y), (a.svg.x - b.svg.x))
+                    forces[b][a] = (mag * math.cos(angle), mag * math.sin(angle), a.name, b.name)
             
             # Apply Forces
             for n in self.vertices:
@@ -178,7 +161,7 @@ class Graph(object):
         def _addcircle(a, complete, cls):
             circle = "  <circle id='node-{}' class='{}' data-rules='{}' transform='matrix(1 0 0 1 {} {})' r='{}' stroke='black' stroke-width='2'><title>{}</title></circle>"
             if a not in complete:
-                name = a.name.replace('.', '')
+                name = re.sub('[.<>:]', '', a.name)
                 return circle.format(name, cls, name, a.svg.x, a.svg.y, 6, a.name), complete | set([a])
             return "", complete
         
@@ -227,8 +210,8 @@ class Graph(object):
         group = '''
         <g class='rules {}' id='rule-{}-{}' x='1' y='1' transform='matrix(1 0 0 1 {} {})' opacity='0.6'>
           <use href='#clipping'/>
-          <rect width='53' height='34' style='stroke-width:1;stroke:rgb(0,0,0);fill:rgb(238, 232, 213)' rx='4' ry='4'/>
-          <text font-size='5' fill='rgb(101,123,131)' y='4'>{}</text>
+          <rect width='73' height='34' style='stroke-width:1;stroke:rgb(0,0,0);fill:rgb(238, 232, 213)' rx='4' ry='4'/>
+          <text font-size='5' fill='rgb(88,110,117)' y='4'>{}</text>
         </g>'''
         
         masks = ""
@@ -238,8 +221,8 @@ class Graph(object):
                     a = path[i][0]
                     x,y = (a.svg.x - 26 + (36 * ((i % 2 * 2) - 1)), (a.svg.y - 17 + (27 * ((i % 2 * 2) - 1))))
                     text = "".join(["<tspan dy='1.2em' x='8'>" + line + "</tspan>" for line in path[i][1].split("\n")])
-                    result += group.format(a.name.replace('.', ''), p, i, x, y, text)
-                    masks  += "<rect width='53' height='34' id='mask-rule-{}-{}' transform='matrix(1 0 0 1 {} {})'></rect>".format(p, i, x, y)
+                    result += group.format(re.sub('[.<>:]', '', a.name), p, i, x, y, text)
+                    masks  += "<rect width='73' height='34' id='mask-rule-{}-{}' transform='matrix(1 0 0 1 {} {})'></rect>".format(p, i, x, y)
         
         result += "</svg>"
         result = result.format(masks)
