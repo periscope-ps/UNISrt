@@ -218,8 +218,13 @@ class UnisClient(object):
             if "headers" not in message or "collection" not in message["headers"]:
                 raise UnisError("Depreciated header in message, client UNIS incompatable")
             callbacks = self._channels[message["headers"]["collection"]]
+            try:
+                model = schemaLoader.get_class(message["data"]["\\$schema"])
+                resource = model(v["data"])
+            except KeyError:
+                raise ValueError("No schema in message from UNIS")
             for callback in callbacks:
-                callback(message)
+                callback(resource)
         def on_open(ws):
             if self._shutdown:
                 ws.close()
@@ -239,6 +244,7 @@ class UnisClient(object):
         q = ""
         for k,v in kwargs.items():
             if v:
+                v = ",".join(v) if isinstance(v, list) else v
                 q += "{k}={v}&".format(k = k, v = v)
                 
         if inline:

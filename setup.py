@@ -21,9 +21,9 @@ import sys
 version = "0.1.dev0"
 
 sys.path.append(".")
-if sys.version_info[0] < 3: 
+if sys.version_info[0] < 3 or sys.versoin_info[1] < 5: 
     print("------------------------------")
-    print("Must use python 3.0 or greater", file=sys.stderr)
+    print("Must use python 3.5 or greater", file=sys.stderr)
     print("Found python version ", sys.version_info, file=sys.stderr)
     print("Installation aborted", file=sys.stderr)
     print("------------------------------")
@@ -49,14 +49,12 @@ setup(
     packages = ["kernel", "libnre", "nreshell", "services", "services.scheduler", "services.forecaster", "services.proxy",
                 "unis", "unis.runtime", "unis.models", "unis.utils", "unis.rest", "unis.services", "unis.test"],
     package_data = { 'unis': ['schemas/*']},
-    author = "Miao Zhang, Jeremy Musser",
+    author = "Jeremy Musser",
     author_email="jemusser@umail.iu.edu",
     license="http://www.apache.org/licenses/LICENSE-2.0",
     
     install_requires=[
         "validictory>=validictory-0.8.1",
-        "pytz",
-        "python-dateutil",
         "httplib2",
         "websocket-client",
         "requests",

@@ -175,8 +175,6 @@ class ObjectLayer(object):
                         if resp["id"] == resource.id:
                             if resp["selfRef"] != getattr(resource, "selfRef", None):
                                 resource.selfRef = resp["selfRef"]
-                                resource.commit("selfRef")
-                    resource._pending = False
                     self._cache[collection].updateIndex(resource)
             self._cache[collection].locked = False
     

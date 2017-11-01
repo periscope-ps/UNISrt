@@ -9,8 +9,8 @@ PKG_RELEASE=2
 
 SRC_DIR=build_src
 RPM_DIR=dist
-PKG_PREFIX=python34
-PYTHON_BIN=python3
+PKG_PREFIX=python35
+PYTHON_BIN=python3.5
 
 FPM_EXEC="fpm -f -s python --python-bin ${PYTHON_BIN} --python-package-name-prefix ${PKG_PREFIX} -t rpm -p ${RPM_DIR}"
 
