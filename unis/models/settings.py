@@ -2,7 +2,7 @@ import os
 
 from unis.settings import LOCAL_ROOT
 
-SCHEMA_HOST        = 'unis.crest.iu.edu'
+SCHEMA_HOST        = 'unis.open.sice.indiana.edu'
 SCHEMAS_LOCAL      = False
 
 JSON_SCHEMAS_ROOT  = os.path.join(LOCAL_ROOT, "schemas")
@@ -32,4 +32,5 @@ SCHEMAS = {
     'Exnode':          _schema.format(host = SCHEMA_HOST, directory = "exnode/6", name = "exnode#"),
     'Extent':          _schema.format(host = SCHEMA_HOST, directory = "exnode/6", name = "extent#"),
     'OFSwitch':        _schema.format(host = SCHEMA_HOST, directory = "ext/ofswitch/1", name = "ofswitch#"),
+    'Flow':            _schema.format(host = SCHEMA_HOST, directory = "ext/flow/1", name = "flow#")
 }
