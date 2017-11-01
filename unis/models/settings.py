@@ -2,7 +2,7 @@ import os
 
 from unis.settings import LOCAL_ROOT
 
-SCHEMA_HOST        = 'unis.open.sice.indiana.edu'
+SCHEMA_HOST        = 'unis.crest.iu.edu'
 SCHEMAS_LOCAL      = False
 
 JSON_SCHEMAS_ROOT  = os.path.join(LOCAL_ROOT, "schemas")
