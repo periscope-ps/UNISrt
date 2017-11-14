@@ -1,18 +1,23 @@
 import bisect
 
-from pubsub import Events
+from lace.logging import trace
+
+from unis.utils.pubsub import Events
 
 class Index(object):
+    @trace.debug("Index")
     def __init__(self, key):
         self.key = key
         self._ls = []
     
+    @trace.info("Index")
     def index(self, item):
         for k,i in self._ls:
             if k == getattr(item, self.key, None):
                 return i
         return None
     
+    @trace.info("Index")
     def subset(self, rel, v):
         keys = [item[0] for item in self._ls]
         values = [item[1] for item in self._ls]
@@ -21,10 +26,11 @@ class Index(object):
             "ge": lambda: set(values[bisect.bisect_left(keys, v):]),
             "lt": lambda: set(values[:bisect_left(keys, v)]),
             "le": lambda: set(values[:bisect_right(keys, v)]),
-            "eq": lambda: set(values[bisect.bisect_left(keys, v):bisect.bisect_right(keys, v))
+            "eq": lambda: set(values[bisect.bisect_left(keys, v):bisect.bisect_right(keys, v)])
         }
         return slices[rel]()
         
+    @trace.info("Index")
     def update(self, i, item):
         try:
             self._ls = [ x for x in self._ls if x[1] != i ]

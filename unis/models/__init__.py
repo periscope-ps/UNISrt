@@ -1,14 +1,9 @@
 import os
 import sys
 
-from unis.models import settings
-from unis.models.models import schemaLoader
+from unis import settings
 
-try:
-    os.makedirs(settings.JSON_SCHEMAS_ROOT)
-except OSError as exp:
-    pass
-
+from unis.models.models import _SchemaCache
+schemaLoader = _SchemaCache()
 for name, schema in settings.SCHEMAS.items():
-    cls = schemaLoader.get_class(schema)
-    setattr(sys.modules[__name__], name, cls)
+    setattr(sys.modules[__name__], name, schemaLoader.get_class(schema))

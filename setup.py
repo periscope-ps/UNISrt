@@ -21,7 +21,7 @@ import sys
 version = "0.1.dev0"
 
 sys.path.append(".")
-if sys.version_info[0] < 3 or sys.versoin_info[1] < 5: 
+if sys.version_info[0] < 3 or sys.version_info[1] < 5: 
     print("------------------------------")
     print("Must use python 3.5 or greater", file=sys.stderr)
     print("Found python version ", sys.version_info, file=sys.stderr)
@@ -46,8 +46,7 @@ setup(
     name = "unisrt",
     version = version,
     py_modules=['settings'],
-    packages = ["kernel", "libnre", "nreshell", "services", "services.scheduler", "services.forecaster", "services.proxy",
-                "unis", "unis.runtime", "unis.models", "unis.utils", "unis.rest", "unis.services", "unis.test"],
+    packages = ["unis", "unis.runtime", "unis.models", "unis.utils", "unis.rest", "unis.services", "unis.measurement", "unis.test"],
     package_data = { 'unis': ['schemas/*']},
     author = "Jeremy Musser",
     author_email="jemusser@umail.iu.edu",
@@ -55,16 +54,11 @@ setup(
     
     install_requires=[
         "validictory>=validictory-0.8.1",
-        "httplib2",
-        "websocket-client",
+        "aiohttp",
         "requests",
         "jsonschema",
-        "bson"
+        "bson",
+        "websockets"
     ],
     cmdclass={'test': tester },
-    entry_points = {
-        'console_scripts': [
-            'nreshell = nreshell.nreshell:main'
-        ]
-    },
 )
