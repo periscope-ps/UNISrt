@@ -19,7 +19,8 @@ class ObjectLayer(object):
             for r in await self._unis.getResources():
                 name = get_name(r)
                 if name not in ['events', 'data']:
-                    futures.append(UnisCollection.new_collection(name, schemaLoader.get_class(r['targetschema']['items']['href']), self))
+                    cls = schemaLoader.get_class(r['targetschema']['items']['href'])
+                    futures.append(UnisCollection.new_collection(name, cls, self))
             for c in await asyncio.gather(*futures):
                 self._cache[c.name] = c
             

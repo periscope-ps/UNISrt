@@ -25,10 +25,11 @@ class UnisProxy(object):
     def __init__(self, conns):
         async def _thread():
             while True:
-                await asyncio.sleep(0)
+                await asyncio.sleep(200)
         
         re_str = 'http[s]?://([^:/]+)(:([0-9]{1,5}))?$'
         self.clients = {}
+        self._session = None 
         self.default_source = "http://localhost:8888"
         asyncio.get_event_loop().run_in_executor(None, loop.run_until_complete, _thread())
         for conn in conns:
@@ -37,26 +38,32 @@ class UnisProxy(object):
                     raise ValueError("unis url is malformed - {}".format(conn["url"]))
                 if "default" in conn and conn["default"]:
                     self.default_source = conn["url"]
-                self.clients[conn['url']] = UnisClient(conn)
+                self.clients[conn['url']] = UnisClient(conn, self)
     
     @trace.info("UnisProxy")
     def shutdown(self):
         for client in self.clients.values():
             client.shutdown()
         loop.stop()
+        self._session.close()
     
     @trace.info("UnisProxy")
     async def getResources(self, source=None):
+        if not self._session:
+            self._session = aiohttp.ClientSession()
         if source:
             if source in self.clients:
                 return await self.clients[source].getResources()
             else:
                 raise ValueError("No unis instance at requested location - {}".format(source))
         else:
-            return await self._query_all([client.getResources for client in self.clients.values()])
+            results = await self._query_all([client.getResources for client in self.clients.values()])
+            return results
     
     @trace.info("UnisProxy")
     async def get(self, href, source=None, kwargs={}):
+        if not self._session:
+            self._session = aiohttp.ClientSession()
         if source:
             if source in self.clients:
                 result = await self.clients[source].get(href, kwargs)
@@ -72,6 +79,8 @@ class UnisProxy(object):
     
     @trace.info("UnisProxy")
     async def post(self, resources):
+        if not self._session:
+            self._session = aiohttp.ClientSession()
         msgs = {}
         resources = resources if isinstance(resources, list) else [resources]
         for resource in resources:
@@ -86,6 +95,8 @@ class UnisProxy(object):
     
     @trace.info("UnisProxy")
     async def put(self, href, data):
+        if not self._session:
+            self._session = aiohttp.ClientSession()
         source = self._source_from_ref(href)
         if source in self.clients:
             return await self.clients[source].put(href, data)
@@ -94,6 +105,8 @@ class UnisProxy(object):
     
     @trace.info("UnisProxy")
     async def delete(self, data):
+        if not self._session:
+            self._session = aiohttp.ClientSession()
         source = data.getSource() or self.default_source
         if source in self.clients:
             return await self.clients[source].delete(data.to_JSON())
@@ -121,7 +134,7 @@ class UnisProxy(object):
         
 class UnisClient(object):
     @trace.debug("UnisClient")
-    def __init__(self, kwargs):
+    def __init__(self, kwargs, proxy):
         re_str = 'http[s]?://(?P<host>[^:/]+)(?::(?P<port>[0-9]{1,5}))?$'
         if not re.compile(re_str).match(kwargs['url']):
             raise ValueError("unis url is malformed")
@@ -132,6 +145,7 @@ class UnisClient(object):
         self._shutdown = False
         self._socket = None
         self._threads = []
+        self._proxy = proxy
         self._channels = defaultdict(list)
     
     @trace.info("UnisClient")
@@ -145,42 +159,37 @@ class UnisClient(object):
     async def getResources(self):
         headers = { 'Content-Type': 'application/perfsonar+json',
                     'Accept': MIME['PSJSON'] }
-        async with aiohttp.ClientSession() as session:
-            async with session.get(self._url, verify_ssl=self._verify, ssl_context=self._ssl, headers=headers) as resp:
-                return await self._check_response(resp, False)
+        async with self._proxy._session.get(self._url, verify_ssl=self._verify, ssl_context=self._ssl, headers=headers) as resp:
+            return await self._check_response(resp, False)
                 
     @trace.info("UnisClient")
     async def get(self, url, kwargs={}):
         args = self._get_conn_args(url)
         args["url"] = self._build_query(args, **kwargs)
-        async with aiohttp.ClientSession() as session:
-            async with session.get(args['url'], verify_ssl=self._verify, ssl_context=self._ssl, headers=args["headers"]) as resp:
-                return await self._check_response(resp, False)
+        async with self._proxy._session.get(args['url'], verify_ssl=self._verify, ssl_context=self._ssl, headers=args["headers"]) as resp:
+            return await self._check_response(resp, False)
     
     @trace.info("UnisClient")
     async def post(self, url, data):
         args = self._get_conn_args(url)
         if isinstance(data, dict):
             data = json.dumps(data)
-        async with aiohttp.ClientSession() as session:
-            async with session.post(args['url'], data=data, verify_ssl=self._verify, ssl_context=self._ssl) as resp:
-                return await self._check_response(resp, False)
+        async with self._proxy._session.post(args['url'], data=data, verify_ssl=self._verify, ssl_context=self._ssl) as resp:
+            return await self._check_response(resp, False)
                 
     @trace.info("UnisClient")
     async def put(self, url, data):
         args = self._get_conn_args(url)
         if isinstance(data, dict):
             data = json.dumps(data)
-        async with aiohttp.ClientSession() as session:
-            async with session.put(args['url'], data=data, verify_ssl=self._verify, ssl_context=self._ssl) as resp:
-                return await self._check_response(resp, False)
+        async with self._proxy._session.put(args['url'], data=data, verify_ssl=self._verify, ssl_context=self._ssl) as resp:
+            return await self._check_response(resp, False)
     
     @trace.info("UnisClient")
     async def delete(self, url):
         args = self._get_conn_args(url)
-        async with aiohttp.ClientSession() as session:
-            async with session.delete(args['url'], verify_ssl=self._verify, ssl_context=self._ssl) as resp:
-                return await self._check_response(resp, False)
+        async with self._proxy._session.delete(args['url'], verify_ssl=self._verify, ssl_context=self._ssl) as resp:
+            return await self._check_response(resp, False)
     
     @trace.info("UnisClient")
     async def subscribe(self, collection, callback):

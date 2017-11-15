@@ -21,7 +21,7 @@ class UnisCollection(object):
         
         preload = False
         stubs = {}
-        for v in itertools.chain(await _get_stubs()):
+        for v in await _get_stubs():
             try:
                 stubs[v["selfRef"]] = None
             except KeyError:
