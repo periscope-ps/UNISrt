@@ -1,9 +1,9 @@
 import json
 import bson
-import re
 import requests
 import websocket
 import concurrent.futures
+import uritools
 
 from concurrent.futures import ThreadPoolExecutor
 
@@ -21,12 +21,11 @@ class UnisReferenceError(UnisError):
 class UnisProxy(object):
     @logging.debug("UnisProxy")
     def __init__(self, conns, inline=False):
-        re_str = 'http[s]?://([^:/]+)(:([0-9]{1,5}))?$'
         self.clients = {}
         self._default_source = "http://localhost:8888"
         for conn in conns:
             if conn.get("enabled", True):
-                if not re.compile(re_str).match(conn["url"]):
+                if not uritools.urisplit(conn['url']).authority:
                     raise ValueError("unis url is malformed - {}".format(conn["url"]))
                 if "default" in conn and conn["default"]:
                     self._default_source = conn["url"]
@@ -77,7 +76,7 @@ class UnisProxy(object):
             futures = []
             results = []
             for data in msgs.values():
-                futures.append(executor.submit(self.clients[data[0]].post, "#/{}".format(data[1]), json.dumps(data[2])))
+                futures.append(executor.submit(self.clients[data[0]].post, "{}".format(data[1]), json.dumps(data[2])))
             for future in concurrent.futures.as_completed(futures):
                 result = future.result()
                 if isinstance(result, list):
@@ -123,19 +122,13 @@ class UnisProxy(object):
     
     @logging.debug("UnisProxy")
     def _source_from_ref(self, href):
-        re_str = "(?P<source>http[s]?://(?P<host>[^:/]+)(?::(?P<port>[0-9]{1,4}))?)"
-        match = re.compile(re_str).match(href)
-        if match:
-            return match.group("source")
-        raise ValueError("href must be a full url - {}".format(href))
+        if uritools.urijoin(href, '/') == '/':
+            raise ValueError('href must contain a fully qualified domain name')
+        return uritools.urijoin(href, '/').strip('/')
         
 class UnisClient(object):
     @logging.debug("UnisClient")
     def __init__(self, kwargs, inline=False):
-        re_str = 'http[s]?://(?P<host>[^:/]+)(?::(?P<port>[0-9]{1,5}))?$'
-        if not re.compile(re_str).match(kwargs['url']):
-            raise ValueError("unis url is malformed")
-        
         self._url = kwargs["url"]
         self._verify = kwargs.get("verify", False)
         self._ssl = kwargs.get("cert", None)
@@ -207,12 +200,10 @@ class UnisClient(object):
         if self._ssl:
             kwargs["ca_certs"] = self._ssl[0]
             
-        re_str = 'http[s]?://(?P<host>[^:/]+)(?::(?P<port>[0-9]{1,4}))$'
-        matches = re.match(re_str, self._url)
-        url = "ws{s}://{h}:{p}/subscribe/{c}".format(s = "s" if "ca_certs" in kwargs else "", 
-                                                     h = matches.group("host"), 
-                                                     p = matches.group("port"), 
-                                                     c = collection)
+        uri = uritools.urisplit(self._url)
+        url = "ws{s}://{h}/subscribe/{c}".format(s = "s" if "ca_certs" in kwargs else "", 
+                                                 h = uri.authority,
+                                                 c = collection)
         def on_message(ws, message):
             message = json.loads(message)
             if "headers" not in message or "collection" not in message["headers"]:
@@ -248,17 +239,14 @@ class UnisClient(object):
         return "{b}?{q}".format(b=args["url"], q=q)
     
     @logging.debug("UnisClient")
-    def _get_conn_args(self, url):
-        re_str = "{full}|{rel}|{name}".format(full = 'http[s]?://(?P<host>[^:/]+)(?::(?P<port>[0-9]{1,4}))?/(?P<col1>[a-zA-Z]+)(?:/(?P<uid1>[^/]+))?$',
-                                              rel  = '#/(?P<col2>[a-zA-Z]+)(?:/(?P<uid2>[^/]+))?$',
-                                              name = '(?P<col3>[a-zA-Z]+)$')
-        matches = re.compile(re_str).match(url)
-        collection = matches.group("col1") or matches.group("col2") or matches.group("col3")
-        uid = matches.group("uid1") or matches.group("uid2")
-        return { "collection": collection,
-                 "url": "{u}/{c}{i}".format(u = self._url, c = collection, i = "/" + uid if uid else ""),
-                 "headers": { 'Content-Type': 'application/perfsonar+json',
-                              'Accept': MIME['PSJSON'] } }
+    def _get_conn_args(self, uri):
+        path = uritools.urisplit(uri).getpath().split('/')
+        collection, uid = path[-2:] if len(path) > 1 else (path[0], '')
+        path = "/".join([collection, uid])
+        uri = uritools.urijoin(self._url, path.strip('/'))
+        return { "collection": collection, 
+                 "url": uritools.urijoin(self._url, "/".join([collection, uid])).strip('/'),
+                 "headers": { 'Content-Type': 'application/perfsonar+json', 'Accept': MIME['PSJSON'] } }
     
     @logging.debug("UnisClient")
     def _check_response(self, r, read_as_bson=True):

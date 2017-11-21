@@ -4,9 +4,9 @@ import httplib2
 import json
 import jsonschema
 import time
-import re
 import weakref
 import tempfile
+import uritools
 
 from unis.models.settings import SCHEMAS, JSON_SCHEMA_SCHEMA, JSON_SCHEMA_HYPER, \
     JSON_SCHEMA_LINKS, JSON_SCHEMAS_ROOT, SCHEMAS_LOCAL
@@ -280,14 +280,6 @@ class LocalObject(metaclass=JSONObjectMeta):
 class UnisObject(metaclass = JSONObjectMeta):
     @logging.info("UnisObject")
     def initialize(self, src={}, runtime=None, set_attr=True, defer=False, local_only=True):
-        def _source_from_ref():
-            re_str = "(?P<source>http[s]?://(?:[^:/]+)(?::[0-9]{1,5}))"
-            matches = re.compile(re_str).match(self.selfRef)
-            if matches:
-                return matches.group("source")
-            else:
-                raise ValueError("Bad selfRef in object - {}".format(self.selfRef))
-
         assert isinstance(src, dict), "{t} src must be of type dict, got {t2}".format(t = type(self), t2 = type(src))
         
         for k, v in src.items():
@@ -303,7 +295,7 @@ class UnisObject(metaclass = JSONObjectMeta):
         self.__reserved__["_dirty"] = False
         self.__reserved__["_local"] = local_only
         self.__reserved__["_waiting_on"] = set()
-        self.__reserved__["_source"] = _source_from_ref() if "selfRef" in src else None
+        self.__reserved__["_source"] = uritools.urijoin(self.selfRef, '/') if "selfRef" in src else None
         
     def __getattribute__(self, n):
         if n in ["get_virtual", "__dict__", "__reserved__"]:
@@ -597,9 +589,7 @@ class SchemasLoader(object):
         if parent_uri:
             for parent in parent_uri:
                 if "$ref" in parent:
-                    re_str = "http[s]?://(?:[^:/]+)(?::[0-9]{1-4})?/(?:[^/]+/)*(?P<sname>[^/]+)#$"
-                    matches = re.compile(re_str).match(parent["$ref"])
-                    assert matches, "$ref in allof must be a full url"
+                    assert uritools.urisplit(parent['$ref']).authority, '$ref in allof must be a fully qualified domain name'
                     cls = self.get_class(parent["$ref"])
                     parents.append(cls)
                     parent_metas.append(type(cls))

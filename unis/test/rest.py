@@ -122,10 +122,10 @@ class ProxyTest(unittest.TestCase):
         clients['http://localhost:8888'].get.return_value = "success"
         
         # Act
-        v = proxy.get('#/nodes')
+        v = proxy.get('nodes')
         
         # Assert
-        clients['http://localhost:8888'].get.assert_called_once_with("#/nodes", None, {})
+        clients['http://localhost:8888'].get.assert_called_once_with("nodes", None, {})
         self.assertEqual(v, ["success"])
         
     def test_multi_unis_get_generic(self):
@@ -135,11 +135,11 @@ class ProxyTest(unittest.TestCase):
         clients['http://localhost:8889'].get.return_value = "success2"
         
         # Act
-        v = proxy.get('#/nodes')
+        v = proxy.get('nodes')
         
         # Assert
-        clients['http://localhost:8888'].get.assert_called_once_with("#/nodes", None, {})
-        clients['http://localhost:8889'].get.assert_called_once_with("#/nodes", None, {})
+        clients['http://localhost:8888'].get.assert_called_once_with("nodes", None, {})
+        clients['http://localhost:8889'].get.assert_called_once_with("nodes", None, {})
         self.assertEqual(len(v), 2)
         self.assertIn("success1", v)
         self.assertIn("success2", v)
@@ -151,11 +151,11 @@ class ProxyTest(unittest.TestCase):
         clients['http://localhost:8889'].get.return_value = ["success2"]
         
         # Act
-        v = proxy.get('#/nodes')
+        v = proxy.get('nodes')
         
         # Assert
-        clients['http://localhost:8888'].get.assert_called_once_with("#/nodes", None, {})
-        clients['http://localhost:8889'].get.assert_called_once_with("#/nodes", None, {})
+        clients['http://localhost:8888'].get.assert_called_once_with("nodes", None, {})
+        clients['http://localhost:8889'].get.assert_called_once_with("nodes", None, {})
         self.assertEqual(len(v), 2)
         self.assertIn("success1", v)
         self.assertIn("success2", v)
@@ -193,11 +193,11 @@ class ProxyTest(unittest.TestCase):
         clients['http://localhost:8889'].get.return_value = "success2"
         
         # Act
-        v = proxy.get("#/nodes", "http://localhost:8889")
+        v = proxy.get("nodes", "http://localhost:8889")
         
         # Assert
         self.assertEqual(clients['http://localhost:8888'].get.call_count, 0)
-        clients['http://localhost:8889'].get.assert_called_once_with("#/nodes", None, {})
+        clients['http://localhost:8889'].get.assert_called_once_with("nodes", None, {})
         self.assertEqual(v, ["success2"])
     
     def test_single_unis_post_one(self):
@@ -213,7 +213,7 @@ class ProxyTest(unittest.TestCase):
         v = proxy.post(n)
         
         # Assert
-        clients['http://localhost:8888'].post.assert_called_once_with("#/nodes", "[{}]")
+        clients['http://localhost:8888'].post.assert_called_once_with("nodes", "[{}]")
         self.assertEqual(v, ["success"])
 
     def test_multi_unis_post_one(self):
@@ -231,7 +231,7 @@ class ProxyTest(unittest.TestCase):
         
         # Assert
         self.assertEqual(clients['http://localhost:8888'].post.call_count, 0)
-        clients['http://localhost:8889'].post.assert_called_once_with("#/nodes", "[{}]")
+        clients['http://localhost:8889'].post.assert_called_once_with("nodes", "[{}]")
         self.assertEqual(v, ["success2"])
 
     def test_single_unis_post_list(self):
@@ -251,7 +251,7 @@ class ProxyTest(unittest.TestCase):
         v = proxy.post([n1, n2])
         
         # Assert
-        clients['http://localhost:8888'].post.assert_called_once_with("#/nodes", "[{}, {}]")
+        clients['http://localhost:8888'].post.assert_called_once_with("nodes", "[{}, {}]")
         self.assertEqual(v, ["success"])
     
     def test_multi_unis_post_list(self):
@@ -272,8 +272,8 @@ class ProxyTest(unittest.TestCase):
         v = proxy.post([n1, n2])
         
         # Assert
-        clients['http://localhost:8888'].post.assert_called_once_with("#/nodes", "[{}]")
-        clients['http://localhost:8889'].post.assert_called_once_with("#/nodes", "[{}]")
+        clients['http://localhost:8888'].post.assert_called_once_with("nodes", "[{}]")
+        clients['http://localhost:8889'].post.assert_called_once_with("nodes", "[{}]")
         self.assertEqual(len(v), 2)
         self.assertIn("success1", v)
         self.assertIn("success2", v)
@@ -300,8 +300,8 @@ class ProxyTest(unittest.TestCase):
         
         # Assert
         self.assertTrue(clients['http://localhost:8888'].post.call_count == 2)
-        clients['http://localhost:8888'].post.assert_any_call("#/nodes", '[{"v": 10}]')
-        clients['http://localhost:8888'].post.assert_any_call("#/links", '[{"v": 20}, {"v": 20}]')
+        clients['http://localhost:8888'].post.assert_any_call("nodes", '[{"v": 10}]')
+        clients['http://localhost:8888'].post.assert_any_call("links", '[{"v": 20}, {"v": 20}]')
         
 
     def test_multi_unis_post_multilist(self):
@@ -328,9 +328,9 @@ class ProxyTest(unittest.TestCase):
         # Assert
         self.assertTrue(clients['http://localhost:8888'].post.call_count == 1)
         self.assertTrue(clients['http://localhost:8889'].post.call_count == 2)
-        clients['http://localhost:8888'].post.assert_called_once_with("#/nodes", '[{"v": 10}]')
-        clients['http://localhost:8889'].post.assert_any_call("#/links", '[{"v": 20}]')
-        clients['http://localhost:8889'].post.assert_any_call("#/ports", '[{"v": 30}]')
+        clients['http://localhost:8888'].post.assert_called_once_with("nodes", '[{"v": 10}]')
+        clients['http://localhost:8889'].post.assert_any_call("links", '[{"v": 20}]')
+        clients['http://localhost:8889'].post.assert_any_call("ports", '[{"v": 30}]')
         
     def test_single_unis_put(self):
         # Arrange
@@ -469,7 +469,7 @@ class ClientTest(unittest.TestCase):
         requests.get.return_value = ClientTest._response()
         
         # Act
-        v = client.get('#/nodes')
+        v = client.get('nodes')
         
         # Assert
         requests.get.assert_called_once_with('http://localhost:8888/nodes?', verify=False, cert=None, headers=self._headers())
@@ -482,7 +482,7 @@ class ClientTest(unittest.TestCase):
         requests.get.return_value = ClientTest._response()
         
         # Act
-        v = client.get('#/nodes/test')
+        v = client.get('nodes/test')
         
         # Assert
         requests.get.assert_called_once_with('http://localhost:8888/nodes/test?', verify=False, cert=None, headers=self._headers())
@@ -496,7 +496,7 @@ class ClientTest(unittest.TestCase):
         
         # Act
         with self.assertRaises(Exception):
-            client.get('#/nodes')
+            client.get('nodes')
 
     @patch('unis.rest.unis_client.requests')
     def test_post(self, requests):
@@ -505,7 +505,7 @@ class ClientTest(unittest.TestCase):
         requests.post.return_value = ClientTest._response()
         
         # Act
-        v = client.post('#/nodes', { 'v': 10 })
+        v = client.post('nodes', { 'v': 10 })
         
         # Assert
         requests.post.assert_called_once_with('http://localhost:8888/nodes', data='{"v": 10}', verify=False, cert=None)
@@ -532,7 +532,7 @@ class ClientTest(unittest.TestCase):
         
         # Act
         with self.assertRaises(Exception):
-            client.post('#/nodes', {'v': 10})
+            client.post('nodes', {'v': 10})
     
     @patch('unis.rest.unis_client.requests')
     def test_put(self, requests):
@@ -541,7 +541,7 @@ class ClientTest(unittest.TestCase):
         requests.put.return_value = ClientTest._response()
         
         # Act
-        v = client.put('#/nodes/test', { 'v': 10 })
+        v = client.put('nodes/test', { 'v': 10 })
         
         # Assert
         requests.put.assert_called_once_with('http://localhost:8888/nodes/test', data='{"v": 10}', verify=False, cert=None)
@@ -568,7 +568,7 @@ class ClientTest(unittest.TestCase):
         
         # Act
         with self.assertRaises(Exception):
-            client.put('#/nodes', {'v': 10})
+            client.put('nodes', {'v': 10})
     
     @patch('unis.rest.unis_client.requests')
     def test_delete(self, requests):
@@ -577,7 +577,7 @@ class ClientTest(unittest.TestCase):
         requests.delete.return_value = ClientTest._response()
         
         # Act
-        v = client.delete('#/nodes/test')
+        v = client.delete('nodes/test')
         
         # Assert
         requests.delete.assert_called_once_with('http://localhost:8888/nodes/test', verify=False, cert=None)
@@ -604,5 +604,5 @@ class ClientTest(unittest.TestCase):
         
         # Act
         with self.assertRaises(Exception):
-            client.delete('#/nodes', {'v': 10})
+            client.delete('nodes', {'v': 10})
     

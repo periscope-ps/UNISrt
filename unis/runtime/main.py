@@ -59,7 +59,7 @@ class Runtime(object):
         return self._settings
     
     @logging.debug("Runtime")
-    def __init__(self, url=None, defer_update=False, subscribe=True, auto_sync=True, inline=False):
+    def __init__(self, url=None, defer_update=False, subscribe=True, auto_sync=True, inline=False, **kwargs):
         self.log = settings.get_logger()
         self.log.info("Starting Unis network Runtime Environment...")
         
@@ -72,6 +72,8 @@ class Runtime(object):
         self.settings["subscribe"] = subscribe
         self.settings["auto_sync"] = auto_sync
         self.settings["inline"] = inline
+        if "preload" in kwargs:
+            self.settings["preload"] = kwargs["preload"]
         
         if url:
             url = url if isinstance(url, list) else [ url ]

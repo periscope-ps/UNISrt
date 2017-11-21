@@ -323,7 +323,7 @@ class CollectionIterator(object):
         if source:
             self.url = "{}/{}".format(source, ls.collection)
         else:
-            self.url = "#/{}".format(ls.collection)
+            self.url = "{}".format(ls.collection)
         self.limit = 100
         
     @logging.debug("CollectionIterator")
