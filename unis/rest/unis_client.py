@@ -23,15 +23,11 @@ loop = asyncio.new_event_loop()
 class UnisProxy(object):
     @trace.debug("UnisProxy")
     def __init__(self, conns):
-        async def _thread():
-            while True:
-                await asyncio.sleep(200)
-        
         re_str = 'http[s]?://([^:/]+)(:([0-9]{1,5}))?$'
         self.clients = {}
         self._session = None 
         self.default_source = "http://localhost:8888"
-        asyncio.get_event_loop().run_in_executor(None, loop.run_until_complete, _thread())
+        asyncio.get_event_loop().run_in_executor(None, loop.run_forever)
         for conn in conns:
             if conn.get("enabled", True):
                 if not re.compile(re_str).match(conn["url"]):
@@ -42,9 +38,12 @@ class UnisProxy(object):
     
     @trace.info("UnisProxy")
     def shutdown(self):
-        for client in self.clients.values():
-            client.shutdown()
-        loop.stop()
+        async def close():
+            list(map(lambda t: t.cancel(), [t for t in asyncio.Task.all_tasks(loop) if t != asyncio.Task.current_task(loop)]))
+            await asyncio.sleep(0.1)
+            loop.stop()
+            
+        asyncio.run_coroutine_threadsafe(close(), loop)
         self._session.close()
     
     @trace.info("UnisProxy")
@@ -197,11 +196,6 @@ class UnisClient(object):
             async for msg in ws:
                 msg = json.loads(msg)
                 list(map(lambda cb: cb(msg['data']), self._channels[msg['headers']['collection']]))
-        async def _updater(ws, init):
-            channels = set([init])
-            while True:
-                await asyncio.gather(*[ws.send(json.dumps({'query':{}, 'resourceType':c})) for c in channels - set(self._channels.keys())])
-                channels = set(self._channels.keys())
         
         if not self._shutdown:
             self._channels[collection].append(callback)
@@ -209,8 +203,9 @@ class UnisClient(object):
                 m = re.match('http[s]?://(?P<host>[^:/]+)(?::(?P<port>[0-9]{1,5}').compile(self._url)
                 url = 'ws{}://{}:{}/subscribe/{}'.format("s" if self._ssl else "", m.group('host'), m.group('port') or 80, collection)
                 self._socket = await websockets.connect(url, self._ssl)
-                self._threads.append(asyncio.ensure_future(_updater(self._socket, collection), loop=loop))
-                self._threads.append(asyncio.ensure_future(_listen(self._socket), loop=loop))
+                asyncio.run_coroutine_threadsafe(_updater(self._socket, collection), loop)
+            else:
+                await self._socket.send(json.dumps({'query':{}, 'resourceType':collection}))
         
     @trace.debug("UnisClient")
     def _build_query(self, args, **kwargs):
