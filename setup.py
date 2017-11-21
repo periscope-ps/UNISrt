@@ -61,7 +61,8 @@ setup(
         "websocket-client",
         "requests",
         "jsonschema",
-        "bson"
+        "bson",
+        "uritools"
     ],
     cmdclass={'test': tester },
     entry_points = {
