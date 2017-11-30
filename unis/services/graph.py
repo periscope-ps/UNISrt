@@ -10,12 +10,12 @@ class UnisGrapher(RuntimeService):
     targets = [ Node, Link ]
 
     def new(self, resource):
-        if not hasattr(self._runtime, "graph"):
-            self._runtime.graph = Graph(db=self._runtime)
+        if not hasattr(self.runtime, "graph"):
+            self.runtime.graph = Graph(db=self.runtime)
         if isinstance(resource, Node):
             if not hasattr(resource, "svg"):
                 resource.svg = { "x": 0, "y": 0, "active": False }
-                self._runtime.graph.vertices.append(resource)
+                self.runtime.graph.vertices.append(resource)
             l4_addr = []
             for port in resource.ports:
                 if hasattr(port, "address") and getattr(port.address, "type", None) == "ipv4":
@@ -36,5 +36,5 @@ class UnisGrapher(RuntimeService):
                 if isinstance(resource.endpoints[1], Port):
                     resource.endpoints[1].link = resource
                 if len(resource.endpoints) == 2 and all(map(lambda x: hasattr(x, "node"), resource.endpoints)):
-                    self._runtime.graph.edges.append((resource.endpoints[0].node, resource.endpoints[1].node))
-                    self._runtime.graph.edges.append((resource.endpoints[1].node, resource.endpoints[0].node))
+                    self.runtime.graph.edges.append((resource.endpoints[0].node, resource.endpoints[1].node))
+                    self.runtime.graph.edges.append((resource.endpoints[1].node, resource.endpoints[0].node))

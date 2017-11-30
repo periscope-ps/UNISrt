@@ -1,6 +1,6 @@
 import asyncio
-import re
 import uuid
+import urllib
 
 from collections import defaultdict
 from lace.logging import trace
@@ -11,7 +11,7 @@ from unis.rest import UnisProxy
 
 class ObjectLayer(object):
     @trace.debug("OAL")
-    def __init__(self, runtime):
+    def __init__(self):
         async def _build_cols():
             def get_name(r):
                 return re.compile('http[s]?://([^:/]+)(?::([0-9]{1,5}))?/(?P<col>[a-zA-Z]+)$').match(r["href"]).group("col")
@@ -23,7 +23,8 @@ class ObjectLayer(object):
                     futures.append(UnisCollection.new_collection(name, cls, self))
             for c in await asyncio.gather(*futures):
                 self._cache[c.name] = c
-            
+        
+        runtime = Runtime()
         self.__dict__.update(**{"settings": runtime.settings, "_cache": {}, "_models": {}, "_rt": runtime,
                               "_unis": UnisProxy(runtime.settings["unis"]), "_pending": set()})
         asyncio.get_event_loop().run_until_complete(_build_cols())
@@ -47,7 +48,7 @@ class ObjectLayer(object):
         if not self._pending:
             return
         cols = defaultdict(list)
-        list(map(lambda r: cols[r.getCollection()].append(r), self._pending))
+        list(map(lambda r: cols[r.getCollection().name].append(r), self._pending))
         asyncio.get_event_loop().run_until_complete(asyncio.gather(*[self._do_update(v,k) for k,v in cols.items()]))
         
     @trace.info("OAL")

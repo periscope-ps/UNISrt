@@ -7,6 +7,7 @@ from lace.logging import trace
 
 from unis.utils import Events, Index
 from unis.models import schemaLoader
+from unis.rest import UnisProxy
 
 class UnisCollection(object):
     async def _mock(self):
@@ -14,11 +15,6 @@ class UnisCollection(object):
     @classmethod
     @trace.debug("UnisCollection")
     async def new_collection(cls, name, model, runtime):
-        @trace.debug("UnisCollection")
-        async def _get_stubs():
-            result = list(await runtime._unis.get(name, None, {"fields": "selfRef"}))
-            return result
-        
         preload = False
         stubs = {}
         for v in await _get_stubs():
@@ -27,16 +23,18 @@ class UnisCollection(object):
             except KeyError:
                 continue
         collection = cls(name, model, runtime, stubs)
+        await collection._get_stubs()
         if runtime.settings["cache"]["mode"] == "greedy" or name in runtime.settings["preload"]:
             await collection._complete_cache()
         return collection
     
     @trace.debug("UnisCollection")
-    def __init__(self, name, model, runtime, stubs):
+    def __init__(self, name, model, runtime):
         self.name, self.model, self._rt = name, model, runtime
-        self._cache, self._stubs = [], stubs
+        self._cache = []
         self._block_size = 10
         self._indices, self._services = {}, []
+        self._unis = UnisProxy(name)
         self.createIndex("id")
         self.createIndex("selfRef")
         self._loop = asyncio.get_event_loop()
@@ -71,20 +69,16 @@ class UnisCollection(object):
     
     @trace.info("UnisCollection")
     def get(self, hrefs):
-        hrefs = hrefs if isinstance(hrefs, list) else [hrefs]
-        to_get = []
-        for href in hrefs:
-            if not self._stubs[href]:
-                to_get.append(href.rsplit("/", 1)[1])
+        to_get = [v.rsplit('/', 1)[1] for v in list(hrefs) if not self._stubs[v]]
         if to_get:
             self._loop.run_until_complete(self._get_next(to_get))
-        return self._stubs[hrefs[0]] if len(hrefs) == 1 else [ self._stub[href] for href in hrefs ]
+        return self._stubs[list(hrefs)[0]] if (hrefs) == 1 else [self._stub[href] for href in hrefs]
     
     @trace.info("UnisCollection")
     def append(self, item):
         self._check_record(item)
         item.setRuntime(self._rt)
-        item.setCollection(self.name)
+        item.setCollection(self)
         i = self._indices['id'].index(item)
         if i:
             self.__setitem__(i, item)
@@ -149,16 +143,21 @@ class UnisCollection(object):
         for key, index in self._indices.items():
             index.update(i, v)
     
+    @trace.info("UnisCollection")
+    async def addSource(self, hrefs):
+        self._unis.addSource(self.name, hrefs)
+        self._stubs.update({ k: v for k,v in await self._unis.getStubs().items() if k not in self._stubs })
+    
+    @trace.info("UnisCollection")
+    def addService(self, service):
+        self._services.append(service)
+    
     @trace.debug("UnisCollection")
     def _check_record(self, v):
         if self.model._rt_schema["name"] not in v.names:
             raise TypeError("Resource not of correct type: got {}, expected {}".format(self.model, type(v)))
         if v._rt_runtime and v._rt_runtime != self._rt:
             raise TypeError("Resource already member of another runtime")
-    
-    @trace.info("UnisCollection")
-    def addService(self, service):
-        self._services.append(service)
     
     @trace.debug("UnisCollection")
     def _serve(self, ty, v):
@@ -168,32 +167,8 @@ class UnisCollection(object):
     
     @trace.debug("UnisCollection")
     async def _complete_cache(self):
-        async def worker(jobs):
-            job = await jobs.get()
-            resources = []
-            while job:
-                start, batch = job
-                resources.extend(await self._from_unis(start, batch))
-                job = await jobs.get()
-            await jobs.put(None)
-            return resources
+        list(map(lambda x: self.append(schemaLoader.get_class(v['$schema'])(x, self._rt)), await self._unis.getAll()))
         
-        jobs = asyncio.Queue()
-        loop = asyncio.get_event_loop()
-        skip = 0
-        for start in range(0, len(self._stubs), self._rt.settings["proxy"]["batch"]):
-            jobs.put_nowait((start, self._rt.settings["proxy"]["batch"]))
-        jobs.put_nowait(None)
-        
-        workers = [asyncio.ensure_future(worker(jobs), loop=loop) for _ in range(self._rt.settings["proxy"]["threads"])]
-        results = await asyncio.gather(*workers)
-        
-        for v in itertools.chain(*results):
-            model = schemaLoader.get_class(v["$schema"])
-            self.append(model(v, self._rt))
-        self._complete_cache = self._mock
-        self._get_next = self._mock
-    
     @trace.debug("UnisCollection")
     async def _get_next(self, ids=[]):
         todo = (href.rsplit("/", 1)[1] for href,stub in self._stubs.items() if not stub)
@@ -231,7 +206,7 @@ class UnisCollection(object):
             except KeyError:
                 raise ValueError("No schema in message from UNIS")
             self.append(resource)
-        asyncio.run_until_complete(self._rt._unis.subscribe(self.name, cb))
+        asyncio.run_until_complete(self._unis.subscribe(cb))
         self._subscribe = lambda: None
     
     @trace.debug("UnisCollection")
@@ -239,7 +214,7 @@ class UnisCollection(object):
         self._subscribe()
         loop = asyncio.get_event_loop()
         kwargs.update({"skip": start, "limit": size})
-        result = await self._rt._unis.get(self.name, None, kwargs)
+        result = await self._unis.get(None, kwargs)
         return result if isinstance(result, list) else [result]
         
 
@@ -259,5 +234,3 @@ class UnisCollection(object):
     def __iter__(self):
         self._loop.run_until_complete(self._complete_cache())
         return iter(self._cache)
-    
-        

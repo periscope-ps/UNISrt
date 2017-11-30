@@ -12,7 +12,14 @@ from unis import settings
 from unis.runtime.oal import ObjectLayer
 from unis.models.models import UnisObject
 
-class Runtime(object):
+class _Singleton(type):
+    instance = None
+    def __call__(cls, urls=None, **kwargs):
+        instance = instance or super(_Singleton, cls).__new__(cls)
+        instance._rt_init(urls or ['http://localhost:8888'], **kwargs)
+        return instance
+        
+class Runtime(metaclass=_Singleton):
     @property
     def settings(self):
         if not hasattr(self, "_settings"):
@@ -35,27 +42,23 @@ class Runtime(object):
         return self._settings
     
     @trace.debug("Runtime")
-    def __init__(self, url=None, defer_update=True, subscribe=None):
+    def __init__(self):
         self.log = logging.getLogger()
         self.log.info("Starting Unis network Runtime Environment...")
+        self._services = []
         
         signal.signal(signal.SIGINT, self.shutdown)
         signal.signal(signal.SIGTERM, self.shutdown)
         atexit.register(self.shutdown)
         
-        self._services = []
-        self.settings["defer_update"] = defer_update
-        if isinstance(subscribe, bool):
-            self.settings["proxy"]["subscribe"] = subscribe
+        self._oal = ObjectLayer()
         
-        if url:
-            urls = [u if isinstance(u,dict) else { 'url': u, 'verify': False, 'cert': None } for u in list(url)]
-            urls[0]["default"] = True
-            self.settings["unis"] = urls
-        
-        self._oal = ObjectLayer(self)
-        map(self.addService, self.settings["services"])
-        map(lambda x: getattr(self._oal, x).load(), self.settings["preload"])
+    def _rt_init(self, urls, **kwargs):
+        for k,v in kwargs:
+            self.settings[k] = {**self.settings[k], **v} if isinstance(v, dict) else v
+        self._oal.addSources(urls)
+        list(map(self.addService, self.settings['services']))
+        list(map(lambda x: getattr(self._oal, x).load(), self.settings['preload']))
         
     def __getattr__(self, n):
         if n != "_oal":
@@ -89,9 +92,11 @@ class Runtime(object):
             instance = module()
         if isinstance(service, type):
             instance = service()
-        if not isinstance(instance, RuntimeService):
+        if not issubclass(service, RuntimeService):
             raise ValueError("Service must by of type RuntimeService")
-        instance.attach(self)
+        if service not in self._services:
+            self._services.append(service)
+            instance.attach()
     
     @trace.info("Runtime")
     def shutdown(self, sig=None, frame=None):

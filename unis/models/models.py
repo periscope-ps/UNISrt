@@ -186,16 +186,16 @@ class UnisObject(_unistype):
     @trace.debug("UnisObject")
     def _update(self, ref):
         if ref in self._rt_remote and self._rt_runtime:
-            self._rt_runtime.update(self)
+            self._rt_collection.update(self)
     @trace.debug("UnisObject")
     def _get_reference(self, n):
         return n
     @trace.info("UnisObject")
-    def poke(self):
+    def touch(self):
         if self.selfRef:
             self.__dict__['ts'] = int(time.time() * 1000000)
             payload = json.dumps({'ts': self.ts})
-            asyncio.run_until_complete(self._rt_runtime._unis.put(self.selfRef, payload))
+            asyncio.run_until_complete(self._rt_collection._unis.put(self.selfRef, payload))
     @trace.info("UnisObject")
     def getSource(self):
         return self._rt_source
@@ -210,11 +210,11 @@ class UnisObject(_unistype):
         if not self._rt_runtime:
             raise AttributeError("Resource must be attached to a Runtime instance to commit")
         if not self.selfRef and self._rt_collection:
-            url = publish_to or self._rt_runtime._unis.default_source
+            url = publish_to or self._rt_runtime.settings['default_source']
             assert(re.compile("http[s]?://([^:/]+)(?::[0-9]{1,5})$").match(url))
             self._rt_source = url
             self.__dict__['ts'] = int(time.time() * 1000000)
-            self.__dict__['selfRef'] = "{}/{}/{}".format(url, self._rt_collection, self.id)
+            self.__dict__['selfRef'] = "{}/{}/{}".format(url, self._rt_collection.name, self.id)
             self._update('id')
     @trace.info("UnisObject")
     def extendSchema(self, n, v=None):
@@ -280,6 +280,7 @@ class _SchemaCache(object):
             parents = [self.get_class(p['$ref']) for p in schema.get('allOf', [])] or [UnisObject]
             pmeta = [type(p) for p in parents]
             meta = _schemaFactory(schema,class_name or schema['name'], pmeta)
+            _CACHE[schema['id']] = schema
             self._CLASSES[schema_uri] = meta(class_name or schema['name'], tuple(parents), {})
             return self._CLASSES[schema_uri]
         return self._CLASSES.get(schema_uri, None) or _make_class()

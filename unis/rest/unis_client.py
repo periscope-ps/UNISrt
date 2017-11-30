@@ -22,18 +22,16 @@ class UnisReferenceError(UnisError):
 loop = asyncio.new_event_loop()
 class UnisProxy(object):
     @trace.debug("UnisProxy")
-    def __init__(self, conns):
+    def __init__(self, collection, runtime):
         re_str = 'http[s]?://([^:/]+)(:([0-9]{1,5}))?$'
         self.clients = {}
-        self._session = None 
-        self.default_source = "http://localhost:8888"
+        self._session = None
+        self._rt_runtime = runtime
         asyncio.get_event_loop().run_in_executor(None, loop.run_forever)
         for conn in conns:
             if conn.get("enabled", True):
                 if not re.compile(re_str).match(conn["url"]):
                     raise ValueError("unis url is malformed - {}".format(conn["url"]))
-                if "default" in conn and conn["default"]:
-                    self.default_source = conn["url"]
                 self.clients[conn['url']] = UnisClient(conn, self)
     
     @trace.info("UnisProxy")
@@ -60,21 +58,21 @@ class UnisProxy(object):
             return results
     
     @trace.info("UnisProxy")
-    async def get(self, href, source=None, kwargs={}):
+    async def get(self, source=None, kwargs=None):
         if not self._session:
             self._session = aiohttp.ClientSession()
         if source:
             if source in self.clients:
-                result = await self.clients[source].get(href, kwargs)
+                result = await self.clients[source].get(kwargs or {})
                 return result if isinstance(result, list) else [result]
             else:
                 raise ValueError("No unis instance at requested location - {}".format(source))
         else:
             try:
-                result = await self.clients[self._source_from_ref(href)].get(href, kwargs)
+                result = await self.clients[self._source_from_ref(href)].get(kwargs)
                 return result if isinstance(result, list) else [result]
             except ValueError:
-                return await self._query_all([client.get for client in self.clients.values()], href, kwargs)
+                return await self._query_all([client.get for client in self.clients.values()], kwargs)
     
     @trace.info("UnisProxy")
     async def post(self, resources):
@@ -83,8 +81,8 @@ class UnisProxy(object):
         msgs = {}
         resources = resources if isinstance(resources, list) else [resources]
         for resource in resources:
-            source = resource.getSource() or self.default_source
-            col = resource.getCollection()
+            source = resource.getSource() or self._rt_runtime.settings['default_source']
+            col = resource.getCollection().name
             k = "{}.{}".format(source, col)
             if k not in msgs:
                 msgs[k] = (source, col, [])
@@ -106,7 +104,7 @@ class UnisProxy(object):
     async def delete(self, data):
         if not self._session:
             self._session = aiohttp.ClientSession()
-        source = data.getSource() or self.default_source
+        source = data.getSource() or self._rt_runtime.settings['default_source']
         if source in self.clients:
             return await self.clients[source].delete(data.to_JSON())
         else:
@@ -162,8 +160,8 @@ class UnisClient(object):
             return await self._check_response(resp, False)
                 
     @trace.info("UnisClient")
-    async def get(self, url, kwargs={}):
-        args = self._get_conn_args(url)
+    async def get(self, kwargs={}):
+        args = self._get_conn_args()
         args["url"] = self._build_query(args, **kwargs)
         async with self._proxy._session.get(args['url'], verify_ssl=self._verify, ssl_context=self._ssl, headers=args["headers"]) as resp:
             return await self._check_response(resp, False)

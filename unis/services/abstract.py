@@ -1,4 +1,4 @@
-
+from unis import Runtime
 
 class ServiceMetaclass(type):
     def __init__(cls, name, bases, kwargs):
@@ -22,8 +22,8 @@ class RuntimeService(metaclass=ServiceMetaclass):
             for target in targets:
                 self.targets.append(target)
         super(RuntimeService, self).__init__()
-    def attach(self, runtime):
-        self._runtime = runtime
+    def attach(self):
+        self.runtime = Runtime()
         if self.targets:
             for target in self.targets:
                 if target in self._runtime:
