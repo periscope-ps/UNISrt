@@ -6,7 +6,7 @@ import uuid
 import re
 
 from unis.utils.pubsub import Events
-from unis.models.models import schemaLoader
+from unis.models import schemaLoader
 from unis import logging
 
 class DataCollection(object):

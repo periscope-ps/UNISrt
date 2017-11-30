@@ -7,7 +7,7 @@ import uritools
 
 from concurrent.futures import ThreadPoolExecutor
 
-from unis.runtime.settings import MIME
+from unis.settings import MIME
 from unis import logging
 
 class UnisError(Exception):

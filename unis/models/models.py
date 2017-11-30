@@ -1,15 +1,13 @@
-import copy
-import datetime
-import httplib2
+import itertools
 import json
 import jsonschema
+import os
+import re
+import requests
 import time
-import weakref
-import tempfile
 import uritools
 
-from unis.models.settings import SCHEMAS, JSON_SCHEMA_SCHEMA, JSON_SCHEMA_HYPER, \
-    JSON_SCHEMA_LINKS, JSON_SCHEMAS_ROOT, SCHEMAS_LOCAL
+from unis.settings import SCHEMA_CACHE_DIR
 from unis.utils.pubsub import Events
 from unis import logging
 
@@ -620,17 +618,108 @@ class SchemasHTTPLib2(SchemasLoader):
         self._CACHE[uri] = json.loads(content.decode())
         return self._CACHE[uri]
 
-"""Load a locally stored copy of the schemas if requested."""
-if SCHEMAS_LOCAL:
-    for s in SCHEMAS.keys():
-        try:
-            CACHE[SCHEMAS[s]] = json.loads(open(JSON_SCHEMAS_ROOT + "/" + s).read())
-        except Exception as e:
-            print("Error loading cached schema for {0}: {1}".format(e, s))
+_CACHE = {}
+if SCHEMA_CACHE_DIR:
+    try:
+        os.makedirs(SCHEMA_CACHE_DIR)
+    except FileExistsError:
+        pass
+    except OSError as exp:
+        raise exp
+    for n in os.listdir(SCHEMA_CACHE_DIR):
+        with open(SCHEMA_CACHE_DIR + "/" + n) as f:
+            schema = json.load(f)
+            _CACHE[schema['id']] = schema
 
-http_client = httplib2.Http()
-schemaLoader = SchemasHTTPLib2(http_client, cache=CACHE)
+def schemaMetaFactory(name, schema, parents = [JSONObjectMeta], loader=None):
+    assert isinstance(schema, dict), "schema is not of type dict"
+    class SchemaMetaClass(*parents):
+        def __init__(cls, name, bases, classDict):
+            super(SchemaMetaClass, cls).__init__(name=name, bases=bases, classDict=classDict)
+            cls.names = [name]
+            for base in bases:
+                cls.names.extend(base.names)
+            cls._schema = schema
+            cls._schemaLoader = loader
+            cls._models = {}
+            cls._resolver = jsonschema.RefResolver(schema["id"], schema, _CACHE)
+            cls.__doc__ = schema.get("description", None)
+            
+                # This is a good idea, but it requires a ton more work to function correctly with HyperSchema
+                #if v.get("type", None) == "array" and "items" in v and "$ref" in v["items"]:
+                #    cls._models[k] = loader.get_class(v["items"]["$ref"])
+        
+        def __call__(meta, *args, **kwargs):
+            # TODO:
+            #      Revisit how to move this to class __init__ instead of __call__
+            instance = super(SchemaMetaClass, meta).__call__(*args, **kwargs)
+            instance.__dict__["$schema"] = meta._schema["id"]
+            if schema.get("type", "object") == "object":
+                for k, v in schema.get("properties", {}).items():
+                    if k not in instance.__dict__:
+                        if k in instance.__meta__:
+                            instance.__dict__[k] = instance.__meta__[k]
+                        else:
+                            ty = "null"
+                            defaults = { "null": None, "string": "", "boolean": False, "integer": 0, "number": 0, "object": {}, "array": [] }
+                            if "anyOf" in v:
+                                for t in v["anyOf"]:
+                                    if "type" in t:
+                                        ty = t["type"]
+                                        break
+                                        
+                            instance.__dict__[k] = v.get("default", defaults.get(v.get("type", ty), None))
+            return instance
+            
+    return SchemaMetaClass
 
-JSONSchema = schemaLoader.get_class(JSON_SCHEMA_SCHEMA, "JSONSchema")
-HyperSchema = schemaLoader.get_class(JSON_SCHEMA_HYPER, "HyperSchema")
-HyperLink = schemaLoader.get_class(JSON_SCHEMA_LINKS, "HyperLink")
+            
+def _schemaFactory(schema, n, tys):
+    class _jsonMeta(*tys):
+        def __init__(cls, name, bases, attrs):
+            def _value(v):
+                tys = {'null': None, 'string': "", 'boolean': False, 'number': 0, 'integer': 0, 'object': {}, 'array': []}
+                return v.get('default', tys[v.get('type', 'null')])
+            _props = lambda s: {k:_value(v) for k,v in s.get('properties', {}).items()}
+            cls.names, cls._rt_defaults = set(), {}
+            super(_jsonMeta, cls).__init__(name, bases, attrs)
+            cls.names.append(n)
+            cls._rt_defaults.update({k:v for k,v in _props(schema).items()})
+            cls._schema, cls._rt_resolver = schema, jsonschema.RefResolver(schema['id'], schema, _CACHE)
+            cls.__doc__ = schema.get('description', None)
+            
+    return _jsonMeta
+
+class _SchemaCache(object):
+    _CLASSES = {}
+    def get_class(self, schema_uri, class_name=None):
+        def _make_class():
+            schema = _CACHE.get(schema_uri, None) or requests.get(schema_uri).json()
+            if SCHEMA_CACHE_DIR and schema_uri not in _CACHE:
+                with open(SCHEMA_CACHE_DIR + "/" + schema['id'].replace('/', ''), 'w') as f:
+                    json.dump(schema, f)
+
+            ### TODO ###
+            # Make parent resolution work for all types of allof fields
+            ############
+            parent_uri = schema.get("allOf", [])
+            parent_metas = []
+            parents = []
+            if parent_uri:
+                for parent in parent_uri:
+                    if "$ref" in parent:
+                        assert uritools.urisplit(parent['$ref']).authority, '$ref in allof must be a fully qualified domain name'
+                        cls = self.get_class(parent["$ref"])
+                        parents.append(cls)
+                        parent_metas.append(type(cls))
+                    else:
+                        raise AttributeError("allof must be remote references")
+            else:
+                parents = [UnisObject]
+                parent_metas = [JSONObjectMeta]
+
+            meta = schemaMetaFactory("{n}Meta".format(n = class_name), schema, parent_metas, self)
+            _CACHE[schema['id']] = schema
+            self._CLASSES[schema_uri] = meta(class_name or schema['name'], tuple(parents), {})
+            return self._CLASSES[schema_uri]
+        return self._CLASSES.get(schema_uri, None) or _make_class()

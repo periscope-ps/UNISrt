@@ -5,11 +5,11 @@ import signal
 import sys
 
 from unis.services import RuntimeService
-from unis.runtime import settings
 from unis.runtime.oal import ObjectLayer
 from unis.utils.pubsub import Events
 from unis.models.models import UnisObject
 from unis import logging
+from unis import settings
 
 class RuntimeMeta(type):
     instances = {}
