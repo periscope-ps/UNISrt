@@ -26,8 +26,8 @@ import unis
 import unis.runtime
 import unis.runtime.oal
 
+from unis.settings import SCHEMAS
 from unis.models import Node
-from unis.models.settings import SCHEMAS
 from unis.services import RuntimeService
 from unis.runtime.oal import ObjectLayer
 from unis.runtime import Runtime
