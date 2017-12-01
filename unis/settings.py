@@ -79,7 +79,7 @@ SCHEMAS = {
 
 RTUSER_ROOT = os.path.expandvars("$RTUSER_ROOT")
 if RTUSER_ROOT is "$RTUSER_ROOT":
-    RTUSER_ROOT="/var/unis"
+    RTUSER_ROOT=os.path.expanduser("~/.unis")
 
 SCHEMA_CACHE_DIR = os.path.join(RTUSER_ROOT, ".cache")
 
