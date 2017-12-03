@@ -293,8 +293,8 @@ class UnisObject(metaclass = JSONObjectMeta):
         self.__reserved__["_dirty"] = False
         self.__reserved__["_local"] = local_only
         self.__reserved__["_waiting_on"] = set()
-        self.__reserved__["_source"] = uritools.urijoin(self.selfRef, '/') if "selfRef" in src else None
-        
+        self.__reserved__["_source"] = uritools.urijoin(self.selfRef, '/').strip('/') if "selfRef" in src else None
+
     def __getattribute__(self, n):
         if n in ["get_virtual", "__dict__", "__reserved__"]:
             return super(UnisObject, self).__getattribute__(n)

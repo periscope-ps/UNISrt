@@ -282,11 +282,23 @@ class UnisCollection(object):
     @logging.debug("UnisCollection")
     def _subscribe(self):
         def _callback(v):
-            if "\\$schema" in v.get("data", {}):
-                model = schemaLoader.get_class(v["data"]["\\$schema"])
+            header = v.get("headers", {})
+            data = v.get("data", {})
+            if "\\$schema" in data:
+                model = schemaLoader.get_class(data["\\$schema"])
+            elif "$schema" in data:
+                model = schemaLoader.get_class(data["$schema"])
             else:
                 raise ValueError("Bad message from UNIS")
-            resource = model(v["data"], self._runtime, local_only=False)
+
+            # PUT updates may only be a partial set of attributes on the complete object
+            # thus we need to merge with the existing object to prevent overwriting
+            # our local state with model defaults
+            if "action" in header and header["action"] == "PUT":
+                old = self._fromId(data["id"]).to_JSON()
+                resource = model({**old, **data}, self._runtime, local_only=False)
+            else:
+                resource = model(v["data"], self._runtime, local_only=False)
             try:
                 while self.locked:
                     pass
