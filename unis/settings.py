@@ -4,7 +4,9 @@ import sys
 ##################################################################
 # UNISrt Configuration
 ##################################################################
-CONFIGFILE = None
+CONFIGFILE = os.path.expandvars("$RTUSER_CONFIG")
+if CONFIGFILE is "$RTUSER_CONFIG":
+    CONFIGFILE=os.path.expanduser("~/.unis/rt.conf")
 
 DEFAULT_CONFIG = {
     "unis": [
