@@ -295,7 +295,7 @@ class UnisCollection(object):
             # thus we need to merge with the existing object to prevent overwriting
             # our local state with model defaults
             if "action" in header and header["action"] == "PUT":
-                old = self._fromId(data["id"]).to_JSON()
+                old = self._runtime.find(data['selfRef']).to_JSON()
                 resource = model({**old, **data}, self._runtime, local_only=False)
             else:
                 resource = model(v["data"], self._runtime, local_only=False)
