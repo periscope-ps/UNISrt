@@ -54,9 +54,10 @@ class Runtime(object):
         self.log = settings.get_logger()
         self.log.info("Starting Unis network Runtime Environment...")
         
-        signal.signal(signal.SIGINT, self.shutdown)
-        signal.signal(signal.SIGTERM, self.shutdown)
-        atexit.register(self.shutdown)
+        if subscribe:
+            signal.signal(signal.SIGINT, self.shutdown)
+            signal.signal(signal.SIGTERM, self.shutdown)
+            atexit.register(self.shutdown)
         
         self._services = []
         self.settings["defer_update"] = defer_update
@@ -64,8 +65,14 @@ class Runtime(object):
         self.settings["auto_sync"] = auto_sync
         self.settings["inline"] = inline
         if url:
-            self.settings["unis"]["url"] = url
-        self._oal = ObjectLayer(runtime=self, **self.settings["unis"])
+            url = url if isinstance(url, list) else [ url ]
+            urls = []
+            for unis in url:
+                urls.append(unis if isinstance(unis, dict) else { 'url': unis, 'verify': False, 'cert': None })
+            urls[0]['default'] = True
+            self.settings["unis"] = urls
+
+        self._oal = ObjectLayer(self)
         
         for service in self.settings["services"]:
             self.addService(service)

@@ -196,7 +196,7 @@ class UnisCollection(object):
             for i, v in enumerate(self._cache):
                 if v == item:
                     return i
-            raise ValueError("Item does not exist in collection")
+            raise ValueError("{}.{} does not exist in collection".format(self.collection, item.id))
             
         i = get_index()
         for k, ls in self._indices.items():
