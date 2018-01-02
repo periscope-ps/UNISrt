@@ -93,7 +93,7 @@ class DataCollection(object):
 
 class UnisCollection(object):
     @logging.debug("UnisCollection")
-    def __init__(self, href, collection, model, runtime, auto_sync=True, subscribe=False):
+    def __init__(self, href, collection, model, runtime, auto_sync=True, subscribe=True):
         self._cache = []
         self._services = []
         self._indices = { "id": []}
@@ -106,11 +106,10 @@ class UnisCollection(object):
         self.collection = collection
         self.locked = False
         
-        if not subscribe or collection not in subscribe:
+        if not subscribe or (type(subscribe) is dict and collection not in subscribe):
             self._subscribe = lambda: None
-        elif collection in subscribe:
+        elif type(subscribe) is dict and collection in subscribe:
             self._user_callback = subscribe.get(collection, None)
-            
         
     def __repr__(self):
         if getattr(self, '_full', False):
