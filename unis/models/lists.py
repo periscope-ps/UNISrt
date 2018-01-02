@@ -93,7 +93,7 @@ class DataCollection(object):
 
 class UnisCollection(object):
     @logging.debug("UnisCollection")
-    def __init__(self, href, collection, model, runtime, auto_sync=True, subscribe=True):
+    def __init__(self, href, collection, model, runtime, auto_sync=True, subscribe=False):
         self._cache = []
         self._services = []
         self._indices = { "id": []}
@@ -102,11 +102,15 @@ class UnisCollection(object):
         self._rangeset = set()
         self._do_sync = auto_sync
         self._full = False
+        self._user_callback = None
         self.collection = collection
         self.locked = False
         
-        if not subscribe:
+        if not subscribe or collection not in subscribe:
             self._subscribe = lambda: None
+        elif collection in subscribe:
+            self._user_callback = subscribe.get(collection, None)
+            
         
     def __repr__(self):
         if getattr(self, '_full', False):
@@ -305,7 +309,11 @@ class UnisCollection(object):
                 self.append(resource)
             except ValueError:
                 pass
-        
+
+            # once RT update completes, fire the user callback
+            if self._user_callback:
+                self._user_callback(resource)
+            
         self._runtime._unis.subscribe(self.collection, _callback)
         self._subscribe = lambda: None
     
