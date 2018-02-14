@@ -1,42 +1,49 @@
 import bisect
+import functools
 
 from lace.logging import trace
 
 from unis.utils.pubsub import Events
+from unis.models.models import UnisObject
 
 class Index(object):
     @trace.debug("Index")
     def __init__(self, key):
         self.key = key
-        self._ls = []
+        self._keys, self._indices, self._items = [], [], []
     
     @trace.info("Index")
     def index(self, item):
-        for k,i in self._ls:
-            if k == getattr(item, self.key, None):
-                return i
-        return None
+        try:
+            v = getattr(item, self.key) if isinstance(item, UnisObject) else item
+        except AttributeError:
+            return None
+        s = bisect.bisect_left(self._keys, v)
+        
+        for i in range(s, len(self._keys)):
+            if self._items[i] == item:
+                return self._indices[i]
     
     @trace.info("Index")
     def subset(self, rel, v):
-        keys = [item[0] for item in self._ls]
-        values = [item[1] for item in self._ls]
         slices = {
-            "gt": lambda: set(values[bisect.bisect_right(keys, v):]),
-            "ge": lambda: set(values[bisect.bisect_left(keys, v):]),
-            "lt": lambda: set(values[:bisect_left(keys, v)]),
-            "le": lambda: set(values[:bisect_right(keys, v)]),
-            "eq": lambda: set(values[bisect.bisect_left(keys, v):bisect.bisect_right(keys, v)])
+            "gt": lambda: set(self._indices[bisect.bisect_right(self._keys, v):]),
+            "ge": lambda: set(self._indices[bisect.bisect_left(self._keys, v):]),
+            "lt": lambda: set(self._indices[:bisect_left(self._keys, v)]),
+            "le": lambda: set(self._indices[:bisect_right(self._keys, v)]),
+            "eq": lambda: set(self._indices[bisect.bisect_left(self._keys, v):bisect.bisect_right(self._keys, v)])
         }
         return slices[rel]()
         
     @trace.info("Index")
-    def update(self, i, item):
-        try:
-            self._ls = [ x for x in self._ls if x[1] != i ]
-            v = getattr(item, self.key)
-            self._ls.insert(bisect.bisect_left([x[0] for x in self._ls], v), (v, i))
-        except ValueError:
-            pass
-        except AttributeError:
-            pass
+    def update(self, index, item):
+        i = functools.reduce(lambda a,b: b if b == index else a, self._indices, None)
+        if i:
+            self._keys.pop(i)
+            self._indices.pop(i)
+            self._items.pop(i)
+        key = getattr(item, self.key, None)
+        i = bisect.bisect_left(self._keys, key)
+        self._keys.insert(i, key)
+        self._indices.insert(i, index)
+        self._items.insert(i, item)

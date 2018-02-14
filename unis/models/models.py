@@ -9,89 +9,135 @@ import time
 
 from lace.logging import trace
 
-#from unis.settings import SCHEMA_CACHE_DIR
-#TESTING
-SCHEMA_CACHE_DIR = "/home/jemusser/smith/UNISrt/.cache"
+from unis.settings import SCHEMA_CACHE_DIR
 
 class _attr(object):
     def __init__(self, default=None):
-        self._default = default
-        self.__values__ = {}
+        self._default, self.__values__ = default, {}
     def __get__(self, obj, cls):
         return self.__values__.get(obj, self._default)
     def __set__(self, obj, v):
         self.__values__[obj] = v
     
+class Context(object):
+    _obj, _rt = _attr(), _attr()
+    def __init__(self, obj, runtime):
+        self._obj, self._rt = obj, runtime
+    def __getattribute__(self, n):
+        if not hasattr(type(self), n):
+            v = self._obj._getattribute(n, self._rt)
+            if callable(v):
+                return lambda *args, **kwargs: v(*args, ctx=self._rt, **kwargs)
+            return Context(v, self._rt) if isinstance(v, _unistype) else v
+        return super(Context, self).__getattribute__(n)
+    def __setattr__(self, n, v):
+        if hasattr(type(self), n):
+            return super(Context, self).__setattr__(n, v)
+        return self._obj._setattr(n, v, self._rt)
+    def __getitem__(self, i):
+        v = self._obj._getitem(i, self._rt)
+        return Context(v, self._rt) if isinstance(v, _unistype) else v
+    def __setitem__(self, i, v):
+        return self._obj._setitem(i, v, self._rt)
+    def __iter__(self):
+        for v in self._obj._iter(self._rt):
+            yield Context(v, self._rt) if isinstance(v, _unistype) else v
+    def __dir__(self):
+        return self._obj.__dir__()
+    def __repr__(self):
+        return self._obj.__repr__()
+    
+    def getRuntime(self):
+        return self._rt
+    def setRuntime(self, runtime):
+        self._rt = runtime
+    def getObject(self):
+        return self._obj
+
+class _nodefault(object): pass
 class _unistype(object):
-    _rt_parent, _rt_runtime = _attr(), _attr()
+    _rt_parent = _attr()
     _rt_source, _rt_raw, _rt_reference = _attr(), _attr(), _attr()
     _rt_restricted = []
     @trace.debug("unistype")
-    def __init__(self, v, rt, ref):
-        self._rt_runtime, self._rt_reference, self._rt_raw = rt, ref, self
+    def __init__(self, v, ref):
+        self._rt_reference, self._rt_raw, = ref, self
     
-    @trace.debug("unistype")
     def __getattribute__(self, n):
-        v = super(_unistype, self).__getattribute__(n)
+        if not hasattr(type(self), n):
+            if n in self._rt_restricted:
+                return self._getattribute(n, None)
+            raise NotImplementedError # This is for debugging purposes, this line should never be reached
+        return super(_unistype, self).__getattribute__(n)
+    @trace.debug("unistype")
+    def _getattribute(self, n, ctx, default=_nodefault()):
+        try:
+            v = super(_unistype, self).__getattribute__(n)
+        except AttributeError:
+            v = default
+            if isinstance(default, _nodefault):
+                raise
         if n != '__dict__' and n in self.__dict__:
-            self.__dict__[n] = self._lift(v, self._get_reference(n))
+            self.__dict__[n] = self._lift(v, self._get_reference(n), ctx)
             return self.__dict__[n]._rt_raw
         return v
     
     @trace.debug("unistype")
     def __setattr__(self, n, v):
+        if not hasattr(type(self), n):
+            raise NotImplementedError # This is for debugging purposes, this line should never be reached
+        return super(_unistype, self).__setattr__(n, v)
+    @trace.debug("unistype")
+    def _setattr(self, n, v, ctx):
         if n in self._rt_restricted:
             raise AttributeError("Cannot change restricted attribute {}".format(n))
         if hasattr(type(self), n):
             object.__setattr__(self, n, v)
         else:
             eq = lambda a,b: (isinstance(a, _unistype) and a._rt_raw == b._rt_raw) or a == b._rt_raw
-            newvalue = self._lift(v, self._get_reference(n))
-            if not eq(self.__dict__[n], newvalue):
-                super(_unistype, self).__setattr__(n, self._lift(v, self._get_reference(n)))
-                self._update(self._get_reference(n))
+            newvalue = self._lift(v, self._get_reference(n), ctx)
+            if n not in self.__dict__ or not eq(self.__dict__[n], newvalue):
+                super(_unistype, self).__setattr__(n, self._lift(v, self._get_reference(n), ctx))
+                self._update(self._get_reference(n), ctx)
     
     @trace.debug("unistype")
-    def _lift(self, v, ref):
+    def _lift(self, v, ref, ctx):
+        v = v.getObject() if isinstance(v, Context) else v
         if isinstance(v, _unistype):
             return v
         elif isinstance(v, dict):
             if '$schema' in v or 'href' in v:
-                v = self._rt_runtime.insert(v) if "$schema" in v else self._rt_runtime.find(v['href'])
+                v = ctx.insert(v) if "$schema" in v else ctx.find(v['href'])[0]
             else:
-                v =  Local(v, self._rt_runtime, ref)
+                v =  Local(v, ref)
         elif isinstance(v, list):
-            v = List(v, self._rt_runtime, ref)
+            v = List(v, ref)
         else:
-            v = Primitive(v, self._rt_runtime, ref)
+            v = Primitive(v, ref)
         v._rt_parent = self._rt_parent
         return v
     
     @trace.debug("unistype")
-    def _update(self, ref):
+    def _update(self, ref, ctx):
         if self._rt_parent:
-            self._rt_parent._update(ref)
+            self._rt_parent._update(ref, ctx)
     @trace.debug("unistype")
     def _get_reference(self, n):
         raise NotImplemented()
     @trace.info("unistype")
-    def to_JSON(self):
+    def to_JSON(self, ctx, top):
         raise NotImplemented()
-    @trace.info("unistype")
-    def setRuntime(self, rt):
-        self._rt_runtime = rt
-        map(lambda x: x.setRuntime(rt), [v for v in self.__dict__ if isinstance(v, _unistype)])
     
 class Primitive(_unistype):
     @trace.debug("Primitive")
-    def __init__(self, v, rt, ref):
-        super(Primitive, self).__init__(v, rt, ref)
+    def __init__(self, v, ref):
+        super(Primitive, self).__init__(v, ref)
         self._rt_raw = v
     @trace.debug("Primitive")
     def _get_reference(self, n):
         return self._rt_reference
     @trace.info("Primitive")
-    def to_JSON(self):
+    def to_JSON(self, ctx, top):
         return self._rt_raw
     @trace.none
     def __repr__(self):
@@ -100,25 +146,26 @@ class Primitive(_unistype):
 class List(_unistype):
     _rt_ls = _attr()
     @trace.debug("List")
-    def __init__(self, v, rt, ref):
-        super(List, self).__init__(v, rt, ref)
-        self._rt_ls = list(map(lambda x: self._lift(x, self._rt_reference), v))
+    def __init__(self, v, ref):
+        super(List, self).__init__(v, ref)
+        v = v if isinstance(v, list) else [v]
+        self._rt_ls = [x for x in v]
     @trace.debug("List")
-    def __getitem__(self, i):
-        return self._rt_ls[i]._rt_raw
+    def _getitem(self, i, ctx):
+        return self._lift(self._rt_ls[i], self._rt_reference, ctx)._rt_raw
     @trace.debug("list")
-    def __setitem__(self, i, v):
-        self._rt_ls[i] = self._lift(v, self._rt_reference)
+    def _setitem(self, i, v, ctx):
+        self._rt_ls[i] = self._lift(v, self._rt_reference, ctx)
         self._update(self._rt_reference)
     @trace.info("List")
-    def append(self, v):
-        self._rt_ls.append(self._lift(v, self._rt_reference))
-        self._update(self._rt_reference)
+    def append(self, v, ctx):
+        self._rt_ls.append(self._lift(v, self._rt_reference, ctx))
+        self._update(self._rt_reference, ctx)
     @trace.info("List")
-    def remove(self, v):
+    def remove(self, v, ctx):
         return self._rt_ls.remove(v)
     @trace.info("List")
-    def where(self, f):
+    def where(self, f, ctx):
         if isinstance(pred, types.FunctionType):
             return (v for v in filter(pred, self._rt_ls))
         else:
@@ -138,12 +185,12 @@ class List(_unistype):
     def _get_reference(self, n):
         return self._rt_reference
     @trace.info("List")
-    def to_JSON(self):
-        self._rt_ls = list(map(lambda x: self._lift(x, self._rt_reference), self._rt_ls))
-        return list(map(lambda x: x.to_JSON(), self._rt_ls))
+    def to_JSON(self, ctx, top):
+        self._rt_ls = [self._lift(x, self._rt_reference, ctx) for x in self._rt_ls]
+        return list(map(lambda x: x.to_JSON(ctx, top), [x for x in self._rt_ls if x._getattribute('selfRef', ctx, True)]))
     @trace.debug("List")
-    def __iter__(self):
-        self._rt_ls = list(map(lambda x: self._lift(x, self._rt_reference), self._rt_ls))
+    def _iter(self, ctx):
+        self._rt_ls = list(map(lambda x: self._lift(x, self._rt_reference, ctx), self._rt_ls))
         return map(lambda x: x._rt_raw, self._rt_ls)
     @trace.debug("List")
     def __len__(self):
@@ -157,103 +204,110 @@ class List(_unistype):
 
 class Local(_unistype):
     @trace.debug("Local")
-    def __init__(self, v, rt, ref):
-        super(Local, self).__init__(v, rt, ref)
-        self.__dict__ = v
+    def __init__(self, v, ref):
+        super(Local, self).__init__(v, ref)
+        for k,v in v:
+            self.__dict__[k] = v
     @trace.debug("Local")
     def _get_reference(self, n):
         return self._rt_reference
     @trace.info("Local")
-    def to_JSON(self):
-        return {k:self._lift(v, self._rt_reference).to_JSON() for k,v in self.__dict__.items()}
+    def to_JSON(self, ctx, top):
+        return {k:self._lift(v, self._rt_reference, ctx).to_JSON(ctx, top) for k,v in self.__dict__.items()}
     @trace.none
     def __repr__(self):
         return "<unis.Local {}>".format(self.__dict__.__repr__())
 
-class UnisObject(_unistype):
+class _metacontextcheck(type):
+    def __instancecheck__(self, other):
+        other = other.getObject() if hasattr(other, 'getObject') else other
+        return super(_metacontextcheck, self).__instancecheck__(other)
+class UnisObject(_unistype, metaclass=_metacontextcheck):
     _rt_remote, _rt_source, _rt_collection = _attr(), _attr(), _attr()
-    _rt_restricted = ["ts", "selfRef"]
+    _rt_restricted, _rt_live = ["ts", "selfRef"], False
     @trace.debug("UnisObject")
-    def __init__(self, v={}, rt=None, ref=None):
-        super(UnisObject, self).__init__(v, rt, ref)
-        self._rt_parent, self._rt_remote = self, set(v.keys()) | set(self._rt_defaults.keys())
+    def __init__(self, v=None, ref=None):
+        v = v or {}
+        super(UnisObject, self).__init__(v, ref)
+        self._rt_parent, self._rt_remote, self._rt_live = self, set(v.keys()) | set(self._rt_defaults.keys()), True
         self.__dict__.update({**self._rt_defaults, **v, **{'$schema': self._rt_schema['id']}})
         
     @trace.debug("UnisObject")
-    def __setattr__(self, n, v):
-        self.__dict__['ts'] = int(time.time() * 1000000)
-        super(UnisObject, self).__setattr__(n, v)
+    def _setattr(self, n, v, ctx):
+        if n in self.__dict__:
+            self.__dict__['ts'] = int(time.time() * 1000000)
+        super(UnisObject, self)._setattr(n, v, ctx)
     @trace.debug("UnisObject")
-    def _update(self, ref):
-        if ref in self._rt_remote and self._rt_runtime:
-            self._rt_collection.update(self)
+    def _update(self, ref, ctx):
+        if ref in self._rt_remote and ctx and self._rt_live:
+            self.__dict__['ts'] = int(time.time() * 1000000)
+            ctx.update(Context(self, ctx))
     @trace.debug("UnisObject")
     def _get_reference(self, n):
         return n
     @trace.info("UnisObject")
-    def touch(self):
+    def touch(self, ctx):
         if self.selfRef:
             self.__dict__['ts'] = int(time.time() * 1000000)
             payload = json.dumps({'ts': self.ts})
             asyncio.run_until_complete(self._rt_collection._unis.put(self.selfRef, payload))
     @trace.info("UnisObject")
-    def getSource(self):
-        return self._rt_source
+    def getSource(self, ctx=None):
+        return self._rt_source or ctx.settings['default_source']
     @trace.info("UnisObject")
-    def setCollection(self, v):
+    def setCollection(self, v, ctx=None):
         self._rt_collection = v
     @trace.info("UnisObject")
-    def getCollection(self):
+    def getCollection(self, ctx=None):
         return self._rt_collection
     @trace.info("UnisObject")
-    def commit(self, publish_to=None):
-        if not self._rt_runtime:
-            raise AttributeError("Resource must be attached to a Runtime instance to commit")
+    def commit(self, publish_to=None, ctx=None):
+        if not ctx:
+            raise AttributeError("Failed to aquire runtime context")
         if not self.selfRef and self._rt_collection:
-            url = publish_to or self._rt_runtime.settings['default_source']
-            assert(re.compile("http[s]?://([^:/]+)(?::[0-9]{1,5})$").match(url))
+            url = publish_to or ctx.settings['default_source']
             self._rt_source = url
             self.__dict__['ts'] = int(time.time() * 1000000)
-            self.__dict__['selfRef'] = "{}/{}/{}".format(url, self._rt_collection.name, self.id)
-            self._update('id')
+            self.__dict__['selfRef'] = "{}/{}/{}".format(url, self._rt_collection.name, self._getattribute('id', ctx))
+            self._update('id', ctx)
     @trace.info("UnisObject")
-    def extendSchema(self, n, v=None):
+    def extendSchema(self, n, v=None, ctx=None):
         if v:
-            self.__dict__[n] = self._lift(v, n)
+            self.__dict__[n] = self._lift(v, n, ctx)
         if n not in self._rt_remote:
             self._rt_remote.add(n)
-            self._update(n)
+            self._update(n, ctx)
     @trace.info("UnisObject")
-    def validate(self):
-        jsonschema.validate(self.to_JSON(), self._rt_schema, resolver=self._rt_resolver)
+    def validate(self, ctx):
+        jsonschema.validate(self.to_JSON(ctx), self._rt_schema, resolver=self._rt_resolver)
     @trace.info("UnisObject")
-    def to_JSON(self):
+    def to_JSON(self, ctx=None, top=True):
         result = {}
-        for k,v in self.__dict__.items():
-            if isinstance(v, _unistype):
-                if not isinstance(v, UnisObject):
-                    result[k] = v.to_JSON()
-                elif v.selfRef:
-                    result[k] = { "rel": "full", "href": v.selfRef }
-            else:
-                result[k] = v
+        if top:
+            for k,v in filter(lambda x: x[0] in self._rt_remote, self.__dict__.items()):
+                result[k] = v.to_JSON(ctx, False) if isinstance(v, _unistype) else v
+        else:
+            result = { "rel": "full", "href": self.selfRef }
         return result
     @trace.none
     def __repr__(self):
         return "<{}.{} {}>".format(self.__class__.__module__, self.__class__.__name__, self.__dict__.__repr__())
+    
 
 _CACHE = {}
 if SCHEMA_CACHE_DIR:
     try:
         os.makedirs(SCHEMA_CACHE_DIR)
-    except OSError as exp:
+    except FileExistsError:
         pass
+    except OSError as exp:
+        raise exp
     for n in os.listdir(SCHEMA_CACHE_DIR):
         with open(SCHEMA_CACHE_DIR + "/" + n) as f:
             schema = json.load(f)
             _CACHE[schema['id']] = schema
 
-def _schemaFactory(schema, n, tys):
+def _schemaFactory(schema, n, tys, raw=False):
     class _jsonMeta(*tys):
         def __init__(cls, name, bases, attrs):
             def _value(v):
@@ -266,21 +320,28 @@ def _schemaFactory(schema, n, tys):
             cls._rt_defaults.update({k:v for k,v in _props(schema).items()})
             cls._rt_schema, cls._rt_resolver = schema, jsonschema.RefResolver(schema['id'], schema, _CACHE)
             cls.__doc__ = schema.get('description', None)
-            
+        
+        def __call__(cls, *args, **kwargs):
+            instance = super(_jsonMeta, cls).__call__(*args, **kwargs)
+            return Context(instance, None) if not raw else instance
+        
+        def __instancecheck__(self, other):
+            return hasattr(other, 'names') and not self.names - other.names
     return _jsonMeta
 
 class _SchemaCache(object):
     _CLASSES = {}
-    def get_class(self, schema_uri, class_name=None):
+    def get_class(self, schema_uri, class_name=None, raw=False):
+        key = (schema_uri, raw)
         def _make_class():
             schema = _CACHE.get(schema_uri, None) or requests.get(schema_uri).json()
             if SCHEMA_CACHE_DIR and schema_uri not in _CACHE:
                 with open(SCHEMA_CACHE_DIR + "/" + schema['id'].replace('/', ''), 'w') as f:
                     json.dump(schema, f)
-            parents = [self.get_class(p['$ref']) for p in schema.get('allOf', [])] or [UnisObject]
+            parents = [self.get_class(p['$ref'], None, True) for p in schema.get('allOf', [])] or [UnisObject]
             pmeta = [type(p) for p in parents]
-            meta = _schemaFactory(schema,class_name or schema['name'], pmeta)
+            meta = _schemaFactory(schema, class_name or schema['name'], pmeta, raw)
             _CACHE[schema['id']] = schema
-            self._CLASSES[schema_uri] = meta(class_name or schema['name'], tuple(parents), {})
-            return self._CLASSES[schema_uri]
-        return self._CLASSES.get(schema_uri, None) or _make_class()
+            self._CLASSES[key] = meta(class_name or schema['name'], tuple(parents), {})
+            return self._CLASSES[key]
+        return self._CLASSES.get(key, None) or _make_class()

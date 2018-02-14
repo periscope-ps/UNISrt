@@ -46,19 +46,22 @@ setup(
     name = "unisrt",
     version = version,
     py_modules=['settings'],
-    packages = ["unis", "unis.runtime", "unis.models", "unis.utils", "unis.rest", "unis.services", "unis.measurement", "unis.test"],
+    packages = ["unis", "unis.runtime", "unis.models", "unis.utils", "unis.rest", "unis.services", "unis.measurements", "unis.test"],
     package_data = { 'unis': ['schemas/*']},
     author = "Jeremy Musser",
     author_email="jemusser@umail.iu.edu",
     license="http://www.apache.org/licenses/LICENSE-2.0",
-    
+    dependency_links=[
+        "git+https://github.com/periscope-ps/lace.git/@master#egg=lace",
+    ],
     install_requires=[
         "validictory>=validictory-0.8.1",
         "aiohttp",
         "requests",
         "jsonschema",
         "bson",
-        "websockets"
+        "websockets",
+        "lace"
     ],
     cmdclass={'test': tester },
 )

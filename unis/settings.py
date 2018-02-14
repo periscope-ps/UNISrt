@@ -1,43 +1,4 @@
-#from unis.services.data import DataService
-#from unis.services.graph import UnisGrapher
-
-##################################################################
-# UNISrt Configuration
-##################################################################
-CONFIGFILE = None
-
-DEFAULT_CONFIG = {
-    "unis": [
-        {
-            "url": "http://localhost:8888",
-            "verify": False,
-            "cert": None,
-            "default": True
-        },
-        {
-            "url": "http://localhost:8889",
-            "verify": False,
-            "cert": None,
-            "enabled": False
-        }
-    ],
-    "services": [], # UnisGrapher ],
-    "subscribe": False,
-    "preload": [ "nodes", "links" ],
-    "cache": {
-        "mode": "exponential",
-        "growth": 2,
-    },
-    "proxy": {
-        "threads": 10,
-        "batch": 1000,
-        "subscribe": False
-    },
-    "measurements": {
-        "read_history": False,
-        "subscribe": False
-    }
-}
+import os
 
 ##################################################################
 # Schema definitions and locations
@@ -52,7 +13,11 @@ MIME = {
     'PSXML': 'application/perfsonar+xml',
     }
 
-SCHEMA_CACHE_DIR = "/home/jemusser/smith/UNISrt/.cache"
+RTUSER_ROOT = os.path.expandvars("$RTUSER_ROOT")
+if RTUSER_ROOT == "$RTUSER_ROOT":
+    RTUSER_ROOT = os.path.expanduser("~/.unis")
+
+SCHEMA_CACHE_DIR = os.path.join(RTUSER_ROOT, ".cache")
 SCHEMA_HOST        = 'unis.crest.iu.edu'
 
 _schema = "http://{host}/schema/{directory}/{name}"
@@ -77,3 +42,34 @@ SCHEMAS = {
     'OFSwitch':        _schema.format(host = SCHEMA_HOST, directory = "ext/ofswitch/1", name = "ofswitch#"),
     'Flow':            _schema.format(host = SCHEMA_HOST, directory = "ext/flow/1", name = "flow#")
 }
+
+##################################################################
+# UNISrt Configuration
+##################################################################
+from unis.services.data import DataService
+#from unis.services.graph import UnisGrapher
+
+CONFIGFILE = os.path.expandvars("$RTUSER_CONFIG")
+if CONFIGFILE == "$RTUSER_CONFIG":
+    CONFIGFILE = os.path.expanduser("~/.unis/rt.conf")
+
+DEFAULT_CONFIG = {
+    "unis": [ { "url": "http://localhost:8888", "default": True, "verify": False, "ssl": None } ],
+    "services": [DataService],
+    "preload": [ "nodes", "links" ],
+    "defer_update": True,
+    "cache": {
+        "mode": "exponential",
+        "growth": 2,
+    },
+    "proxy": {
+        "threads": 10,
+        "batch": 1000,
+        "subscribe": True
+    },
+    "measurements": {
+        "read_history": True,
+        "subscribe": True
+    }
+}
+
