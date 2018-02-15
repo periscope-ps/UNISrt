@@ -22,6 +22,8 @@ RUN_UNIT_TESTING = True
 RUN_INTEGRATION_TESTING = False
 
 UNIT_TEST_MODULES = [
+    'unis.test.rest.ProxyTest',
+    'unis.test.rest.ClientTest',
     'unis.test.models.UnisObjectTest',
     'unis.test.models.NetworkResourceTest',
     'unis.test.models.CollectionTest',

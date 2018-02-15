@@ -1,2 +1,2 @@
-from unis.utils import _logging as logging
+from unis import settings
 from unis.runtime import Runtime

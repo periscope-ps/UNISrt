@@ -1,13 +1,13 @@
 
-
 class ServiceMetaclass(type):
     def __init__(cls, name, bases, kwargs):
         def decoratorFactory(fn):
             def nf(self, resource):
-                tmpState = resource.isDeferred()
-                resource.setDeferred(True)
+                tmpState = resource._rt_live
+                resource.setRuntime(self.runtime)
+                resource._rt_live = False
                 kwargs[fn](self, resource)
-                resource.setDeferred(tmpState)
+                resource._rt_live = tmpState
             return nf
         
         for op in ['new', 'update', 'delete']:
@@ -23,13 +23,14 @@ class RuntimeService(metaclass=ServiceMetaclass):
                 self.targets.append(target)
         super(RuntimeService, self).__init__()
     def attach(self, runtime):
-        self._runtime = runtime
+        self.runtime = runtime
         if self.targets:
             for target in self.targets:
-                collection = self._runtime.getModel(getattr(target, "names", []))
-                collection.addService(self)
+                if target in self.runtime:
+                    collection = self.runtime.getModel(getattr(target, "names", []))
+                    getattr(self.runtime, collection).addService(self)
         else:
-            for collection in self._runtime.collections:
+            for collection in self.runtime.collections:
                 collection.addService(self)
     
     def new(self, resource):

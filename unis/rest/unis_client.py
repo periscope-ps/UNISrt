@@ -1,166 +1,228 @@
-import json
-import bson
-import re
-import requests
-import websocket
+import asyncio
+import aiohttp, requests, websockets
+import bson, json
+import itertools
 
-from concurrent.futures import ThreadPoolExecutor
+from collections import defaultdict
+from urllib.parse import urljoin, urlparse
+from lace.logging import trace
 
-from unis.runtime.settings import MIME
-from unis import logging
+from unis.settings import MIME
 
 class UnisError(Exception):
     pass
-
 class UnisReferenceError(UnisError):
     def __init__(self, msg, href):
         super(UnisReferenceError, self).__init__(msg)
         self.href = href
+class ConnectionError(UnisError):
+    def __init__(self, msg, code):
+        super(ConnectionError, self).__init__(msg)
+        self.status = code
 
-class UnisClient(object):
-    @logging.debug("UnisClient")
-    def __init__(self, url, inline=False, **kwargs):
-        re_str = 'http[s]?://(?P<host>[^:/]+)(?::(?P<port>[0-9]{1,5}))?$'
-        if not re.compile(re_str).match(url):
-            raise ValueError("unis url is malformed")
-        
-        self._url = url
-        self._verify = kwargs.get("verify", False)
-        self._ssl = kwargs.get("cert", None)
-        self._executor = ThreadPoolExecutor(max_workers=12)
-        self._socket = None
-        self._inline = inline
-        self._shutdown = False
-        self._channels = {}
+class ReferenceDict(dict):
+    def __getitem__(self, n):
+        try:
+            return super(ReferenceDict, self).__getitem__(n)
+        except (KeyError, IndexError):
+            raise UnisReferenceError("No unis instance at requested location - {}".format(n), n)
+
+loop = asyncio.new_event_loop()
+class UnisProxy(object):
+    @trace.debug("UnisProxy")
+    def __init__(self, collection):
+        self.clients = ReferenceDict()
+        self._name = collection
+        if not loop.is_running():
+            asyncio.get_event_loop().run_in_executor(None, loop.run_forever)
     
-    @logging.info("UnisClient")
+    @trace.info("UnisProxy")
     def shutdown(self):
-        if self._socket and self._shutdown:
-            self._socket.close()
-            self._socket = None
-        else:
-            self._shutdown = True
-        self._executor.shutdown()
+        async def close():
+            list(map(lambda t: t.cancel(), [t for t in asyncio.Task.all_tasks(loop) if t != asyncio.Task.current_task(loop)]))
+            await asyncio.sleep(0.1)
+            loop.stop()
+        asyncio.run_coroutine_threadsafe(close(), loop)
+        asyncio.get_event_loop().run_until_complete(asyncio.gather(*[c.shutdown() for c in self.clients.values()]))
     
-    @logging.info("UnisClient")
-    def getResources(self):
-        headers = { 'Content-Type': 'application/perfsonar+json',
-                    'Accept': MIME['PSJSON'] }
-        return self._check_response(requests.get(self._url, verify = self._verify, cert = self._ssl, headers=headers), False)
+    @trace.info("UnisProxy")
+    def refToUID(self, source, full=True):
+        url = urlparse(source)
+        if len(url.path.split('/')) != 3 and full:
+            raise ValueError("Cannot convert reference to UUID:collection:id tuple - {}".format(source))
+        uid = UnisClient.fqdns[url.netloc]
+        return uid, tuple(filter(lambda x: x, url.path.split('/')[-2:]))
         
-    @logging.info("UnisClient")
-    def get(self, url, limit = None, **kwargs):
-        args = self._get_conn_args(url)
-        args["url"] = self._build_query(args, inline=self._inline, limit=limit, **kwargs)
-        return self._check_response(requests.get(args["url"], verify = self._verify, cert = self._ssl, headers=args["headers"]), False)
+    @trace.info("UnisProxy")
+    def addSources(self, sources):
+        new = []
+        for s in sources:
+            client = UnisClient(loop=loop, **s)
+            if client.uid not in self.clients:
+                new.append(s['url'])
+                self.clients[client.uid] = client
+        return new
+    @trace.info("UnisProxy")
+    async def getResources(self, source=None):
+        return await self._gather(self._collect_funcs(source, "getResources"))
     
-    @logging.info("UnisClient")
-    def post(self, url, data):
-        args = self._get_conn_args(url)
-        if isinstance(data, dict):
-            data = json.dumps(data)
+    @trace.info("UnisProxy")
+    async def getStubs(self, source):
+        return await self._gather(self._collect_funcs(source, "getStubs"), self._name)
         
-        return self._check_response(requests.post(args["url"], data = data, 
-                                                  verify = self._verify, cert = self._ssl), False)
+    @trace.info("UnisProxy")
+    async def get(self, source=None, ref=None, **kwargs):
+        return await self._gather(self._collect_funcs(source, "get"), ref or self._name, **kwargs)
     
-    @logging.info("UnisClient")
-    def put(self, url, data):
-        args = self._get_conn_args(url)
-        if isinstance(data, dict):
-            data = json.dumps(data)
-            
-        return self._check_response(requests.put(args["url"], data=data,
-                                                 verify=self._verify, cert=self._ssl), False)
-        
-    @logging.info("UnisClient")
-    def delete(self, url):
-        args = self._get_conn_args(url)
-        return self._check_response(requests.delete(args["url"], verify=self._verify, cert=self._ssl), False)
+    @trace.info("UnisProxy")
+    async def post(self, resources):
+        msgs = defaultdict(list)
+        for r in resources:
+            msgs[self.refToUID(r.getSource(), False)[0]].append(r.to_JSON())
+        results = await asyncio.gather(*[self.clients[k].post(self._name, json.dumps(v)) for k,v in msgs.items()])
+        return list(itertools.chain(*[list(r) for r in results]))
     
-    @logging.info("UnisClient")
-    def subscribe(self, collection, callback):
-        if collection not in self._channels:
-            self._channels[collection] = []
-        self._channels[collection].append(callback)
+    @trace.info("UnisProxy")
+    async def put(self, href, data):
+        source = self.refToUID(href)
+        return await self.clients[source[0]].put("/".join(source[1]), data)
+    
+    @trace.info("UnisProxy")
+    async def delete(self, data):
+        source = self.refToUID(data.selfRef)
+        return await self.clients[source[0]].delete("/".join(source[1]), data.to_JSON())
+    
+    @trace.info("UnisProxy")
+    async def subscribe(self, source, callback, ref=None):
+        return await self._gather(self._collect_funcs(source, "subscribe"), ref or self._name, callback)
         
-        if self._socket:
-            while not self._shutdown:
-                pass
-            self._socket.send(json.dumps({ 'query': {}, 'resourceType': collection}))
-        else:
-            self._subscribe(collection)
-    @logging.debug("UnisClient")
-    def _subscribe(self, collection):
-        kwargs = {}
-        if self._ssl:
-            kwargs["ca_certs"] = self._ssl[0]
-            
-        re_str = 'http[s]?://(?P<host>[^:/]+)(?::(?P<port>[0-9]{1,4}))$'
-        matches = re.match(re_str, self._url)
-        url = "ws{s}://{h}:{p}/subscribe/{c}".format(s = "s" if "ca_certs" in kwargs else "", 
-                                                     h = matches.group("host"), 
-                                                     p = matches.group("port"), 
-                                                     c = collection)
-        def on_message(ws, message):
-            message = json.loads(message)
-            if "headers" not in message or "collection" not in message["headers"]:
-                raise UnisError("Depreciated header in message, client UNIS incompatable")
-            callbacks = self._channels[message["headers"]["collection"]]
-            for callback in callbacks:
-                callback(message)
-        def on_open(ws):
-            if self._shutdown:
-                ws.close()
-            else:
-                self._shutdown = True
-            
-        self._socket = websocket.WebSocketApp(url, 
-                                              on_message = on_message,
-                                              on_open  = on_open, 
-                                              on_error = lambda ws, error: None,
-                                              on_close = lambda ws: None)
+    @trace.debug("UnisProxy")
+    def _collect_funcs(self, source, n):
+        if source:
+            source = source if isinstance(source, list) else [source]
+            source = [self.clients[(s if isinstance(s, tuple) else self.refToUID(s, False))[0]] for s in source]
+            return [getattr(s, n) for s in source]
+        return [getattr(c, n) for c in self.clients.values()]
+    
+    @trace.debug("UnisProxy")
+    async def _gather(self, funcs, *args, **kwargs):
+        results = await asyncio.gather(*[f(*args, **kwargs) for f in funcs])
+        return list(itertools.chain(*results))
+    
 
-        self._executor.submit(self._socket.run_forever, sslopt=kwargs)
-        
-    @logging.debug("UnisClient")
-    def _build_query(self, args, inline=False, **kwargs):
-        if kwargs:
-            q = ""
-            for k,v in kwargs.items():
-                if v:
-                    q += "{k}={v}&".format(k = k, v = v)
-                
-            if inline:
-                q += "inline"
-            else:
-                q = q[0:-1]
-            return "{b}?{q}".format(b=args["url"], q=q)
-        return args["url"]
+class _SingletonOnUUID(type):
+    fqdns, instances = ReferenceDict(), {}
+    def __init__(self, *args, **kwargs):
+        return super(_SingletonOnUUID, self).__init__(*args, **kwargs)
+    def __call__(cls, url, **kwargs):
+        if not hasattr(cls, '_session'):
+            cls._session, cls._shutdown = aiohttp.ClientSession(loop=asyncio.get_event_loop()), False
+        url = urlparse(url)
+        authority = "{}://{}".format(url.scheme, url.netloc)
+        uuid = cls.fqdns[url.netloc] = kwargs['uid'] = cls.fqdns.get(url.netloc, None) or cls.get_uuid(authority)
+        cls.instances[uuid] = cls.instances.get(uuid, None) or super(_SingletonOnUUID, cls).__call__(authority, **kwargs)
+        return cls.instances[uuid]
     
-    @logging.debug("UnisClient")
-    def _get_conn_args(self, url):
-        re_str = "{full}|{rel}|{name}".format(full = 'http[s]?://(?P<host>[^:/]+)(?::(?P<port>[0-9]{1,4}))?/(?P<col1>[a-zA-Z]+)(?:/(?P<uid1>[^/]+))?$',
-                                              rel  = '#/(?P<col2>[a-zA-Z]+)(?:/(?P<uid2>[^/]+))?$',
-                                              name = '(?P<col3>[a-zA-Z]+)$')
-        matches = re.compile(re_str).match(url)
-        collection = matches.group("col1") or matches.group("col2") or matches.group("col3")
-        uid = matches.group("uid1") or matches.group("uid2")
-        return { "collection": collection,
-                 "url": "{u}/{c}{i}".format(u = self._url, c = collection, i = "/" + uid if uid else ""),
-                 "headers": { 'Content-Type': 'application/perfsonar+json',
-                              'Accept': MIME['PSJSON'] } }
-    
-    @logging.debug("UnisClient")
-    def _check_response(self, r, read_as_bson=True):
-        if 200 <= r.status_code <= 299:
-            try:
-                if read_as_bson:
-                    return bson.loads(r.content)
-                else:
-                    return r.json()
-            except:
-                return r.status_code
-        elif 400 <= r.status_code <= 499:
-            raise Exception("Error from unis server [bad request] - {t} [{exp}]".format(exp = r.status_code, t = r.text))
+    @classmethod
+    def get_uuid(cls, url):
+        headers = { 'Content-Type': 'application/perfsonar+json', 'Accept': MIME['PSJSON'] }
+        resp = requests.get(urljoin(url, "about"), headers=headers)
+        if 200 <= resp.status_code <= 299:
+            config = resp.json()
         else:
-            raise Exception("Error from unis server - {t} [{exp}]".format(exp = r.status_code, t = r.text))
+            raise ConnectionError("Error from server", resp.status_code)
+        return config['uid']
+
+class UnisClient(metaclass=_SingletonOnUUID):
+    @trace.debug("UnisClient")
+    def __init__(self, url, loop, **kwargs):
+        def _handle_exception(future):
+            if not future.cancelled and future.exception():
+                raise future.exception()
+        async def _listen():
+            while True:
+                msg = json.loads(await self._socket.recv())
+                list(map(lambda cb: cb(msg['data'], msg['headers']['action']), self._channels[msg['headers']['collection']]))
+        async def _make_socket():
+            url = 'ws{}://{}/subscribe/nodes'.format("s" if self._ssl else "", urlparse(self._url).netloc)
+            return await websockets.connect(url, loop=loop, ssl=self._ssl)
+        self.uid = kwargs['uid']
+        self._url = url
+        self._verify, self._ssl = kwargs.get("verify", False), kwargs.get("ssl", None)
+        self._socket = asyncio.run_coroutine_threadsafe(_make_socket(), loop).result(timeout=1)
+        self._channels = defaultdict(list)
+        asyncio.run_coroutine_threadsafe(_listen(), loop).add_done_callback(_handle_exception)
+    
+    @trace.debug("UnisClient")
+    async def _do(self, f, *args, **kwargs):
+        async with f(*args, verify_ssl=self._verify, ssl_context=self._ssl, **kwargs) as resp:
+            return await self._check_response(resp, False)
+    
+    @trace.info("UnisClient")
+    async def getResources(self):
+        url, headers = self._get_conn_args("")
+        return await self._do(self._session.get, self._url, headers=headers)
+    
+    @trace.info("UnisClient")
+    async def getStubs(self, collection):
+        url, headers = self._get_conn_args(collection, fields="selfRef")
+        return await self._do(self._session.get, url, headers=headers)
+    
+    @trace.info("UnisClient")
+    async def get(self, collection, **kwargs):
+        url, headers = self._get_conn_args(collection, **kwargs)
+        return await self._do(self._session.get, url, headers=headers)
+    
+    @trace.info("UnisClient")
+    async def post(self, collection, data):
+        url, headers = self._get_conn_args(collection)
+        data = json.dumps(data) if isinstance(data, dict) else data
+        return await self._do(self._session.post, url, data=data, headers=headers)
+    
+    @trace.info("UnisClient")
+    async def put(self, ref, data):
+        url, headers = self._get_conn_args(ref)
+        data = json.dumps(data) if isinstance(data, dict) else data
+        return await self._do(self._session.put, url, data=data, headers=headers)
+    
+    @trace.info("UnisClient")
+    async def delete(self, ref):
+        url, headers = self._get_conn_args(ref)
+        return await self._do(self._session.delete, url, headers=headers)
+    
+    @trace.info("UnisClient")
+    async def subscribe(self, collection, callback):
+        async def _add_channel():
+            await self._socket.send(json.dumps({'query':{}, 'resourceType': collection}))
+        if not self._shutdown:
+            self._channels[collection].append(callback)
+            asyncio.run_coroutine_threadsafe(_add_channel(), loop)
+        return []
+    
+    @trace.debug("UnisClient")
+    def _get_conn_args(self, ref, **kwargs):
+        headers = { 'Content-Type': 'application/perfsonar+json', 'Accept': MIME['PSJSON'] }
+        makelist = lambda v: ",".join(v) if isinstance(v, list) else v
+        params = "?{}".format("&".join(["=".join([k, makelist(v)]) for k,v in kwargs.items() if v]))
+        return urljoin(self._url, "{}{}".format(urlparse(ref).path, params if params[1:] else "")), headers
+    
+    @trace.debug("UnisClient")
+    async def _check_response(self, r, read_as_bson=True):
+        if 200 <= r.status <= 299:
+            try:
+                body = await r.read()
+                resp = bson.loads(body) if r.content_type == MIME['PSBSON'] else json.loads(str(body, 'utf-8'))
+                return resp if isinstance(resp, list) else [resp]
+            except Exception as exp:
+                return r.status
+        elif 400 <= r.status <= 499:
+            raise Exception("Error from unis server [bad request] - [{exp}] {t}".format(exp = r.status, t = r.text))
+        else:
+            raise Exception("Error from unis server - [{exp}] {t}".format(exp = r.status, t = r.text))
+    
+    async def shutdown(self):
+        self._shutdown = True
+        if not self._session.closed:
+            await self._session.close()
+        if self._socket:
+            self._socket.close()
