@@ -183,7 +183,7 @@ class UnisClient(metaclass=_SingletonOnUUID):
     async def put(self, ref, data):
         url, headers = self._get_conn_args(ref)
         data = json.dumps(data) if isinstance(data, dict) else data
-        return await self._do(self._session.put, url, data=data)
+        return await self._do(self._session.put, url, data=data, headers=headers)
     
     @trace.info("UnisClient")
     async def delete(self, ref):
@@ -216,9 +216,9 @@ class UnisClient(metaclass=_SingletonOnUUID):
             except Exception as exp:
                 return r.status
         elif 400 <= r.status <= 499:
-            raise Exception("Error from unis server [bad request] - {t} [{exp}]".format(exp = r.status, t = r.text))
+            raise Exception("Error from unis server [bad request] - [{exp}] {t}".format(exp = r.status, t = r.text))
         else:
-            raise Exception("Error from unis server - {t} [{exp}]".format(exp = r.status_code, t = r.text))
+            raise Exception("Error from unis server - [{exp}] {t}".format(exp = r.status, t = r.text))
     
     async def shutdown(self):
         self._shutdown = True
