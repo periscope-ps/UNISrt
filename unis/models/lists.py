@@ -32,6 +32,8 @@ class UnisCollection(object):
                 yield oContext(v, self._rt)
         def __repr__(self):
             return self._obj.__repr__()
+        def __len__(self):
+            return self._obj.__len__()
     collections = {}
     
     async def _mock(self):
@@ -184,10 +186,6 @@ class UnisCollection(object):
     def addService(self, service):
         self._services.append(service)
     
-    @trace.info("UnisCollection")
-    def shutdown(self):
-        self._unis.shutdown()
-        
     @trace.debug("UnisCollection")
     def _check_record(self, v):
         if self.model._rt_schema["name"] not in v.names:

@@ -40,17 +40,18 @@ class UnisProxy(object):
     def shutdown(self):
         async def close():
             list(map(lambda t: t.cancel(), [t for t in asyncio.Task.all_tasks(loop) if t != asyncio.Task.current_task(loop)]))
-            await UnisClient.shutdown()
             await asyncio.sleep(0.1)
             loop.stop()
         asyncio.run_coroutine_threadsafe(close(), loop)
+        asyncio.get_event_loop().run_until_complete(asyncio.gather(*[c.shutdown() for c in self.clients.values()]))
     
     @trace.info("UnisProxy")
     def refToUID(self, source, full=True):
         url = urlparse(source)
         if len(url.path.split('/')) != 3 and full:
             raise ValueError("Cannot convert reference to UUID:collection:id tuple - {}".format(source))
-        return (self.clients[UnisClient(source, loop=loop).uid].uid, tuple(filter(lambda x: x, url.path.split('/')[-2:])))
+        uid = UnisClient.fqdns[url.netloc]
+        return uid, tuple(filter(lambda x: x, url.path.split('/')[-2:]))
         
     @trace.info("UnisProxy")
     def addSources(self, sources):
@@ -115,7 +116,7 @@ class _SingletonOnUUID(type):
         return super(_SingletonOnUUID, self).__init__(*args, **kwargs)
     def __call__(cls, url, **kwargs):
         if not hasattr(cls, '_session'):
-            cls._session = aiohttp.ClientSession(loop=asyncio.get_event_loop())
+            cls._session, cls._shutdown = aiohttp.ClientSession(loop=asyncio.get_event_loop()), False
         url = urlparse(url)
         authority = "{}://{}".format(url.scheme, url.netloc)
         uuid = cls.fqdns[url.netloc] = kwargs['uid'] = cls.fqdns.get(url.netloc, None) or cls.get_uuid(authority)
@@ -147,19 +148,10 @@ class UnisClient(metaclass=_SingletonOnUUID):
             return await websockets.connect(url, loop=loop, ssl=self._ssl)
         self.uid = kwargs['uid']
         self._url = url
-        self._verify, self._ssl = kwargs.get("verify", False), kwargs.get("ssl", False)
-        self._shutdown = False
+        self._verify, self._ssl = kwargs.get("verify", False), kwargs.get("ssl", None)
         self._socket = asyncio.run_coroutine_threadsafe(_make_socket(), loop).result(timeout=1)
-        self._threads = []
         self._channels = defaultdict(list)
         asyncio.run_coroutine_threadsafe(_listen(), loop).add_done_callback(_handle_exception)
-    
-    @trace.info("UnisClient")
-    def shutdown(self):
-        self._shutdown = True
-        if self._socket:
-            self._socket.close()
-            list(map(lambda t: t.close(), self._threads))
     
     @trace.debug("UnisClient")
     async def _do(self, f, *args, **kwargs):
@@ -228,7 +220,9 @@ class UnisClient(metaclass=_SingletonOnUUID):
         else:
             raise Exception("Error from unis server - {t} [{exp}]".format(exp = r.status_code, t = r.text))
     
-    @classmethod
-    async def shutdown(cls):
-        await cls._session.close()
-
+    async def shutdown(self):
+        self._shutdown = True
+        if not self._session.closed:
+            await self._session.close()
+        if self._socket:
+            self._socket.close()

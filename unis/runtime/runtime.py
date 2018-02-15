@@ -14,10 +14,11 @@ from unis.runtime.oal import ObjectLayer
 
 class Runtime(object):
     def build_settings(self):
+        _ls = lambda x: x if len(x) > 1 else x[0]
         self.settings = copy.deepcopy(settings.DEFAULT_CONFIG)
         hasunis = self.settings.get('unis', False)
         if settings.CONFIGFILE:
-            tys = { "true": True, "false": False }
+            tys = { "true": True, "false": False, "none": None, "": None }
             tmpConfig = configparser.ConfigParser(allow_no_value=True)
             tmpConfig.read(settings.CONFIGFILE)
             
@@ -28,7 +29,7 @@ class Runtime(object):
                         hasunis = True
                     self.settings["unis"].append({k:tys.get(v,v) for k,v in tmpConfig.items(section)})
                 else:
-                    self.settings[section] = {k:tys.get(v,v) for k,v in tmpConfig.items(section)}
+                    self.settings[section] = {k:tys.get(v, _ls(v.split(','))) for k,v in tmpConfig.items(section)}
     
     @trace.debug("Runtime")
     def __init__(self, unis=None, **kwargs):
@@ -55,7 +56,8 @@ class Runtime(object):
                     old.update(**new)
                 else:
                     self.settings['unis'].append(new)
-        
+        elif not self.settings['unis']:
+            raise settings.ConfigurationError("Runtime configuration missing default UNIS instance")
         for k,v in kwargs:
             self.settings[k] = {**self.settings[k], **v} if isinstance(v, dict) else v 
         

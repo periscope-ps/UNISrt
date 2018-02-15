@@ -30,7 +30,8 @@ class ObjectLayer(object):
         try:
             return self._cache[urlparse(href).path.split('/')[1]].get(href)
         except UnisReferenceError as e:
-            self.addSources([e.href])
+            new_source = { 'url': "http://" + e.href, 'default': False, 'enabled': True }
+            self.addSources([new_source])
             return self._cache[urlparse(href).path.split('/')[1]].get(href)
     
     @trace.info("OAL")
@@ -45,7 +46,7 @@ class ObjectLayer(object):
         if resource.selfRef:
             if resource.getObject() not in self._pending:
                 self._pending.add(resource.getObject())
-                if not self.settings['defer_update']:
+                if not self.settings['proxy']['defer_update']:
                     asyncio.get_event_loop().run_until_complete(self._do_update([resource], resource.getCollection().name))
                 
     @trace.debug("OAL")
@@ -81,7 +82,7 @@ class ObjectLayer(object):
     
     @trace.info("OAL")
     def preload(self):
-        _p = lambda c: c.name in self.settings['preload'] or self.settings['cache']['mode'] == 'greedy'
+        _p = lambda c: c.name in self.settings['cache']['preload'] or self.settings['cache']['mode'] == 'greedy'
         futures = [c._complete_cache() for c in self._cache.values() if _p(c)]
         asyncio.get_event_loop().run_until_complete(asyncio.gather(*futures))
         
@@ -111,7 +112,7 @@ class ObjectLayer(object):
     @trace.info("OAL")
     def shutdown(self):
         self.flush()
-        list(map(lambda c: c.shutdown(), self._cache.values()))
+        list(map(lambda p: p._unis.shutdown(), self._cache.values()))
     @trace.debug("OAL")
     def __contains__(self, resource):
         try:

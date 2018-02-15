@@ -21,7 +21,8 @@ class Index(object):
         s = bisect.bisect_left(self._keys, v)
         
         for i in range(s, len(self._keys)):
-            if self._items[i] == item:
+            a, b = self._items[i], item
+            if a.getObject() == b.getObject() or getattr(a, 'selfRef', True) == getattr(b, 'selfRef', False):
                 return self._indices[i]
     
     @trace.info("Index")

@@ -8,6 +8,7 @@ import requests
 import time
 
 from lace.logging import trace
+from urllib.parse import urlparse
 
 from unis.settings import SCHEMA_CACHE_DIR
 
@@ -223,7 +224,7 @@ class _metacontextcheck(type):
         other = other.getObject() if hasattr(other, 'getObject') else other
         return super(_metacontextcheck, self).__instancecheck__(other)
 class UnisObject(_unistype, metaclass=_metacontextcheck):
-    _rt_remote, _rt_source, _rt_collection = _attr(), _attr(), _attr()
+    _rt_remote, _rt_collection = _attr(), _attr()
     _rt_restricted, _rt_live = ["ts", "selfRef"], False
     @trace.debug("UnisObject")
     def __init__(self, v=None, ref=None):
@@ -247,13 +248,17 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
         return n
     @trace.info("UnisObject")
     def touch(self, ctx):
-        if self.selfRef:
+        if self._getattribute('selfRef', ctx):
             self.__dict__['ts'] = int(time.time() * 1000000)
             payload = json.dumps({'ts': self.ts})
-            asyncio.run_until_complete(self._rt_collection._unis.put(self.selfRef, payload))
+            asyncio.run_until_complete(self._rt_collection._unis.put(self._getattribute('selfRef', ctx), payload))
     @trace.info("UnisObject")
     def getSource(self, ctx=None):
-        return self._rt_source or ctx.settings['default_source']
+        url = urlparse(self._getattribute('selfRef', ctx))
+        return "{}://{}".format(url.scheme, url.netloc) if url.netloc else ctx.settings['default_source']
+    @trace.info("UnisObject")
+    def setSource(self, source, ctx=None):
+        self._rt_source = source
     @trace.info("UnisObject")
     def setCollection(self, v, ctx=None):
         self._rt_collection = v

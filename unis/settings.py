@@ -1,5 +1,7 @@
 import os
 
+class ConfigurationError(Exception): pass
+
 ##################################################################
 # Schema definitions and locations
 ##################################################################
@@ -54,18 +56,18 @@ if CONFIGFILE == "$RTUSER_CONFIG":
     CONFIGFILE = os.path.expanduser("~/.unis/rt.conf")
 
 DEFAULT_CONFIG = {
-    "unis": [ { "url": "http://localhost:8888", "default": True, "verify": False, "ssl": None } ],
+    "unis": [],
     "services": [DataService],
-    "preload": [ "nodes", "links" ],
-    "defer_update": True,
     "cache": {
+        "preload": [ "nodes", "links" ],
         "mode": "exponential",
         "growth": 2,
     },
     "proxy": {
         "threads": 10,
         "batch": 1000,
-        "subscribe": True
+        "subscribe": True,
+        "defer_update": True,
     },
     "measurements": {
         "read_history": True,
