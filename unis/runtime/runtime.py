@@ -58,7 +58,7 @@ class Runtime(object):
                     self.settings['unis'].append(new)
         elif not self.settings['unis']:
             raise settings.ConfigurationError("Runtime configuration missing default UNIS instance")
-        for k,v in kwargs:
+        for k,v in kwargs.items():
             self.settings[k] = {**self.settings[k], **v} if isinstance(v, dict) else v 
         
         self.settings['default_source'] = reduce(lambda x,y: y if y['default'] else x, self.settings['unis'])['url']

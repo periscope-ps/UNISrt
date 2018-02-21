@@ -226,6 +226,7 @@ class _metacontextcheck(type):
 class UnisObject(_unistype, metaclass=_metacontextcheck):
     _rt_remote, _rt_collection = _attr(), _attr()
     _rt_restricted, _rt_live = ["ts", "selfRef"], False
+    _rt_callback = lambda s,x,e: x
     @trace.debug("UnisObject")
     def __init__(self, v=None, ref=None):
         v = v or {}
@@ -282,6 +283,12 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
         if n not in self._rt_remote:
             self._rt_remote.add(n)
             self._update(n, ctx)
+    @trace.info("UnisObject")
+    def addCallback(self, fn, ctx=None):
+        self._rt_callback = lambda s,x,e: fn(Context(x, ctx), e)
+    @trace.debug("UnisObject")
+    def _callback(self, event, ctx=None):
+        self._rt_callback(self, event)
     @trace.info("UnisObject")
     def validate(self, ctx):
         jsonschema.validate(self.to_JSON(ctx), self._rt_schema, resolver=self._rt_resolver)

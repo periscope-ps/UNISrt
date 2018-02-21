@@ -25,10 +25,11 @@ UNIT_TEST_MODULES = [
     'unis.test.rest.ProxyTest',
     'unis.test.rest.ClientTest',
     'unis.test.models.UnisObjectTest',
-    'unis.test.models.NetworkResourceTest',
+    'unis.test.models.ContextTest',
     'unis.test.models.CollectionTest',
     'unis.test.runtime.UnisServiceTest',
-    'unis.test.runtime.OALTest'
+    'unis.test.runtime.OALTest',
+    'unis.test.runtime.RuntimeTest'
 ]
 
 INTEGRATION_TEST_MODULES = []
@@ -43,12 +44,12 @@ def main():
         test_modules.extend(UNIT_TEST_MODULES)
     if RUN_INTEGRATION_TESTING:
         test_modules.extend(INTEGRATION_TEST_MODULES)
-
+    
     tsuite = unittest.defaultTestLoader.loadTestsFromNames(test_modules)
     runner = unittest.TextTestRunner()
     ret = not runner.run(tsuite).wasSuccessful()
     sys.exit(ret)
-
+    
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--test", help="Choose which tests to run", type=str,

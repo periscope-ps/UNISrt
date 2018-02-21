@@ -56,6 +56,7 @@ class UnisCollection(object):
         self.createIndex("id")
         self.createIndex("selfRef")
         self._loop = asyncio.get_event_loop()
+        self._callbacks = []
         
     @trace.debug("UnisCollection")
     def __getitem__(self, i):
@@ -181,6 +182,9 @@ class UnisCollection(object):
     @trace.info("UnisCollection")
     def addService(self, service):
         self._services.append(service)
+    @trace.info("UnisCollection")
+    def addCallback(self, cb):
+        self._callbacks.append(cb)
     
     @trace.debug("UnisCollection")
     def _check_record(self, v):
@@ -189,9 +193,12 @@ class UnisCollection(object):
         
     @trace.debug("UnisCollection")
     def _serve(self, ty, v):
+        ctx = oContext(v, None)
+        v._callback(ty.name)
+        list(map(lambda cb: cb(ctx, ty.name), self._callbacks))
         for service in self._services:
             f = getattr(service, ty.name)
-            f(oContext(v, None))
+            f(ctx)
     
     @trace.debug("UnisCollection")
     async def _proto_complete_cache(self):
