@@ -19,22 +19,24 @@ class Index(object):
         except AttributeError:
             return None
         s = bisect.bisect_left(self._keys, v)
-        
-        for i in range(s, len(self._keys)):
+        e = bisect.bisect_right(self._keys, v)
+        for i in range(s, e):
             a, b = self._items[i], item
-            if a.getObject() == b.getObject() or getattr(a, 'selfRef', True) == getattr(b, 'selfRef', False):
+            sr1, sr2 = getattr(a, 'selfRef', True), getattr(b, 'selfRef', False)
+            if a.getObject() == b.getObject() or (sr1 and sr2 and sr1 == sr2):
                 return self._indices[i]
     
     @trace.info("Index")
     def subset(self, rel, v):
         slices = {
-            "gt": lambda: set(self._indices[bisect.bisect_right(self._keys, v):]),
-            "ge": lambda: set(self._indices[bisect.bisect_left(self._keys, v):]),
-            "lt": lambda: set(self._indices[:bisect_left(self._keys, v)]),
-            "le": lambda: set(self._indices[:bisect_right(self._keys, v)]),
-            "eq": lambda: set(self._indices[bisect.bisect_left(self._keys, v):bisect.bisect_right(self._keys, v)])
+            "gt": lambda v: set(self._indices[bisect.bisect_right(self._keys, v):]),
+            "ge": lambda v: set(self._indices[bisect.bisect_left(self._keys, v):]),
+            "lt": lambda v: set(self._indices[:bisect_left(self._keys, v)]),
+            "le": lambda v: set(self._indices[:bisect_right(self._keys, v)]),
+            "eq": lambda v: set(self._indices[bisect.bisect_left(self._keys, v):bisect.bisect_right(self._keys, v)]),
+            "in": lambda v: set().union(**[slices['eq'](x) in v])
         }
-        return slices[rel]()
+        return slices[rel](v)
         
     @trace.info("Index")
     def update(self, index, item):

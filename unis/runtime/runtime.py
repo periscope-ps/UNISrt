@@ -65,8 +65,8 @@ class Runtime(object):
         self._oal = ObjectLayer(self)
         
         self._oal.addSources(self.settings['unis'])
-        self._oal.preload()
         list(map(self.addService, self.settings['services']))
+        self._oal.preload()
         
     def __getattr__(self, n):
         try:
@@ -103,7 +103,7 @@ class Runtime(object):
             raise ValueError("Service must by of type RuntimeService")
         if isinstance(service, type):
             instance = service()
-        if service not in self._services:
+        if type(instance) not in self._services:
             self._services.append(service)
             instance.attach(self)
     

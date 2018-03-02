@@ -21,18 +21,17 @@ class _attr(object):
         self.__values__[obj] = v
     
 class Context(object):
-    _obj, _rt = _attr(), _attr()
     def __init__(self, obj, runtime):
         self._obj, self._rt = obj, runtime
     def __getattribute__(self, n):
-        if not hasattr(type(self), n):
+        if n not in ['_obj', '_rt'] and not hasattr(type(self), n):
             v = self._obj._getattribute(n, self._rt)
             if callable(v):
                 return lambda *args, **kwargs: v(*args, ctx=self._rt, **kwargs)
             return Context(v, self._rt) if isinstance(v, _unistype) else v
         return super(Context, self).__getattribute__(n)
     def __setattr__(self, n, v):
-        if hasattr(type(self), n):
+        if n in ['_obj', '_rt']:
             return super(Context, self).__setattr__(n, v)
         return self._obj._setattr(n, v, self._rt)
     def __getitem__(self, i):
@@ -44,9 +43,20 @@ class Context(object):
         for v in self._obj._iter(self._rt):
             yield Context(v, self._rt) if isinstance(v, _unistype) else v
     def __dir__(self):
-        return self._obj.__dir__()
+        return dir(self._obj)
+    def __len__(self):
+        if hasattr(type(self._obj), '__len__'):
+            return self._obj.__len__()
+        else:
+            return 1
     def __repr__(self):
-        return self._obj.__repr__()
+        return repr(self._obj)
+    def __eq__(self, other):
+        if isinstance(self, other.__class__):
+            return self._obj == other._obj
+        return self._obj == other
+    def __hash__(self):
+        return hash(self._obj)
     
     def getRuntime(self):
         return self._rt
@@ -128,6 +138,9 @@ class _unistype(object):
     @trace.info("unistype")
     def to_JSON(self, ctx, top):
         raise NotImplemented()
+    @trace.none
+    def __repr__(self):
+        return super().__repr__()
     
 class Primitive(_unistype):
     @trace.debug("Primitive")
@@ -142,7 +155,7 @@ class Primitive(_unistype):
         return self._rt_raw
     @trace.none
     def __repr__(self):
-        return "<unis.Primitive {}>".format(self._rt_raw)
+        return "<unis.Primitive>"#.format(self._rt_raw)
     
 class List(_unistype):
     _rt_ls = _attr()
@@ -207,7 +220,7 @@ class Local(_unistype):
     @trace.debug("Local")
     def __init__(self, v, ref):
         super(Local, self).__init__(v, ref)
-        for k,v in v:
+        for k,v in v.items():
             self.__dict__[k] = v
     @trace.debug("Local")
     def _get_reference(self, n):
@@ -243,6 +256,7 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
     def _update(self, ref, ctx):
         if ref in self._rt_remote and ctx and self._rt_live:
             self.__dict__['ts'] = int(time.time() * 1000000)
+            self._rt_collection.update(self)
             ctx.update(Context(self, ctx))
     @trace.debug("UnisObject")
     def _get_reference(self, n):
@@ -303,7 +317,7 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
         return result
     @trace.none
     def __repr__(self):
-        return "<{}.{} {}>".format(self.__class__.__module__, self.__class__.__name__, self.__dict__.__repr__())
+        return "<{}.{} {}>".format(self.__class__.__module__, self.__class__.__name__, self.__dict__.keys())
     
 
 _CACHE = {}

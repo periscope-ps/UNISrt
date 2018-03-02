@@ -49,7 +49,7 @@ SCHEMAS = {
 # UNISrt Configuration
 ##################################################################
 from unis.services.data import DataService
-#from unis.services.graph import UnisGrapher
+from unis.services.graph import UnisGrapher
 
 CONFIGFILE = os.path.expandvars("$RTUSER_CONFIG")
 if CONFIGFILE == "$RTUSER_CONFIG":
@@ -57,7 +57,7 @@ if CONFIGFILE == "$RTUSER_CONFIG":
 
 DEFAULT_CONFIG = {
     "unis": [],
-    "services": [DataService],
+    "services": [DataService, UnisGrapher],
     "cache": {
         "preload": [ "nodes", "links" ],
         "mode": "exponential",

@@ -5,8 +5,11 @@ import re
 
 from collections import defaultdict
 from string import ascii_uppercase
+from copy import copy
 
 from unis.models import Node, Port, Link
+
+from pprint import pprint
 
 class Graph(object):
     def __init__(self, vertices=[], edges=[], db=None, subnet='10.0.0.0/8', prefix=''):
@@ -18,13 +21,14 @@ class Graph(object):
         self.prefix = prefix
         self.vertices = list(vertices)
         self.edges = list(edges)
+        self._edgeref = set()
         self.height = 0
         self.width  = 0
         if db:
             self._rt = db
         else:
-            from unis.runtime import Runtime
-            self._rt = Runtime(defer_update=True)
+            from unis import Runtime
+            self._rt = Runtime(proxy={'defer_update':True, 'subscribe':False})
         self.processing_level = 0
     
     def _nextaddr(self):
@@ -47,6 +51,8 @@ class Graph(object):
         self.vertices.append(n)
         return n
         
+    def hasEdge(self, src, dst):
+        return set([str(hash(src)) + str(hash(dst))]) & self._edgeref
     def createEdge(self, src, dst):
         p_src = Port({"index": str(len(src.ports)) })
         p_dst = Port({"index": str(len(dst.ports)) })
@@ -56,12 +62,14 @@ class Graph(object):
         p_dst.address.type = "ipv4"
         self._rt.insert(p_src)
         self._rt.insert(p_dst)
-        l = Link({ "directed": False, "endpoints": [p_src, p_dst] })
-        self._rt.insert(l)
+        self._edgeref.add(str(hash(src)) + str(hash(dst)))
+        self._edgeref.add(str(hash(dst)) + str(hash(src)))
         src.ports.append(p_src)
         dst.ports.append(p_dst)
         self.edges.append((src, dst))
         self.edges.append((dst, src))
+        l = Link({ "directed": False, "endpoints": [p_src, p_dst] })
+        self._rt.insert(l)
     
     def finalize(self, include_svg=False):
         for n in self.vertices:
@@ -73,9 +81,7 @@ class Graph(object):
             n.commit()
         self._rt.flush()
     
-    def spring(self, intensity, repeat=1000):
-        
-        
+    def spring(self, unitsize, repeat=1000):
         # initialize
         if self.processing_level == 0:
             for n in self.vertices:
@@ -87,40 +93,41 @@ class Graph(object):
         
         # spring
         for x in range(repeat):
-            bar = "#" * int(30 * (x / repeat)) 
+            bar = "#" * math.ceil(30 * float(x + 1) / repeat)
             bar += "-" * 30
             print("\rRunning spring simulation [{}]".format(bar[:30]), end='\r')
             forces = {}
             
             # Repulsive
             for n in self.vertices:
-                forces[n] = {}
+                forces[n.name] = {}
                 for adj in self.vertices:
                     if n == adj:
                         continue
-                    d = math.sqrt((adj.svg.x - n.svg.x)**2 + (adj.svg.y - n.svg.y)**2)
-                    mag = -(intensity * 2) / d**2
+                    d = math.sqrt(pow(adj.svg.x - n.svg.x, 2) + pow(adj.svg.y - n.svg.y, 2)) / unitsize
+                    mag = -1 * (1 / pow(d, 2)) * unitsize
                     angle = math.atan2((adj.svg.y - n.svg.y), (adj.svg.x - n.svg.x))
-                    forces[n][adj] = (mag * math.cos(angle), mag * math.sin(angle))
+                    forces[n.name][adj.name] = (mag * math.cos(angle), mag * math.sin(angle), 'repulsive', mag, angle)
             
             # Attractive
             for a,b in self.edges:
                 if a != b:
-                    d = math.sqrt((b.svg.x - a.svg.x)**2 + (b.svg.y - a.svg.y)**2)
-                    mag = 1.5 * math.log(d / intensity)
+                    d = math.sqrt(pow(b.svg.x - a.svg.x, 2) + pow(b.svg.y - a.svg.y, 2)) / unitsize
+                    mag = 2 * math.log(d / 1) * unitsize
                     angle = math.atan2((b.svg.y - a.svg.y), (b.svg.x - a.svg.x))
-                    forces[a][b] = (mag * math.cos(angle), mag * math.sin(angle), a.name, b.name)
-                    angle = math.atan2((a.svg.y - b.svg.y), (a.svg.x - b.svg.x))
-                    forces[b][a] = (mag * math.cos(angle), mag * math.sin(angle), a.name, b.name)
+                    forces[a.name][b.name] = (mag * math.cos(angle), mag * math.sin(angle), 'attractive', mag, angle, a.name, b.name)
+                    angle += 180
+                    forces[b.name][a.name] = (mag * math.cos(angle), mag * math.sin(angle), 'attractive', mag, angle, a.name, b.name)
             
             # Apply Forces
+            #pprint(forces)
             for n in self.vertices:
-                x = sum([x[0] for x in forces[n].values()]) * 0.1
+                x = sum([x[0] for x in forces[n.name].values()]) * 0.1
                 n.svg.x += x
-                y = sum([x[1] for x in forces[n].values()]) * 0.1
+                y = sum([x[1] for x in forces[n.name].values()]) * 0.1
                 n.svg.y += y
         print()
-
+        
         # Recenter
         x, y = (0, 0)
         self.height = 0
@@ -231,7 +238,42 @@ class Graph(object):
                 f.write(result)
         
         return result
-    
+
+    @classmethod
+    def power_graph(cls, size, gamma, db=None, subnet='10.0.0.0/8'):
+        def get_degrees(d=None):
+            while not d:
+                while not (d and all([sum(d[:k]) <= (k * (k - 1)) + sum(map(lambda x: min(k, x), d[k + 1:])) for k in range(1, size)]) and sum(d) >= 2*(size-1)):
+                    d = list(sorted([min(size - 1, math.floor(pow(random.random(), 1.0/(-1 * gamma)))) for _ in range(size)], reverse=True))
+                    if sum(d) < 2*(size-1):
+                        while sum(d) < 2*(size-1):
+                            for i in range(1, max(d)):
+                                if len(list(filter(lambda x: x == i, d))) > len(list(filter(lambda x: x == i + 1, d))) * gamma:
+                                    d[d.index(i)] += 1
+                            d[0] += 1
+                    td = copy(d)
+                while td:
+                    v = td.pop()
+                    for j in range(v):
+                        if j < len(td):
+                            td[j] -= 1
+                        else:
+                            d = None
+                    td = list(sorted(filter(lambda x: x, td), reverse=True))
+                
+            return d
+        
+        g = Graph(db=db, subnet=subnet)
+        nodes = [[g.createVertex(), d] for d in get_degrees()]
+        while nodes:
+            n, d = nodes.pop()
+            for j in range(d):
+                nodes[j][1] -= 1
+                g.createEdge(n, nodes[j][0])
+            nodes = list(sorted(filter(lambda x: x[1], nodes), key=lambda x: x[1], reverse=True))
+        return g
+            
+            
     @classmethod
     def build_graph(cls, size, degree, db=None, subnet='10.0.0.0/8', prefix=''):
         degree = max(0, min(degree, 1))

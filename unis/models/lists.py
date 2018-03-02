@@ -25,7 +25,7 @@ class UnisCollection(object):
         def __getitem__(self, i):
             return oContext(self._obj.__getitem__(i), self._rt)
         def where(self, pred):
-            for v in self._obj.where(pred):
+            for v in self._obj.where(pred, self._rt):
                 yield oContext(v, self._rt)
         def __iter__(self):
             for v in self._obj.__iter__():
@@ -46,7 +46,6 @@ class UnisCollection(object):
         cls.collections[name]._subscribe = runtime.settings["proxy"]["subscribe"]
         return UnisCollection.Context(cls.collections[name], runtime)
     
-    @trace.debug("UnisCollection")
     def __init__(self, name, model):
         self._complete_cache, self._get_next = self._proto_complete_cache, self._proto_get_next
         self.name, self.model = name, model
@@ -73,11 +72,13 @@ class UnisCollection(object):
             for k,v in item.__dict__.items():
                 self._cache[i].__dict__[k] = v
             for _,index in self._indices.items():
-                index.update(i, self._cache[i])
-            if self._cache[i]._getattribute("selfRef"):
-                self._stubs[self._unis.refToUID(self._cache[i]._getattribute("selfRef"))] = self._cache[i]
-            self._serve(Events.update, self._cache[i])
+                index.update(i, oContext(self._cache[i], None))
+            if self._cache[i]._getattribute("selfRef", None):
+                self._stubs[self._unis.refToUID(self._cache[i]._getattribute("selfRef", None))] = self._cache[i]
     
+    @trace.info("UnisCollection")
+    def update(self, item):
+        self._serve(Events.update, item)
     @trace.info("UnisCollection")
     def load(self):
         self._loop.run_until_complete(self._complete_cache())
@@ -128,7 +129,7 @@ class UnisCollection(object):
                 return None
     
     @trace.info("UnisCollection")
-    def where(self, pred):
+    def where(self, pred, ctx):
         op = {
             "gt": lambda b: lambda a: type(a) is type(b) and a > b, 
             "ge": lambda b: lambda a: type(a) is type(b) and a >= b,
@@ -138,7 +139,7 @@ class UnisCollection(object):
         }
         self._loop.run_until_complete(self._complete_cache())
         if isinstance(pred, types.FunctionType):
-            for v in filter(pred, self._cache):
+            for v in filter(lambda x: pred(oContext(x, ctx)), self._cache):
                 yield v
         else:
             non_index = {}
@@ -162,7 +163,7 @@ class UnisCollection(object):
         index = Index(k)
         self._indices[k] = index
         for i, v in enumerate(self._cache):
-            index.update(i, oContext(v))
+            index.update(i, oContext(v, None))
     
     @trace.info("UnisCollection")
     def updateIndex(self, v):
@@ -277,7 +278,7 @@ class UnisCollection(object):
         return result if isinstance(result, list) else [result]
     
     def __repr__(self):
-        rep = ".{} {}".format(self.name, self._cache.__repr__() if self._cache else "[...]")
+        rep = ".{} {}".format(self.name, self._cache.__repr__() if self._cache and len(self._cache) < 4 else "[...]")
         return "<UnisList{}>".format(rep if hasattr(self, "name") else "")
     
     @trace.debug("UnisCollection")
