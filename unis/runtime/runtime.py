@@ -14,7 +14,14 @@ from unis.runtime.oal import ObjectLayer
 
 class Runtime(object):
     def build_settings(self):
-        _ls = lambda x: x if len(x) > 1 else x[0]
+        def _ls(v):
+            for i, x in enumerate(v):
+                try:
+                    v[i] = int(x)
+                except ValueError:
+                    pass
+            return v if len(v) > 1 else v[0]
+        
         self.settings = copy.deepcopy(settings.DEFAULT_CONFIG)
         hasunis = self.settings.get('unis', False)
         if settings.CONFIGFILE:

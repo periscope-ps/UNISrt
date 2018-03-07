@@ -36,8 +36,6 @@ class UnisCollection(object):
             return self._obj.__len__()
     collections = {}
     
-    async def _mock(self):
-        return None
     @classmethod
     @trace.debug("UnisCollection")
     def get_collection(cls, name, model, runtime):
@@ -59,7 +57,7 @@ class UnisCollection(object):
         
     @trace.debug("UnisCollection")
     def __getitem__(self, i):
-        self._loop.run_until_complete(self._complete_cache())
+        self._complete_cache()
         return self._cache[i]
     
     @trace.debug("UnisCollection")
@@ -81,7 +79,7 @@ class UnisCollection(object):
         self._serve(Events.update, item)
     @trace.info("UnisCollection")
     def load(self):
-        self._loop.run_until_complete(self._complete_cache())
+        self._complete_cache()
         return list(self._cache)
     
     @trace.info("UnisCollection")
@@ -91,7 +89,7 @@ class UnisCollection(object):
                 raise UnisReferenceError("Requested object in unknown location", hrefs)
         to_get = [v for v in hrefs if not self._stubs[v]]
         if to_get:
-            self._loop.run_until_complete(self._get_next(to_get))
+            self._get_next(to_get)
         return [self._stubs[href] for href in hrefs]
     
     @trace.info("UnisCollection")
@@ -137,7 +135,7 @@ class UnisCollection(object):
             "le": lambda b: lambda a: type(a) is type(b) and a <= b,
             "eq": lambda b: lambda a: type(a) is type(b) and a == b
         }
-        self._loop.run_until_complete(self._complete_cache())
+        self._complete_cache()
         if isinstance(pred, types.FunctionType):
             for v in filter(lambda x: pred(oContext(x, ctx)), self._cache):
                 yield v
@@ -202,24 +200,25 @@ class UnisCollection(object):
             f(ctx)
     
     @trace.debug("UnisCollection")
-    async def _proto_complete_cache(self):
+    def _proto_complete_cache(self):
         self._block_size = max(self._block_size, len(self._stubs) - len(self._cache))
-        await self._get_next()
+        self._get_next()
         
     @trace.debug("UnisCollection")
-    async def _proto_get_next(self, ids=None):
+    def _proto_get_next(self, ids=None):
         ids = ids or []
         todo = (k for k in self._stubs.keys() if not self._stubs[k])
         while len(ids) < self._block_size:
             try:
                 ids.append(next(todo))
             except StopIteration:
-                self._complete_cache = self._get_next = self._mock
+                self._complete_cache = self._get_next = lambda s: None
                 break
         requests = defaultdict(list)
         for v in ids:
             requests[v[0]].append(v[1][1])
-        results = await asyncio.gather(*[self._get_block(k, v, self._block_size) for k,v in requests.items()])
+        future = asyncio.gather(*[self._get_block(k, v, self._block_size) for k,v in requests.items()])
+        results = asyncio.get_event_loop().run_until_complete(future)
         self._block_size *= self._growth
         for result in itertools.chain(*results):
             model = schemaLoader.get_class(result["$schema"], raw=True)
@@ -291,5 +290,5 @@ class UnisCollection(object):
     
     @trace.debug("UnisCollection")
     def __iter__(self):
-        self._loop.run_until_complete(self._complete_cache())
+        self._complete_cache()
         return iter(self._cache)
