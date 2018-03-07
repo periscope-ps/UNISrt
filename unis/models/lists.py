@@ -212,7 +212,7 @@ class UnisCollection(object):
             try:
                 ids.append(next(todo))
             except StopIteration:
-                self._complete_cache = self._get_next = lambda s: None
+                self._complete_cache = self._get_next = lambda: None
                 break
         requests = defaultdict(list)
         for v in ids:

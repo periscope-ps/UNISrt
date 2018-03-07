@@ -83,8 +83,8 @@ class Graph(object):
     
     def spring(self, unitsize, repeat=1000):
         # initialize
-        if self.processing_level == 0:
-            for n in self.vertices:
+        for n in self.vertices:
+            if self.processing_level == 0 or not hasattr(n, 'svg'):
                 n.svg = { "x": 0, "y": 0 }
         sidelen = int(math.sqrt(len(self.vertices)))
         for i, n in enumerate(self.vertices):
