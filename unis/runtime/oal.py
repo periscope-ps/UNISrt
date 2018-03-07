@@ -83,7 +83,7 @@ class ObjectLayer(object):
     @trace.info("OAL")
     def preload(self):
         _p = lambda c: c.name in self.settings['cache']['preload'] or self.settings['cache']['mode'] == 'greedy'
-        values = [c.load for c in self._cache.values() if _p(c)]
+        values = [c.load() for c in self._cache.values() if _p(c)]
         
     @trace.info("OAL")
     def insert(self, res, uid=None):
