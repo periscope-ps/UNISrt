@@ -69,7 +69,7 @@ class UnisGrapher(RuntimeService):
                 if isinstance(resource.endpoints.sink, Port):
                     resource.endpoints.sink.link = resource
                     if resource.endpoints.source and resource.endpoints.sink:
-                        self.runtime.graph.edges.append((resource.endpoints.source, resource.endpoints.sink))
+                        self.runtime.graph.edges.append((resource.endpoints.source.node, resource.endpoints.sink.node))
             else:
                 if isinstance(resource.endpoints[0], Port):
                     resource.endpoints[0].link = resource
