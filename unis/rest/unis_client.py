@@ -37,13 +37,13 @@ class UnisProxy(object):
             asyncio.get_event_loop().run_in_executor(None, loop.run_forever)
     
     @trace.info("UnisProxy")
-    def shutdown(self):
+    async def shutdown(self):
         async def close():
             list(map(lambda t: t.cancel(), [t for t in asyncio.Task.all_tasks(loop) if t != asyncio.Task.current_task(loop)]))
             await asyncio.sleep(0.1)
             loop.stop()
         asyncio.run_coroutine_threadsafe(close(), loop)
-        asyncio.get_event_loop().run_until_complete(asyncio.gather(*[c.shutdown() for c in self.clients.values()]))
+        await asyncio.gather(*[c.shutdown() for c in self.clients.values()])
     
     @trace.info("UnisProxy")
     def refToUID(self, source, full=True):

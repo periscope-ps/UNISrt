@@ -111,7 +111,7 @@ class ObjectLayer(object):
     @trace.info("OAL")
     def shutdown(self):
         self.flush()
-        list(map(lambda p: p._unis.shutdown(), self._cache.values()))
+        list(map(lambda p: asyncio.get_event_loop().run_until_complete(p._unis.shutdown()), self._cache.values()))
     @trace.debug("OAL")
     def __contains__(self, resource):
         try:
