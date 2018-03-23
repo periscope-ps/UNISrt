@@ -53,7 +53,7 @@ class ObjectLayer(object):
     async def _do_update(self, resources, collection):
         self._cache[collection].locked = True
         response = []
-        map(lambda x: x.validate(), resources)
+        list(map(lambda x: x.validate(), resources))
         try:
             response = await self._cache[collection]._unis.post(resources)
         except:
@@ -61,7 +61,7 @@ class ObjectLayer(object):
         finally:
             response = response if isinstance(response, list) else [response]
             for r in resources:
-                r = Context(r, self)
+                r = Context(r, self) if not isinstance(r, Context) else r
                 resp = next(o for o in response if o['id'] == r.id)
                 r.__dict__["selfRef"] = resp["selfRef"]
                 self._cache[collection].updateIndex(r)
