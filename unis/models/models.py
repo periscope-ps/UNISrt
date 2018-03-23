@@ -27,7 +27,10 @@ class Context(object):
         if n not in ['_obj', '_rt'] and not hasattr(type(self), n):
             v = self._obj._getattribute(n, self._rt)
             if callable(v):
-                return lambda *args, **kwargs: v(*args, ctx=self._rt, **kwargs)
+                def f(*args, **kwargs):
+                    kwargs['ctx'] = self._rt
+                    return v(*args, **kwargs)
+                return f
             return Context(v, self._rt) if isinstance(v, _unistype) else v
         return super(Context, self).__getattribute__(n)
     def __setattr__(self, n, v):
