@@ -170,7 +170,7 @@ class List(_unistype):
     @trace.debug("list")
     def _setitem(self, i, v, ctx):
         self._rt_ls[i] = self._lift(v, self._rt_reference, ctx)
-        self._update(self._rt_reference)
+        self._update(self._rt_reference, ctx)
     @trace.info("List")
     def append(self, v, ctx):
         self._rt_ls.append(self._lift(v, self._rt_reference, ctx))
