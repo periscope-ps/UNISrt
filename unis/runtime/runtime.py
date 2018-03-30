@@ -50,9 +50,8 @@ class Runtime(object):
         self.build_settings()
         self._services = []
         
-        signal.signal(signal.SIGINT, self.shutdown)
-        signal.signal(signal.SIGTERM, self.shutdown)
-        atexit.register(self.shutdown)
+        signal.signal(signal.SIGINT, self.sig_close)
+        atexit.register(self.exit_close)
         
         if unis:
             unis = unis if isinstance(unis, list) else [unis]
@@ -114,17 +113,20 @@ class Runtime(object):
             self._services.append(service)
             instance.attach(self)
     
+    def sig_close(self, sig=None, frame=None):
+        signal.signal(signal.SIGTERM, signal.SIG_DFL)
+        self.shutdown()
+        raise KeyboardInterrupt
+    def exit_close(self):
+        self.shutdown()
+        
     @trace.info("Runtime")
     def shutdown(self, sig=None, frame=None):
         self.log.info("Tearing down connection to UNIS...")
         if getattr(self, "_oal", None):
             self._oal.shutdown()
             self._oal = None
-        signal.signal(signal.SIGINT, signal.SIG_DFL)
-        signal.signal(signal.SIGTERM, signal.SIG_DFL)
         self.log.info("Teardown complete.")
-        if sig:
-            sys.exit(130)
     def __contains__(self, model):
         from unis.models.models import UnisObject
         if issubclass(model, UnisObject):

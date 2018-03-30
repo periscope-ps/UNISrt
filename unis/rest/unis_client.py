@@ -43,7 +43,9 @@ class UnisProxy(object):
             await asyncio.sleep(0.1)
             loop.stop()
         asyncio.run_coroutine_threadsafe(close(), loop)
-        await asyncio.gather(*[c.shutdown() for c in self.clients.values()])
+        if hasattr(UnisClient, '_session'):
+            await asyncio.gather(*[c.shutdown() for c in self.clients.values()])
+            del UnisClient._session
     
     @trace.info("UnisProxy")
     def refToUID(self, source, full=True):
