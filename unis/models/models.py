@@ -166,7 +166,7 @@ class List(_unistype):
     def __init__(self, v, ref):
         super(List, self).__init__(v, ref)
         v = v if isinstance(v, list) else [v]
-        self._rt_ls = [x for x in v]
+        self._rt_ls = [x.getObject() if isinstance(x, Context) else x for x in v]
     @trace.debug("List")
     def _getitem(self, i, ctx):
         return self._lift(self._rt_ls[i], self._rt_reference, ctx)._rt_raw
@@ -314,7 +314,8 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
         result = {}
         if top:
             for k,v in filter(lambda x: x[0] in self._rt_remote, self.__dict__.items()):
-                result[k] = v.to_JSON(ctx, False) if isinstance(v, _unistype) else v
+                self.__dict__[k] = v = v if isinstance(v, _unistype) else self._lift(v, k, ctx)
+                result[k] = v.to_JSON(ctx, False)
         else:
             result = { "rel": "full", "href": self.selfRef }
         return result
