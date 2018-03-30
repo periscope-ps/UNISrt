@@ -1,3 +1,4 @@
+import asyncio
 import atexit
 import configparser
 import copy
@@ -21,7 +22,7 @@ class Runtime(object):
                 except ValueError:
                     pass
             return v if len(v) > 1 else v[0]
-        
+
         self.settings = copy.deepcopy(settings.DEFAULT_CONFIG)
         hasunis = self.settings.get('unis', False)
         if settings.CONFIGFILE:
@@ -47,6 +48,12 @@ class Runtime(object):
         
         self.log = logging.getLogger()
         self.log.info("Starting Unis network Runtime Environment...")
+        try:
+            asyncio.get_event_loop()
+        except:
+            self.log.warn("No event loop found, creating event loop for runtime")
+            asyncio.set_event_loop(asyncio.new_event_loop())
+            
         self.build_settings()
         self._services = []
         
