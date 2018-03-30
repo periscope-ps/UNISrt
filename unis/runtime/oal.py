@@ -44,11 +44,11 @@ class ObjectLayer(object):
     @trace.info("OAL")
     def update(self, resource):
         if resource.selfRef:
-            if resource.getObject() not in self._pending:
-                self._pending.add(resource.getObject())
+            if resource not in self._pending:
+                self._pending.add(resource)
                 if not self.settings['proxy']['defer_update']:
                     asyncio.get_event_loop().run_until_complete(self._do_update([resource], resource.getCollection().name))
-                
+    
     @trace.debug("OAL")
     async def _do_update(self, resources, collection):
         self._cache[collection].locked = True

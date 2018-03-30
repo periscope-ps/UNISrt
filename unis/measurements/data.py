@@ -69,7 +69,7 @@ class DataCollection(object):
             return fn.postprocess(fn.prior)
         self._fn.append(fn if isinstance(fn, Function) else Function(fn=fn, name=name))
         setattr(type(self), fn.name, property(_get, doc=doc))
-        
+    
     @trace.debug("DataCollection")
     def __len__(self):
         return self._len
