@@ -51,8 +51,7 @@ class Runtime(object):
         self._services = []
         
         signal.signal(signal.SIGINT, self.sig_close)
-        signal.signal(signal.SIGTERM, self.sig_close)
-        atexit.register(self.shutdown)
+        atexit.register(self.exit_close)
         
         if unis:
             unis = unis if isinstance(unis, list) else [unis]
@@ -113,13 +112,13 @@ class Runtime(object):
         if type(instance) not in self._services:
             self._services.append(service)
             instance.attach(self)
-
+    
     def sig_close(self, sig=None, frame=None):
-        signal.signal(signal.SIGINT, signal.SIG_DFL)
         signal.signal(signal.SIGTERM, signal.SIG_DFL)
         self.shutdown()
-        
+        raise KeyboardInterrupt
     def exit_close(self):
+        self.shutdown()
         
     @trace.info("Runtime")
     def shutdown(self, sig=None, frame=None):
