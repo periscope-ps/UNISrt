@@ -196,7 +196,7 @@ class List(_unistype):
             f = [(k,ops[k](v)) for k,v in f.items()]
             def _check(x, k, op):
                 return isinstance(x, _unistype) and hasattr(x, k) and op(getattr(x, k))
-            return (x for x in self if all(map(lambda v: _check(x,*v), f)))
+            return (x for x in self if all([_check(x,*v) for v in f]))
     
     @trace.debug("List")
     def _get_reference(self, n):
@@ -204,10 +204,10 @@ class List(_unistype):
     @trace.info("List")
     def to_JSON(self, ctx, top):
         self._rt_ls = [self._lift(x, self._rt_reference, ctx) for x in self._rt_ls]
-        return list(map(lambda x: x.to_JSON(ctx, top), [x for x in self._rt_ls if x._getattribute('selfRef', ctx, True)]))
+        return [r.to_JSON(ctx,top) for r in [x for x in self._rt_ls if x._getattribute('selfRef', ctx, True)]]
     @trace.debug("List")
     def _iter(self, ctx):
-        self._rt_ls = list(map(lambda x: self._lift(x, self._rt_reference, ctx), self._rt_ls))
+        self._rt_ls = [self._lift(x, self._rt_reference, ctx) for x in self._rt_ls]
         return map(lambda x: x._rt_raw, self._rt_ls)
     @trace.debug("List")
     def __len__(self):

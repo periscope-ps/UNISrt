@@ -84,7 +84,7 @@ class UnisCollection(object):
     
     @trace.info("UnisCollection")
     def get(self, hrefs):
-        hrefs = list(map(self._unis.refToUID, (hrefs if isinstance(hrefs, list) else [hrefs])))
+        hrefs = [self._unis.refToUID(x) for x in (hrefs if isinstance(hrefs, list) else [hrefs])]
         if any(x not in self._stubs for x in hrefs):
                 raise UnisReferenceError("Requested object in unknown location", hrefs)
         to_get = [v for v in hrefs if not self._stubs[v]]
@@ -194,7 +194,7 @@ class UnisCollection(object):
     def _serve(self, ty, v):
         ctx = oContext(v, None)
         v._callback(ty.name)
-        list(map(lambda cb: cb(ctx, ty.name), self._callbacks))
+        [cb(ctx, ty.name) for cb in self._callbacks]
         for service in self._services:
             f = getattr(service, ty.name)
             f(ctx)
@@ -203,7 +203,7 @@ class UnisCollection(object):
     def _proto_complete_cache(self):
         self._block_size = max(self._block_size, len(self._stubs) - len(self._cache))
         self._get_next()
-        
+    
     @trace.debug("UnisCollection")
     def _proto_get_next(self, ids=None):
         ids = ids or []

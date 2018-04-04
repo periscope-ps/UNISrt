@@ -79,7 +79,7 @@ class Runtime(object):
         self._oal = ObjectLayer(self)
         
         self._oal.addSources(self.settings['unis'])
-        list(map(self.addService, self.settings['services']))
+        [self.addService(s) for s in self.settings['services']]
         self._oal.preload()
         
     def __getattr__(self, n):

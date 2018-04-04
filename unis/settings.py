@@ -15,11 +15,11 @@ MIME = {
     'PSXML': 'application/perfsonar+xml',
     }
 
-RTUSER_ROOT = os.path.expandvars("$RTUSER_ROOT")
-if RTUSER_ROOT == "$RTUSER_ROOT":
-    RTUSER_ROOT = os.path.expanduser("~/.unis")
+PERISCOPE_ROOT = os.path.expandvars("$PERISCOPE_ROOT")
+if PERISCOPE_ROOT == "$PERISCOPE_ROOT":
+    PERISCOPE_ROOT = os.path.expanduser("~/.periscope")
 
-SCHEMA_CACHE_DIR = os.path.join(RTUSER_ROOT, ".cache")
+SCHEMA_CACHE_DIR = os.path.join(PERISCOPE_ROOT, ".cache")
 SCHEMA_HOST        = 'unis.crest.iu.edu'
 
 _schema = "http://{host}/schema/{directory}/{name}"
@@ -53,7 +53,7 @@ from unis.services.graph import UnisGrapher
 
 CONFIGFILE = os.path.expandvars("$RTUSER_CONFIG")
 if CONFIGFILE == "$RTUSER_CONFIG":
-    CONFIGFILE = os.path.expanduser("~/.unis/rt.conf")
+    CONFIGFILE = os.path.join(PERISCOPE_ROOT, "rt.conf")
 
 DEFAULT_CONFIG = {
     "unis": [],

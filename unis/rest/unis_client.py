@@ -75,12 +75,18 @@ class UnisProxy(object):
         return await self._gather(self._collect_funcs(source, "get"), ref or self._name, **kwargs)
     
     @trace.info("UnisProxy")
-    async def post(self, resources):
+    def post(self, collections):
+        async def _f(msgs):
+            async with aiohttp.ClientSession() as session:
+                return await asyncio.gather(*[self.clients[k[1]].post(k[0], json.dumps(v)) for k,v in msgs.items()])
         msgs = defaultdict(list)
-        for r in resources:
-            msgs[self.refToUID(r.getSource(), False)[0]].append(r.to_JSON())
-        results = await asyncio.gather(*[self.clients[k].post(self._name, json.dumps(v)) for k,v in msgs.items()])
-        return list(itertools.chain(*[list(r) for r in results]))
+        for col, resources in collections.items():
+            for r in resources:
+                msgs[(col, self.refToUID(r.getSource(), False)[0])].append(r.to_JSON())
+        results = defaultdict(list)
+        for col, res in asyncio.get_event_loop().run_until_complete(_f(msgs)):
+            results[col].extend(res)
+        return results
     
     @trace.info("UnisProxy")
     async def put(self, href, data):
@@ -177,7 +183,7 @@ class UnisClient(metaclass=_SingletonOnUUID):
     async def post(self, collection, data):
         url, headers = self._get_conn_args(collection)
         data = json.dumps(data) if isinstance(data, dict) else data
-        return await self._do(self._session.post, url, data=data, headers=headers)
+        return (collection, await self._do(self._session.post, url, data=data, headers=headers))
     
     @trace.info("UnisClient")
     async def put(self, ref, data):
