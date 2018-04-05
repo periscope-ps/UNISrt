@@ -38,8 +38,8 @@ class ObjectLayer(object):
     def flush(self):
         if self._pending:
             cols = defaultdict(list)
-            list(map(lambda r: cols[r.getCollection().name].append(r), self._pending))
-            asyncio.get_event_loop().run_until_complete(asyncio.gather(*[self._do_update(v,k) for k,v in cols.items()]))
+            [cols[r.getCollection().name].append(r) for r in self._pending]
+            self._do_update(cols)
         
     @trace.info("OAL")
     def update(self, resource):
@@ -47,26 +47,28 @@ class ObjectLayer(object):
             if resource not in self._pending:
                 self._pending.add(resource)
                 if not self.settings['proxy']['defer_update']:
-                    asyncio.get_event_loop().run_until_complete(self._do_update([resource], resource.getCollection().name))
+                    self._do_update({ resource.getCollection().name: [resource]})
     
     @trace.debug("OAL")
-    async def _do_update(self, resources, collection):
-        self._cache[collection].locked = True
+    def _do_update(self, resources):
+        for collection in resources.keys():
+            self._cache[collection].locked = True
         response = []
-        list(map(lambda x: x.validate(), resources))
+        for _, items in resources.items():
+            [x.validate() for x in items]
         try:
-            response = await self._cache[collection]._unis.post(resources)
+            response = next(iter((self._cache.values())))._unis.post(resources)
         except:
             raise
         finally:
-            response = response if isinstance(response, list) else [response]
-            for r in resources:
-                r = Context(r, self) if not isinstance(r, Context) else r
-                resp = next(o for o in response if o['id'] == r.id)
-                r.__dict__["selfRef"] = resp["selfRef"]
-                self._cache[collection].updateIndex(r)
-            list(map(self._pending.remove, resources))
-            self._cache[collection].locked = False
+            for col, items in resources.items():
+                for r in items:
+                    r = Context(r, self) if not isinstance(r, Context) else r
+                    resp = next(o for o in response[col] if o['id'] == r.id)
+                    r.__dict__["selfRef"] = resp["selfRef"]
+                    self._cache[col].updateIndex(r)
+                    self._pending.remove(r)
+                self._cache[col].locked = False
     
     @trace.info("OAL")
     def addSources(self, hrefs):
@@ -111,7 +113,7 @@ class ObjectLayer(object):
     @trace.info("OAL")
     def shutdown(self):
         self.flush()
-        list(map(lambda p: asyncio.get_event_loop().run_until_complete(p._unis.shutdown()), self._cache.values()))
+        [p._unis.shutdown() for p in self._cache.values()]
     @trace.debug("OAL")
     def __contains__(self, resource):
         try:
