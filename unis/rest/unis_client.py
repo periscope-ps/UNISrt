@@ -37,13 +37,13 @@ class UnisProxy(object):
             asyncio.get_event_loop().run_in_executor(None, loop.run_forever)
     
     @trace.info("UnisProxy")
-    async def shutdown(self):
+    def shutdown(self):
         async def close():
             list(map(lambda t: t.cancel(), [t for t in asyncio.Task.all_tasks(loop) if t != asyncio.Task.current_task(loop)]))
             await asyncio.sleep(0.1)
             loop.stop()
         asyncio.run_coroutine_threadsafe(close(), loop)
-        await asyncio.gather(*[c.shutdown() for c in self.clients.values()])
+        [c.shutdown() for c in self.clients.values()]
     
     @trace.info("UnisProxy")
     def refToUID(self, source, full=True):
@@ -64,21 +64,24 @@ class UnisProxy(object):
         return new
     @trace.info("UnisProxy")
     async def getResources(self, source=None):
-        return await self._gather(self._collect_funcs(source, "getResources"))
+        async with aiohttp.ClientSession() as session:
+            return await self._gather(self._collect_funcs(source, "getResources"), session=session)
     
     @trace.info("UnisProxy")
     async def getStubs(self, source):
-        return await self._gather(self._collect_funcs(source, "getStubs"), self._name)
+        async with aiohttp.ClientSession() as session:
+            return await self._gather(self._collect_funcs(source, "getStubs"), self._name, session=session)
         
     @trace.info("UnisProxy")
     async def get(self, source=None, ref=None, **kwargs):
-        return await self._gather(self._collect_funcs(source, "get"), ref or self._name, **kwargs)
+        async with aiohttp.ClientSession() as session:
+            return await self._gather(self._collect_funcs(source, "get"), ref or self._name, session=session, **kwargs)
     
     @trace.info("UnisProxy")
     def post(self, collections):
         async def _f(msgs):
             async with aiohttp.ClientSession() as session:
-                return await asyncio.gather(*[self.clients[k[1]].post(k[0], json.dumps(v)) for k,v in msgs.items()])
+                return await asyncio.gather(*[self.clients[k[1]].post(k[0], json.dumps(v), session) for k,v in msgs.items()])
         msgs = defaultdict(list)
         for col, resources in collections.items():
             for r in resources:
@@ -91,12 +94,14 @@ class UnisProxy(object):
     @trace.info("UnisProxy")
     async def put(self, href, data):
         source = self.refToUID(href)
-        return await self.clients[source[0]].put("/".join(source[1]), data)
+        async with aiohttp.ClientSession() as session:
+            return await self.clients[source[0]].put("/".join(source[1]), data, session)
     
     @trace.info("UnisProxy")
     async def delete(self, data):
         source = self.refToUID(data.selfRef)
-        return await self.clients[source[0]].delete("/".join(source[1]), data.to_JSON())
+        async with aiohttp.ClientSession() as session:
+            return await self.clients[source[0]].delete("/".join(source[1]), data.to_JSON(), session)
     
     @trace.info("UnisProxy")
     async def subscribe(self, source, callback, ref=None):
@@ -121,8 +126,8 @@ class _SingletonOnUUID(type):
     def __init__(self, *args, **kwargs):
         return super(_SingletonOnUUID, self).__init__(*args, **kwargs)
     def __call__(cls, url, **kwargs):
-        if not hasattr(cls, '_session'):
-            cls._session, cls._shutdown = aiohttp.ClientSession(loop=asyncio.get_event_loop()), False
+        if not hasattr(cls, '_shutdown'):
+            cls._shutdown = False
         url = urlparse(url)
         authority = "{}://{}".format(url.scheme, url.netloc)
         uuid = cls.fqdns[url.netloc] = kwargs['uid'] = cls.fqdns.get(url.netloc, None) or cls.get_uuid(authority)
@@ -165,36 +170,36 @@ class UnisClient(metaclass=_SingletonOnUUID):
             return await self._check_response(resp, False)
     
     @trace.info("UnisClient")
-    async def getResources(self):
+    async def getResources(self, session):
         url, headers = self._get_conn_args("")
-        return await self._do(self._session.get, self._url, headers=headers)
+        return await self._do(session.get, self._url, headers=headers)
     
     @trace.info("UnisClient")
-    async def getStubs(self, collection):
+    async def getStubs(self, collection, session):
         url, headers = self._get_conn_args(collection, fields="selfRef")
-        return await self._do(self._session.get, url, headers=headers)
+        return await self._do(session.get, url, headers=headers)
     
     @trace.info("UnisClient")
-    async def get(self, collection, **kwargs):
+    async def get(self, collection, session, **kwargs):
         url, headers = self._get_conn_args(collection, **kwargs)
-        return await self._do(self._session.get, url, headers=headers)
+        return await self._do(session.get, url, headers=headers)
     
     @trace.info("UnisClient")
-    async def post(self, collection, data):
+    async def post(self, collection, data, session):
         url, headers = self._get_conn_args(collection)
         data = json.dumps(data) if isinstance(data, dict) else data
-        return (collection, await self._do(self._session.post, url, data=data, headers=headers))
+        return (collection, await self._do(session.post, url, data=data, headers=headers))
     
     @trace.info("UnisClient")
-    async def put(self, ref, data):
+    async def put(self, ref, data, session):
         url, headers = self._get_conn_args(ref)
         data = json.dumps(data) if isinstance(data, dict) else data
-        return await self._do(self._session.put, url, data=data, headers=headers)
+        return await self._do(session.put, url, data=data, headers=headers)
     
     @trace.info("UnisClient")
-    async def delete(self, ref):
+    async def delete(self, ref, session):
         url, headers = self._get_conn_args(ref)
-        return await self._do(self._session.delete, url, headers=headers)
+        return await self._do(session.delete, url, headers=headers)
     
     @trace.info("UnisClient")
     async def subscribe(self, collection, callback):
@@ -226,9 +231,7 @@ class UnisClient(metaclass=_SingletonOnUUID):
         else:
             raise Exception("Error from unis server - [{exp}] {t}".format(exp = r.status, t = r.text))
     
-    async def shutdown(self):
+    def shutdown(self):
         self._shutdown = True
-        if not self._session.closed:
-            await self._session.close()
         if self._socket:
             self._socket.close()

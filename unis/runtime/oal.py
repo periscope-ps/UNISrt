@@ -113,8 +113,7 @@ class ObjectLayer(object):
     @trace.info("OAL")
     def shutdown(self):
         self.flush()
-        futures = [p._unis.shutdown() for p in self._cache.values()]
-        asyncio.get_event_loop().run_until_complete(asyncio.gather(*futures))
+        [p._unis.shutdown() for p in self._cache.values()]
     @trace.debug("OAL")
     def __contains__(self, resource):
         try:
