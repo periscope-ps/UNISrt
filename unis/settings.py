@@ -19,7 +19,7 @@ PERISCOPE_ROOT = os.path.expandvars("$PERISCOPE_ROOT")
 if PERISCOPE_ROOT == "$PERISCOPE_ROOT":
     PERISCOPE_ROOT = os.path.expanduser("~/.periscope")
 
-SCHEMA_CACHE_DIR = os.path.join(PERISCOPE_ROOT, ".cache")
+SCHEMA_CACHE_DIR = os.path.join(PERISCOPE_ROOT, ".rtcache")
 SCHEMA_HOST        = 'unis.crest.iu.edu'
 
 _schema = "http://{host}/schema/{directory}/{name}"
