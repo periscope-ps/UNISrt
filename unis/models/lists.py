@@ -7,10 +7,10 @@ from collections import defaultdict
 from lace.logging import trace
 from urllib.parse import urlparse
 
-from unis.utils import Events, Index
 from unis.models import schemaLoader
 from unis.models.models import Context as oContext
 from unis.rest import UnisProxy, UnisReferenceError
+from unis.utils import Events, Index, async
 
 class _sparselist(list):
     def __len__(self):
@@ -39,16 +39,18 @@ class UnisCollection(object):
     @classmethod
     @trace.debug("UnisCollection")
     def get_collection(cls, name, model, runtime):
-        cls.collections[name] = cls.collections.get(name, cls(name, model))
-        cls.collections[name]._growth = runtime.settings["cache"]["growth"]
-        cls.collections[name]._subscribe = runtime.settings["proxy"]["subscribe"]
-        return UnisCollection.Context(cls.collections[name], runtime)
+        collection = cls.collections.get(name, None) or cls(name, model)
+        collection._growth = max(collection._growth, runtime.settings['cache']['growth'])
+        collection._subscribe |= runtime.settings['proxy']['subscribe']
+        cls.collections[name] = collection
+        return UnisCollection.Context(collection, runtime)
     
     def __init__(self, name, model):
         self._complete_cache, self._get_next = self._proto_complete_cache, self._proto_get_next
         self.name, self.model = name, model
         self._indices, self._services, self._unis = {}, [], UnisProxy(name)
         self._block_size = 10
+        self._growth, self._subscribe = 0, False
         self._stubs, self._cache = {}, _sparselist()
         self.createIndex("id")
         self.createIndex("selfRef")
@@ -57,7 +59,8 @@ class UnisCollection(object):
         
     @trace.debug("UnisCollection")
     def __getitem__(self, i):
-        self._complete_cache()
+        if i > len(self._cache):
+            self._complete_cache()
         return self._cache[i]
     
     @trace.debug("UnisCollection")
@@ -76,6 +79,7 @@ class UnisCollection(object):
     
     @trace.info("UnisCollection")
     def update(self, item):
+        print("UPDATE")
         self._serve(Events.update, item)
     @trace.info("UnisCollection")
     def load(self):
@@ -217,8 +221,7 @@ class UnisCollection(object):
         requests = defaultdict(list)
         for v in ids:
             requests[v[0]].append(v[1][1])
-        future = asyncio.gather(*[self._get_block(k, v, self._block_size) for k,v in requests.items()])
-        results = asyncio.get_event_loop().run_until_complete(future)
+        results = async.make_async(asyncio.gather, *[self._get_block(k, v, self._block_size) for k,v in requests.items()])
         self._block_size *= self._growth
         for result in itertools.chain(*results):
             model = schemaLoader.get_class(result["$schema"], raw=True)
@@ -246,8 +249,9 @@ class UnisCollection(object):
                     raise ValueError("No schema in message from UNIS - {}".format(v))
                 model = schemaLoader.get_class(schema, raw=True)
                 if action == 'POST':
+                    print("POST")
                     resource = model(v)
-                    self.append(resource)
+                    resource = self.append(resource)
                 else:
                     try:
                         index = self.indices['id'].index(v['id'])
@@ -255,6 +259,8 @@ class UnisCollection(object):
                         return
                     old = self._cache[index].to_JSON()
                     self[index] = model({**old, **v})
+                    resource = self._cache[index]
+                self.update(resource)
             elif action == 'DELETE':
                 try:
                     i = self._indices['id'].index(v['id'])
@@ -267,7 +273,6 @@ class UnisCollection(object):
                 except IndexError:
                     raise ValueError("No such element in UNIS to delete")
         if self._subscribe:
-            self._subscribe = False
             await self._unis.subscribe(sources, cb)
     
     @trace.debug("UnisCollection")

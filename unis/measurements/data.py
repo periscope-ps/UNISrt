@@ -84,8 +84,7 @@ class DataCollection(object):
             sets = list(v.values())
             for s in sets:
                 list(map(self._process, s))
-        future = self._rt.metadata._unis.subscribe(self._source, cb, self._href)
-        asyncio.get_event_loop().run_until_complete(future)
+        make_async(self._rt.metadata._unis.subscribe, self._source, cb, self._href)
         self._subscribe = lambda: True
         return False
     
@@ -93,8 +92,7 @@ class DataCollection(object):
     def load(self):
         if not self._subscribe():
             kwargs = { "sort": "ts:1", "ts": "gt={}".format(self._at) }
-            future = self._rt.metadata._unis.get(self._source, ref=self._href, **kwargs)
-            data = asyncio.get_event_loop().run_until_complete(future)
+            data = make_async(self._rt.metadata._unis.get, self._source, ref=self._href, **kwargs)
             list(map(self._process, data))
             self._at = int(time.time() * 1000000)
 

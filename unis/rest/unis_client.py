@@ -8,6 +8,7 @@ from urllib.parse import urljoin, urlparse
 from lace.logging import trace
 
 from unis.settings import MIME
+from unis.utils import async
 
 class UnisError(Exception):
     pass
@@ -87,7 +88,7 @@ class UnisProxy(object):
             for r in resources:
                 msgs[(col, self.refToUID(r.getSource(), False)[0])].append(r.to_JSON())
         results = defaultdict(list)
-        for col, res in asyncio.get_event_loop().run_until_complete(_f(msgs)):
+        for col, res in async.make_async(_f, msgs):
             results[col].extend(res)
         return results
     
@@ -148,7 +149,7 @@ class UnisClient(metaclass=_SingletonOnUUID):
     @trace.debug("UnisClient")
     def __init__(self, url, loop, **kwargs):
         def _handle_exception(future):
-            if not future.cancelled and future.exception():
+            if not future.cancelled() and future.exception():
                 raise future.exception()
         async def _listen():
             while True:

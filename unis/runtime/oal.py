@@ -8,6 +8,7 @@ from unis.models import schemaLoader
 from unis.models.lists import UnisCollection
 from unis.models.models import Context
 from unis.rest import UnisReferenceError, UnisProxy
+from unis.utils import async
 
 from urllib.parse import urlparse
 
@@ -72,15 +73,14 @@ class ObjectLayer(object):
     
     @trace.info("OAL")
     def addSources(self, hrefs):
-        loop = asyncio.get_event_loop()
         proxy = UnisProxy(None)
         proxy.addSources(hrefs)
-        for r in loop.run_until_complete(proxy.getResources()):
+        for r in async.make_async(proxy.getResources):
             ref = (urlparse(r['href']).path.split('/')[1], r['targetschema']['items']['href'])
             if ref[0] not in ['events', 'data']:
                 col = UnisCollection.get_collection(ref[0], schemaLoader.get_class(ref[1], raw=True), self)
                 self._cache[col.name] = col
-        loop.run_until_complete(asyncio.gather(*[c.addSources(hrefs) for c in self._cache.values()]))
+        async.make_async(asyncio.gather, *[c.addSources(hrefs) for c in self._cache.values()])
     
     @trace.info("OAL")
     def preload(self):

@@ -11,6 +11,7 @@ from lace.logging import trace
 from urllib.parse import urlparse
 
 from unis.settings import SCHEMA_CACHE_DIR
+from unis.utils import async
 
 class _attr(object):
     def __init__(self, default=None):
@@ -269,7 +270,7 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
         if self._getattribute('selfRef', ctx):
             self.__dict__['ts'] = int(time.time() * 1000000)
             payload = json.dumps({'ts': self.ts})
-            asyncio.get_event_loop().run_until_complete(self._rt_collection._unis.put(self._getattribute('selfRef', ctx), payload))
+            async.make_async(self._rt_collection._unis.put, self._getattribute('selfRef', ctx), payload)
     @trace.info("UnisObject")
     def getSource(self, ctx=None):
         url = urlparse(self._getattribute('selfRef', ctx))

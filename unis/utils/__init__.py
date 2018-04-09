@@ -4,7 +4,6 @@ import functools
 from lace.logging import trace
 
 from unis.utils.pubsub import Events
-from unis.models.models import UnisObject
 
 class Index(object):
     @trace.debug("Index")
@@ -15,7 +14,7 @@ class Index(object):
     @trace.info("Index")
     def index(self, item):
         try:
-            v = getattr(item, self.key) if isinstance(item, UnisObject) else item
+            v = getattr(item, self.key)
         except AttributeError:
             return None
         s = bisect.bisect_left(self._keys, v)
