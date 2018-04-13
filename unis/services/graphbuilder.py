@@ -81,7 +81,7 @@ class Graph(object):
             n.commit()
         self._rt.flush()
     
-    def spring(self, unitsize, repeat=1000):
+    def spring(self, unitsize, repeat=50):
         # initialize
         for n in self.vertices:
             if self.processing_level == 0 or not hasattr(n, 'svg'):
@@ -281,7 +281,7 @@ class Graph(object):
         links = size
         adj = {}
         missing = []
-        g = Graph(prefix=prefix)
+        g = Graph(prefix=prefix, subnet=subnet, db=db)
         g.createVertex()
         
         for i in range(size - 1):

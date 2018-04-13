@@ -1,5 +1,4 @@
 jsonschema
-bson
 httplib2
 requests
 pytz

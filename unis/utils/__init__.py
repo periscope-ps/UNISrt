@@ -12,9 +12,9 @@ class Index(object):
         self._keys, self._indices, self._items = [], [], []
     
     @trace.info("Index")
-    def index(self, item):
+    def index(self, item, value=False):
         try:
-            v = getattr(item, self.key)
+            v = item if value else getattr(item, self.key)
         except AttributeError:
             return None
         s = bisect.bisect_left(self._keys, v)

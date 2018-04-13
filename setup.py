@@ -59,7 +59,7 @@ setup(
         "aiohttp",
         "requests",
         "jsonschema",
-        "bson",
+        #"bson",
         "websockets",
         "lace"
     ],

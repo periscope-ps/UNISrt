@@ -79,7 +79,6 @@ class UnisCollection(object):
     
     @trace.info("UnisCollection")
     def update(self, item):
-        print("UPDATE")
         self._serve(Events.update, item)
     @trace.info("UnisCollection")
     def load(self):
@@ -188,7 +187,9 @@ class UnisCollection(object):
     @trace.info("UnisCollection")
     def addCallback(self, cb):
         self._callbacks.append(cb)
-    
+    @trace.info("UnisCollection")
+    def addStub(self, item):
+        self._stubs[self._unis.refToUID(item.selfRef)] = item
     @trace.debug("UnisCollection")
     def _check_record(self, v):
         if self.model._rt_schema["name"] not in v.names:
@@ -216,7 +217,8 @@ class UnisCollection(object):
             try:
                 ids.append(next(todo))
             except StopIteration:
-                self._complete_cache = self._get_next = lambda: None
+                self._complete_cache = lambda: None
+                self._get_next = lambda x: None
                 break
         requests = defaultdict(list)
         for v in ids:
@@ -249,17 +251,12 @@ class UnisCollection(object):
                     raise ValueError("No schema in message from UNIS - {}".format(v))
                 model = schemaLoader.get_class(schema, raw=True)
                 if action == 'POST':
-                    print("POST")
                     resource = model(v)
                     resource = self.append(resource)
                 else:
-                    try:
-                        index = self.indices['id'].index(v['id'])
-                    except IndexError:
-                        return
-                    old = self._cache[index].to_JSON()
-                    self[index] = model({**old, **v})
-                    resource = self._cache[index]
+                    resource = self.get(v['selfRef'])[0]
+                    for k,v in v.items():
+                        resource.__dict__[k] = v
                 self.update(resource)
             elif action == 'DELETE':
                 try:

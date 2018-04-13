@@ -43,8 +43,15 @@ class Runtime(object):
     def __init__(self, unis=None, **kwargs):
         def _unis_config(unis):
             if not isinstance(unis, dict):
-                unis = { "url": unis, "default": False, "verify": False, "ssl": None, "enabled": True }
-            return unis
+                return { "url": unis, "default": False, "verify": False, "ssl": None, "enabled": True }
+            else:
+                return {
+                    "url": unis['url'],
+                    "default": unis.get('default', False),
+                    "verify": unis.get('verify', False),
+                    "ssl": unis.get('ssl', None),
+                    "enabled": unis.get('enabled', True)
+                }
         
         self.log = logging.getLogger()
         self.log.info("Starting Unis network Runtime Environment...")
@@ -57,18 +64,15 @@ class Runtime(object):
         self.build_settings()
         self._services = []
         
-        signal.signal(signal.SIGINT, self.sig_close)
-        atexit.register(self.exit_close)
+        #try:
+        #    signal.signal(signal.SIGINT, self.sig_close)
+        #except:
+        #    pass
+        #atexit.register(self.exit_close)
         
         if unis:
             unis = unis if isinstance(unis, list) else [unis]
-            for new in unis:
-                new = _unis_config(new)
-                old = next((u for u in self.settings['unis'] if u['url'] == new['url']), None)
-                if old:
-                    old.update(**new)
-                else:
-                    self.settings['unis'].append(new)
+            self.settings['unis'] = [_unis_config(u) for u in unis]
         elif not self.settings['unis']:
             raise settings.ConfigurationError("Runtime configuration missing default UNIS instance")
         for k,v in kwargs.items():
@@ -86,7 +90,7 @@ class Runtime(object):
             return super(Runtime, self).__getattribute__(n)
         except AttributeError:
             return getattr(self._oal, n)
-        
+            
     @property
     @trace.info("Runtime")
     def collections(self):
@@ -112,10 +116,12 @@ class Runtime(object):
             service = importlib.import_module(path[0])
             for comp in path[1:]:
                 service = getattr(module, comp)
-        if not issubclass(service, RuntimeService):
-            raise ValueError("Service must by of type RuntimeService")
         if isinstance(service, type):
+            if not issubclass(service, RuntimeService):
+                raise ValueError("Service type must be of type RuntimeService")
             instance = service()
+        if not isinstance(instance, RuntimeService):
+            raise ValueError("Service object must be of type RuntimeService - {}".format(type(instance)))
         if type(instance) not in self._services:
             self._services.append(service)
             instance.attach(self)
@@ -132,7 +138,6 @@ class Runtime(object):
         self.log.info("Tearing down connection to UNIS...")
         if getattr(self, "_oal", None):
             self._oal.shutdown()
-            self._oal = None
         self.log.info("Teardown complete.")
     def __contains__(self, model):
         from unis.models.models import UnisObject

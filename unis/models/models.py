@@ -249,7 +249,7 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
         v = v or {}
         super(UnisObject, self).__init__(v, ref)
         self._rt_parent, self._rt_remote, self._rt_live = self, set(v.keys()) | set(self._rt_defaults.keys()), True
-        self.__dict__.update({**self._rt_defaults, **v, **{'$schema': self._rt_schema['id']}})
+        self.__dict__.update({**self._rt_defaults, **v})
         
     @trace.debug("UnisObject")
     def _setattr(self, n, v, ctx):
@@ -269,7 +269,7 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
     def touch(self, ctx):
         if self._getattribute('selfRef', ctx):
             self.__dict__['ts'] = int(time.time() * 1000000)
-            payload = json.dumps({'ts': self.ts})
+            payload = json.dumps({'ts': self.ts, 'id': self._getattribute('id', ctx)})
             async.make_async(self._rt_collection._unis.put, self._getattribute('selfRef', ctx), payload)
     @trace.info("UnisObject")
     def getSource(self, ctx=None):
@@ -293,6 +293,7 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
             self._rt_source = url
             self.__dict__['ts'] = int(time.time() * 1000000)
             self.__dict__['selfRef'] = "{}/{}/{}".format(url, self._rt_collection.name, self._getattribute('id', ctx))
+            self._rt_collection.addStub(self)
             self._update('id', ctx)
     @trace.info("UnisObject")
     def extendSchema(self, n, v=None, ctx=None):
@@ -317,6 +318,7 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
             for k,v in filter(lambda x: x[0] in self._rt_remote, self.__dict__.items()):
                 self.__dict__[k] = v = v if isinstance(v, _unistype) else self._lift(v, k, ctx)
                 result[k] = v.to_JSON(ctx, False)
+            result['$schema'] = self._rt_schema['id']
         else:
             result = { "rel": "full", "href": self.selfRef }
         return result
@@ -349,6 +351,7 @@ def _schemaFactory(schema, n, tys, raw=False):
             super(_jsonMeta, cls).__init__(name, bases, attrs)
             cls.names.add(n)
             cls._rt_defaults.update({k:v for k,v in _props(schema).items()})
+            setattr(cls, '$schema', schema['id'])
             cls._rt_schema, cls._rt_resolver = schema, jsonschema.RefResolver(schema['id'], schema, _CACHE)
             cls.__doc__ = schema.get('description', None)
         

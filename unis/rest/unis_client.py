@@ -1,6 +1,7 @@
 import asyncio
 import aiohttp, requests, websockets
-import bson, json
+#import bson, json
+import json
 import itertools
 
 from collections import defaultdict
@@ -161,8 +162,12 @@ class UnisClient(metaclass=_SingletonOnUUID):
         self.uid = kwargs['uid']
         self._url = url
         self._verify, self._ssl = kwargs.get("verify", False), kwargs.get("ssl", None)
-        self._socket = asyncio.run_coroutine_threadsafe(_make_socket(), loop).result(timeout=1)
-        self._channels = defaultdict(list)
+        try:
+            self._socket = asyncio.run_coroutine_threadsafe(_make_socket(), loop).result(timeout=1)
+        except Exception as exp:
+            return
+        finally:
+            self._channels = defaultdict(list)
         asyncio.run_coroutine_threadsafe(_listen(), loop).add_done_callback(_handle_exception)
     
     @trace.debug("UnisClient")
@@ -223,7 +228,8 @@ class UnisClient(metaclass=_SingletonOnUUID):
         if 200 <= r.status <= 299:
             try:
                 body = await r.read()
-                resp = bson.loads(body) if r.content_type == MIME['PSBSON'] else json.loads(str(body, 'utf-8'))
+                resp = json.loads(str(body, 'utf-8'))
+                #resp = bson.loads(body) if r.content_type == MIME['PSBSON'] else json.loads(str(body, 'utf-8'))
                 return resp if isinstance(resp, list) else [resp]
             except Exception as exp:
                 return r.status
