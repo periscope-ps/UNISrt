@@ -249,7 +249,7 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
         v = v or {}
         super(UnisObject, self).__init__(v, ref)
         self._rt_parent, self._rt_remote, self._rt_live = self, set(v.keys()) | set(self._rt_defaults.keys()), True
-        self.__dict__.update({**self._rt_defaults, **v})
+        self.__dict__.update({**self._rt_defaults, **{k:self._lift(x, k, None) for k,x in v.items()}})
         
     @trace.debug("UnisObject")
     def _setattr(self, n, v, ctx):
@@ -316,8 +316,7 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
         result = {}
         if top:
             for k,v in filter(lambda x: x[0] in self._rt_remote, self.__dict__.items()):
-                self.__dict__[k] = v = v if isinstance(v, _unistype) else self._lift(v, k, ctx)
-                result[k] = v.to_JSON(ctx, False)
+                result[k] = v.to_JSON(ctx, False) if isinstance(v, _unistype) else v
             result['$schema'] = self._rt_schema['id']
         else:
             result = { "rel": "full", "href": self.selfRef }
