@@ -22,7 +22,7 @@ class Runtime(object):
                 except ValueError:
                     pass
             return v if len(v) > 1 else v[0]
-
+        
         self.settings = copy.deepcopy(settings.DEFAULT_CONFIG)
         hasunis = self.settings.get('unis', False)
         if settings.CONFIGFILE:
@@ -37,7 +37,9 @@ class Runtime(object):
                         hasunis = True
                     self.settings["unis"].append({k:tys.get(v,v) for k,v in tmpConfig.items(section)})
                 else:
-                    self.settings[section] = {k:tys.get(v, _ls(v.split(','))) for k,v in tmpConfig.items(section)}
+                    if section not in self.settings:
+                        self.settings[section] = {}
+                    self.settings[section].update({k:tys.get(v, _ls(v.split(','))) for k,v in tmpConfig.items(section)})
     
     @trace.debug("Runtime")
     def __init__(self, unis=None, **kwargs):

@@ -48,18 +48,15 @@ SCHEMAS = {
 ##################################################################
 # UNISrt Configuration
 ##################################################################
-from unis.services.data import DataService
-from unis.services.graph import UnisGrapher
-
 CONFIGFILE = os.path.expandvars("$RTUSER_CONFIG")
 if CONFIGFILE == "$RTUSER_CONFIG":
     CONFIGFILE = os.path.join(PERISCOPE_ROOT, "rt.conf")
 
 DEFAULT_CONFIG = {
     "unis": [],
-    "services": [DataService, UnisGrapher],
+    "services": [],
     "cache": {
-        "preload": [ "nodes", "links" ],
+        "preload": [],
         "mode": "exponential",
         "growth": 2,
     },
