@@ -249,13 +249,13 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
     _rt_restricted, _rt_live = ["ts", "selfRef"], False
     _rt_callback = lambda s,x,e: x
     @trace.info("UnisObject")
-    def __init__(self, v=None, ref=None, src=None):
+    def __init__(self, v=None, ref=None):
         v = v or {}
         super(UnisObject, self).__init__(v, ref)
         self._rt_parent, self._rt_remote, self._rt_live = self, set(v.keys()) | set(self._rt_defaults.keys()), True
         self.__dict__.update({**self._rt_defaults, **v})
-        if src:
-            self._rt_source = src
+        if self.__dict__.get('selfRef'):
+            self._rt_source = UnisClient.resolve(self._getattribute('selfRef', None))
     
     @trace.debug("UnisObject")
     def _setattr(self, n, v, ctx):

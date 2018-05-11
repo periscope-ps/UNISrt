@@ -2,7 +2,7 @@ import asyncio, requests, websockets
 import copy, itertools, json
 
 from aiohttp import ClientSession, ClientResponse
-from collections import defaultdict, namedtuple
+from collections import defaultdict
 from lace.logging import trace
 from urllib.parse import urljoin, urlparse
 
@@ -13,7 +13,6 @@ from unis.utils import async
 class CID(str):
     pass
 
-Stub = namedtuple('Stub', ['cid', 'rid'])
 class ReferenceDict(dict):
     def __getitem__(self, n):
         """ Internal object get item method
@@ -89,7 +88,7 @@ class UnisProxy(object):
         :param src: List of client identifiers to query
         
         :type src: List[CID]
-        :rtype: List[Stub]
+        :rtype: List[Dict[str, Any]]
         """
         async with ClientSession() as sess:
             return await self._gather(self._collect_fn(src, "getStubs"), self._name, sess=sess)
@@ -305,11 +304,10 @@ class UnisClient(metaclass=_SingletonOnUID):
         
         :type col: str
         :type sess: ClientSession
-        :rtype: List[Stub]
+        :rtype: List[Dict[str, Any]]
         """
-        url, hdr = self._get_conn_args(col, fields="id")
-        results = await self._do(sess.get, url, headers=hdr)
-        return [Stub(self.uid, r['id']) for r in results]
+        url, hdr = self._get_conn_args(col, fields="selfRef")
+        return await self._do(sess.get, url, headers=hdr)
 
     @trace.info("UnisClient")
     async def get(self, col, sess, **kwargs): 

@@ -187,8 +187,9 @@ class UnisCollection(object):
     @trace.info("UnisCollection")
     async def addSources(self, cids):
         self._complete_cache, self._get_next = self._proto_complete_cache, self._proto_get_next
-        for stub in await self._unis.getStubs(cids):
-            self._stubs[stub.rid] = stub.cid
+        for v in filter(lambda x: 'selfRef' in x, await self._unis.getStubs(cids)):
+            uid = urlparse(v['selfRef']).path.split('/')[-1]
+            self._stubs[uid] = UnisClient.resolve(v['selfRef'])
         await self._add_subscription(cids)
     
     @trace.info("UnisCollection")
@@ -235,7 +236,7 @@ class UnisCollection(object):
         self._block_size *= self._growth
         for result in itertools.chain(*results):
             model = schemaLoader.get_class(result["$schema"], raw=True)
-            self.append(model(result, src=self._stubs[result['id']]))
+            self.append(model(result))
     
     @trace.debug("UnisCollection")
     async def _get_block(self, source, ids, blocksize):
