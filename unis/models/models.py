@@ -109,25 +109,30 @@ class _unistype(object):
         return super(_unistype, self).__setattr__(n, v)
     @trace.debug("unistype")
     def _setattr(self, n, v, ctx):
+        def _eq(a, b):
+            if isinstance(b, _unistype):
+                return (isinstance(a, _unistype) and a._rt_raw == b._rt_raw) or a == b._rt_raw
+            return (isinstance(a, _unistype) and a._rt_raw == b) or a == b
         if n in self._rt_restricted:
             raise AttributeError("Cannot change restricted attribute {}".format(n))
         if hasattr(type(self), n):
             object.__setattr__(self, n, v)
         else:
-            eq = lambda a,b: (isinstance(a, _unistype) and a._rt_raw == b._rt_raw) or a == b._rt_raw
-            newvalue = self._lift(v, self._get_reference(n), ctx)
-            if n not in self.__dict__ or not eq(self.__dict__[n], newvalue):
-                super(_unistype, self).__setattr__(n, self._lift(v, self._get_reference(n), ctx))
+            if n not in self.__dict__ or not _eq(self.__dict__[n], v):
+                super(_unistype, self).__setattr__(n, v)
                 self._update(self._get_reference(n), ctx)
     
     @trace.debug("unistype")
-    def _lift(self, v, ref, ctx):
+    def _lift(self, v, ref, ctx, remote=True):
         v = v.getObject() if isinstance(v, Context) else v
         if isinstance(v, _unistype):
             return v
         elif isinstance(v, dict):
             if '$schema' in v or 'href' in v:
-                v = ctx.insert(v) if "$schema" in v else ctx.find(v['href'])[0]
+                if remote and ctx:
+                    v = ctx.insert(v) if "$schema" in v else ctx.find(v['href'])[0]
+                else:
+                    return v
             else:
                 v =  Local(v, ref)
         elif isinstance(v, list):
@@ -178,11 +183,11 @@ class List(_unistype):
         return self._lift(self._rt_ls[i], self._rt_reference, ctx)._rt_raw
     @trace.debug("list")
     def _setitem(self, i, v, ctx):
-        self._rt_ls[i] = self._lift(v, self._rt_reference, ctx)
+        self._rt_ls[i] = v
         self._update(self._rt_reference, ctx)
     @trace.info("List")
     def append(self, v, ctx):
-        self._rt_ls.append(self._lift(v, self._rt_reference, ctx))
+        self._rt_ls.append(v)
         self._update(self._rt_reference, ctx)
     @trace.info("List")
     def remove(self, v, ctx):
@@ -209,12 +214,20 @@ class List(_unistype):
         return self._rt_reference
     @trace.info("List")
     def to_JSON(self, ctx, top):
-        self._rt_ls = [self._lift(x, self._rt_reference, ctx) for x in self._rt_ls]
-        return [r.to_JSON(ctx,top) for r in [x for x in self._rt_ls if x._getattribute('selfRef', ctx, True)]]
+        res = []
+        for i, item in enumerate(self._rt_ls):
+            if isinstance(item, (list, dict)):
+                self._rt_ls[i] = self._lift(item, self._get_reference(i), ctx, False)
+        for item in self._rt_ls:
+            try:
+                res.append(item.to_JSON(ctx, top) if isinstance(item, _unistype) else item)
+            except SkipResource:
+                pass
+        return res
     @trace.debug("List")
     def _iter(self, ctx):
         self._rt_ls = [self._lift(x, self._rt_reference, ctx) for x in self._rt_ls]
-        return map(lambda x: x._rt_raw, self._rt_ls)
+        return iter([x._rt_raw for x in self._rt_ls])
     @trace.debug("List")
     def __len__(self):
         return len(self._rt_ls)
@@ -236,7 +249,15 @@ class Local(_unistype):
         return self._rt_reference
     @trace.info("Local")
     def to_JSON(self, ctx, top):
-        return {k:self._lift(v, self._rt_reference, ctx).to_JSON(ctx, top) for k,v in self.__dict__.items()}
+        res = {}
+        for k,v in self.__dict__.items():
+            if isinstance(v, (list, dict)):
+                self.__dict__[k] = v = self._lift(v, self._get_reference(k), ctx, False)
+            try:
+                res[k] = v.to_JSON(ctx, top) if isinstance(v, _unistype) else v
+            except SkipResource:
+                pass
+        return res
     @trace.none
     def __repr__(self):
         return "<unis.Local {}>".format(self.__dict__.__repr__())
@@ -307,7 +328,7 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
     @trace.info("UnisObject")
     def extendSchema(self, n, v=None, ctx=None):
         if v:
-            self.__dict__[n] = self._lift(v, n, ctx)
+            self.__dict__[n] = v
         if n not in self._rt_remote:
             self._rt_remote.add(n)
             self._update(n, ctx)
@@ -325,6 +346,8 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
         result = {}
         if top:
             for k,v in filter(lambda x: x[0] in self._rt_remote, self.__dict__.items()):
+                if isinstance(v, (list, dict)):
+                    self.__dict__[k] = v = self._lift(v, self._get_reference(k), ctx, False)
                 try:
                     result[k] = v.to_JSON(ctx, False) if isinstance(v, _unistype) else v
                 except SkipResource:
