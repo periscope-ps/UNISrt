@@ -71,8 +71,6 @@ class UnisCollection(object):
     def __setitem__(self, i, item):
         self._check_record(item)
         if self._cache[i]._getattribute('id', None) != item._getattribute('id', None):
-            print(self._cache[i].to_JSON())
-            print(item.to_JSON())
             raise AttributeError("Resource ids do not match")
         
         if getattr(self._cache[i], "ts", 0) < item.ts:
@@ -104,13 +102,16 @@ class UnisCollection(object):
     @trace.info("UnisCollection")
     def append(self, item):
         self._check_record(item)
-        item.setCollection(self)
         i = self.index(item)
-        self._stubs[item._getattribute('id', None)] = item
         if i is not None:
+            uid = item._getattribute('id', None)
             self.__setitem__(i, item)
+            if uid not in self._stubs or isinstance(self._stubs[uid], str):
+                self._stubs[uid] = self._cache[i]
             return self._cache[i]
         else:
+            item.setCollection(self)
+            self._stubs[item._getattribute('id', None)] = item
             i = len(self._cache)
             self._cache.append(item)
             for _,index in self._indices.items():
@@ -140,11 +141,11 @@ class UnisCollection(object):
     @trace.info("UnisCollection")
     def where(self, pred, ctx):
         op = {
-            "gt": lambda b: lambda a: type(a) is type(b) and a > b, 
-            "ge": lambda b: lambda a: type(a) is type(b) and a >= b,
-            "lt": lambda b: lambda a: type(a) is type(b) and a < b,
-            "le": lambda b: lambda a: type(a) is type(b) and a <= b,
-            "eq": lambda b: lambda a: type(a) is type(b) and a == b
+            "gt": lambda b: lambda a: a > b, 
+            "ge": lambda b: lambda a: a >= b,
+            "lt": lambda b: lambda a: a < b,
+            "le": lambda b: lambda a: a <= b,
+            "eq": lambda b: lambda a: a == b
         }
         self._complete_cache()
         if isinstance(pred, types.FunctionType):
@@ -164,8 +165,11 @@ class UnisCollection(object):
             
             for i in subset:
                 record = self._cache[i]
-                if all([v(record._getattribute(k, ctx, None)) for k,v in non_index.items()]):
-                    yield record
+                try:
+                    if all([v(record._getattribute(k, ctx, None)) for k,v in non_index.items()]):
+                        yield record
+                except TypeError:
+                    pass
     
     @trace.info("UnisCollection")
     def createIndex(self, k):

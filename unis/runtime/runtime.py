@@ -66,12 +66,6 @@ class Runtime(object):
         self.build_settings()
         self._services = []
         
-        try:
-            signal.signal(signal.SIGINT, self.sig_close)
-        except:
-            pass
-        atexit.register(self.exit_close)
-        
         if unis:
             unis = unis if isinstance(unis, list) else [unis]
             self.settings['unis'] = [_unis_config(u) for u in unis]
@@ -83,6 +77,12 @@ class Runtime(object):
         self.settings['default_source'] = reduce(lambda x,y: y if y['default'] else x, self.settings['unis'])['url']
         self._oal = ObjectLayer(self)
         
+        try:
+            signal.signal(signal.SIGINT, self.sig_close)
+        except:
+            pass
+        atexit.register(self.exit_close)
+                
         self._oal.addSources(self.settings['unis'])
         [self.addService(s) for s in self.settings['runtime']['services']]
         self._oal.preload()

@@ -61,7 +61,7 @@ class Context(object):
     def __repr__(self):
         return repr(self._obj)
     def __eq__(self, other):
-        if isinstance(self, other.__class__):
+        if isinstance(other, Context):
             return self._obj == other._obj
         return self._obj == other
     def __hash__(self):
@@ -127,9 +127,8 @@ class _unistype(object):
             return v
         elif isinstance(v, dict):
             if '$schema' in v or 'href' in v:
-                v = ctx.insert(v) if "$schema" in v else ctx.find(v['href'])[0]
-            else:
-                v =  Local(v, ref)
+                return ctx.insert(v) if "$schema" in v else ctx.find(v['href'])[0]
+            v =  Local(v, ref)
         elif isinstance(v, list):
             v = List(v, ref)
         else:
@@ -249,7 +248,7 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
     _rt_remote, _rt_collection = _attr(), _attr()
     _rt_restricted, _rt_live = ["ts", "selfRef"], False
     _rt_callback = lambda s,x,e: x
-    @trace.debug("UnisObject")
+    @trace.info("UnisObject")
     def __init__(self, v=None, ref=None):
         v = v or {}
         super(UnisObject, self).__init__(v, ref)
@@ -277,7 +276,6 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
         if self._getattribute('selfRef', ctx):
             self.__dict__['ts'] = int(time.time() * 1000000)
             cid, rid = self.getSource(), self._getattribute('id', ctx)
-            
             async.make_async(self._rt_collection._unis.put, cid, rid, {'ts': self.ts, 'id': rid})
     @trace.info("UnisObject")
     def getSource(self, ctx=None):
@@ -339,7 +337,6 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
     @trace.none
     def __repr__(self):
         return "<{}.{} {}>".format(self.__class__.__module__, self.__class__.__name__, self.__dict__.keys())
-    
 
 _CACHE = {}
 if SCHEMA_CACHE_DIR:
