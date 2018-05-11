@@ -7,7 +7,8 @@ from lace.logging import trace
 from unis.models import schemaLoader
 from unis.models.lists import UnisCollection
 from unis.models.models import Context
-from unis.rest import UnisReferenceError, UnisProxy
+from unis.rest import UnisProxy
+from unis.exceptions import UnisReferenceError
 from unis.utils import async
 
 from urllib.parse import urlparse
@@ -29,43 +30,49 @@ class ObjectLayer(object):
     @trace.debug("OAL")
     def find(self, href):
         try:
-            return self._cache[urlparse(href).path.split('/')[1]].get(href)
+            res = self._cache[urlparse(href).path.split('/')[1]].get([href])
+            return res
         except UnisReferenceError as e:
-            new_source = { 'url': "http://" + e.href, 'default': False, 'enabled': True }
-            self.addSources([new_source])
-            return self._cache[urlparse(href).path.split('/')[1]].get(href)
+            new_sources = [{'url': r, 'default': False, 'enabled': True} for r in e.hrefs]
+            self.addSources(new_sources)
+            return self._cache[urlparse(href).path.split('/')[1]].get([href])
     
     @trace.info("OAL")
     def flush(self):
         if self._pending:
             cols = defaultdict(list)
-            [cols[r.getCollection().name].append(r) for r in self._pending]
+            [cols[r.getSource(), r.getCollection().name].append(r) for r in self._pending]
             self._do_update(cols)
-        
+    
     @trace.info("OAL")
-    def update(self, resource):
-        if resource.selfRef:
-            if resource not in self._pending:
-                self._pending.add(resource)
+    def update(self, res):
+        if res.selfRef:
+            if res not in self._pending:
+                self._pending.add(res)
                 if not self.settings['proxy']['defer_update']:
-                    self._do_update({ resource.getCollection().name: [resource]})
+                    self._do_update({(res.getSource(), res.getCollection().name): [res]})
     
     @trace.debug("OAL")
-    def _do_update(self, resources):
-        for collection in resources.keys():
+    def _do_update(self, pending):
+        request = {}
+        for (cid, collection), reslist in pending.items():
             self._cache[collection].locked = True
+            items = []
+            for item in reslist:
+                item.validate()
+                items.append(item.to_JSON())
+            request[(cid, collection)] = items
+        
         response = []
-        for _, items in resources.items():
-            [x.validate() for x in items]
         try:
-            response = next(iter((self._cache.values())))._unis.post(resources)
+            response = UnisProxy.post(request)
         except:
             raise
         finally:
-            for col, items in resources.items():
+            for (_, col), items in pending.items():
                 for r in items:
-                    r = Context(r, self) if not isinstance(r, Context) else r
-                    resp = next(o for o in response[col] if o['id'] == r.id)
+                    r = r if isinstance(r, Context) else Context(r, self)
+                    resp = next(o for o in response if o['id'] == r.id)
                     r.__dict__["selfRef"] = resp["selfRef"]
                     self._cache[col].updateIndex(r)
                     self._pending.remove(r)
@@ -73,14 +80,15 @@ class ObjectLayer(object):
     
     @trace.info("OAL")
     def addSources(self, hrefs):
-        proxy = UnisProxy(None)
-        proxy.addSources(hrefs)
-        for r in async.make_async(proxy.getResources):
+        proxy = UnisProxy()
+        clients = proxy.addSources(hrefs)
+        for r in async.make_async(proxy.getResources, clients):
             ref = (urlparse(r['href']).path.split('/')[1], r['targetschema']['items']['href'])
             if ref[0] not in ['events', 'data']:
-                col = UnisCollection.get_collection(ref[0], schemaLoader.get_class(ref[1], raw=True), self)
+                model = schemaLoader.get_class(ref[1], raw=True)
+                col = UnisCollection.get_collection(ref[0], model, self)
                 self._cache[col.name] = col
-        async.make_async(asyncio.gather, *[c.addSources(hrefs) for c in self._cache.values()])
+        async.make_async(asyncio.gather, *[c.addSources(clients) for c in self._cache.values()])
     
     @trace.info("OAL")
     def preload(self):

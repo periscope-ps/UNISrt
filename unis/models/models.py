@@ -10,8 +10,13 @@ import time
 from lace.logging import trace
 from urllib.parse import urlparse
 
+from unis.exceptions import UnisReferenceError
+from unis.rest import UnisClient
 from unis.settings import SCHEMA_CACHE_DIR
 from unis.utils import async
+
+class SkipResource(Exception):
+    pass
 
 class _attr(object):
     def __init__(self, default=None):
@@ -249,8 +254,10 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
         v = v or {}
         super(UnisObject, self).__init__(v, ref)
         self._rt_parent, self._rt_remote, self._rt_live = self, set(v.keys()) | set(self._rt_defaults.keys()), True
-        self.__dict__.update({**self._rt_defaults, **{k:self._lift(x, k, None) for k,x in v.items()}})
-        
+        self.__dict__.update({**self._rt_defaults, **v})
+        if self.__dict__.get('selfRef'):
+            self._rt_source = UnisClient.resolve(self._getattribute('selfRef', None))
+    
     @trace.debug("UnisObject")
     def _setattr(self, n, v, ctx):
         if n in self.__dict__:
@@ -269,15 +276,14 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
     def touch(self, ctx):
         if self._getattribute('selfRef', ctx):
             self.__dict__['ts'] = int(time.time() * 1000000)
-            payload = json.dumps({'ts': self.ts, 'id': self._getattribute('id', ctx)})
-            async.make_async(self._rt_collection._unis.put, self._getattribute('selfRef', ctx), payload)
+            cid, rid = self.getSource(), self._getattribute('id', ctx)
+            
+            async.make_async(self._rt_collection._unis.put, cid, rid, {'ts': self.ts, 'id': rid})
     @trace.info("UnisObject")
     def getSource(self, ctx=None):
-        url = urlparse(self._getattribute('selfRef', ctx))
-        return "{}://{}".format(url.scheme, url.netloc) if url.netloc else ctx.settings['default_source']
-    @trace.info("UnisObject")
-    def setSource(self, source, ctx=None):
-        self._rt_source = source
+        if not self._rt_source:
+            raise UnisReferenceError("Attempting to resolve unregistered resource.", [])
+        return self._rt_source
     @trace.info("UnisObject")
     def setCollection(self, v, ctx=None):
         self._rt_collection = v
@@ -290,10 +296,13 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
             raise AttributeError("Failed to aquire runtime context")
         if not self.selfRef and self._rt_collection:
             url = publish_to or ctx.settings['default_source']
-            self._rt_source = url
+            try:
+                self._rt_source = UnisClient.resolve(url)
+            except UnisReferenceError:
+                ctx.addSources([{'url': url, 'default': False, 'enabled': True}])
+                self._rt_source = UnisClient.resolve(url)
             self.__dict__['ts'] = int(time.time() * 1000000)
             self.__dict__['selfRef'] = "{}/{}/{}".format(url, self._rt_collection.name, self._getattribute('id', ctx))
-            self._rt_collection.addStub(self)
             self._update('id', ctx)
     @trace.info("UnisObject")
     def extendSchema(self, n, v=None, ctx=None):
@@ -316,10 +325,16 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
         result = {}
         if top:
             for k,v in filter(lambda x: x[0] in self._rt_remote, self.__dict__.items()):
-                result[k] = v.to_JSON(ctx, False) if isinstance(v, _unistype) else v
+                try:
+                    result[k] = v.to_JSON(ctx, False) if isinstance(v, _unistype) else v
+                except SkipResource:
+                    pass
             result['$schema'] = self._rt_schema['id']
         else:
-            result = { "rel": "full", "href": self.selfRef }
+            if self.selfRef:
+                result = { "rel": "full", "href": self.selfRef }
+            else:
+                raise SkipResource()
         return result
     @trace.none
     def __repr__(self):

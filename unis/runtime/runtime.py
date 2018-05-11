@@ -64,11 +64,11 @@ class Runtime(object):
         self.build_settings()
         self._services = []
         
-        #try:
-        #    signal.signal(signal.SIGINT, self.sig_close)
-        #except:
-        #    pass
-        #atexit.register(self.exit_close)
+        try:
+            signal.signal(signal.SIGINT, self.sig_close)
+        except:
+            pass
+        atexit.register(self.exit_close)
         
         if unis:
             unis = unis if isinstance(unis, list) else [unis]

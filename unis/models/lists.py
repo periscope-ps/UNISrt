@@ -3,19 +3,23 @@ import itertools
 import math
 import types
 
-from collections import defaultdict
+from collections import defaultdict, namedtuple
 from lace.logging import trace
 from urllib.parse import urlparse
 
+from unis.exceptions import UnisReferenceError
 from unis.models import schemaLoader
 from unis.models.models import Context as oContext
-from unis.rest import UnisProxy, UnisReferenceError
+from unis.rest import UnisProxy, UnisClient
 from unis.utils import Events, Index, async
 
 class _sparselist(list):
     def __len__(self):
-        return len(list(filter(lambda x: not isinstance(x, type(None)), self)))
+        return len(self.valid_list())
+    def valid_list(self):
+        return list(filter(lambda x: not isinstance(x, str), self))
 
+_rkey = namedtuple('ResourceKey', ['uid', 'cid'])
 class UnisCollection(object):
     class Context(object):
         def __init__(self, obj, rt):
@@ -59,23 +63,24 @@ class UnisCollection(object):
         
     @trace.debug("UnisCollection")
     def __getitem__(self, i):
-        if i > len(self._cache):
+        if i >= len(self._cache):
             self._complete_cache()
         return self._cache[i]
     
     @trace.debug("UnisCollection")
     def __setitem__(self, i, item):
         self._check_record(item)
-        if self._cache[i].selfRef != item.selfRef:
-            raise AttributeError("Resource selfRefs do not match")
+        if self._cache[i]._getattribute('id', None) != item._getattribute('id', None):
+            print(self._cache[i].to_JSON())
+            print(item.to_JSON())
+            raise AttributeError("Resource ids do not match")
         
         if getattr(self._cache[i], "ts", 0) < item.ts:
             for k,v in item.__dict__.items():
                 self._cache[i].__dict__[k] = v
             for _,index in self._indices.items():
                 index.update(i, oContext(self._cache[i], None))
-            if self._cache[i]._getattribute("selfRef", None):
-                self._stubs[self._unis.refToUID(self._cache[i]._getattribute("selfRef", None))] = self._cache[i]
+            self._stubs[item._getattribute('id', None)] = self._cache[i]
     
     @trace.info("UnisCollection")
     def update(self, item):
@@ -83,24 +88,26 @@ class UnisCollection(object):
     @trace.info("UnisCollection")
     def load(self):
         self._complete_cache()
-        return list(self._cache)
+        return self._cache.valid_list()
     
     @trace.info("UnisCollection")
     def get(self, hrefs):
-        hrefs = [self._unis.refToUID(x) for x in (hrefs if isinstance(hrefs, list) else [hrefs])]
-        if any(x not in self._stubs for x in hrefs):
-                raise UnisReferenceError("Requested object in unknown location", hrefs)
-        to_get = [v for v in hrefs if not self._stubs[v]]
+        ids = [urlparse(r).path.split('/')[-1] for r in hrefs]
+        try:
+            to_get = [_rkey(uid, self._stubs[uid]) for uid in ids if isinstance(self._stubs[uid], str)]
+        except KeyError:
+            raise UnisReferenceError("Requested object in unregistered instance", hrefs)
         if to_get:
             self._get_next(to_get)
-        return [self._stubs[href] for href in hrefs]
+        return [self._stubs[uid] for uid in ids]
     
     @trace.info("UnisCollection")
     def append(self, item):
         self._check_record(item)
         item.setCollection(self)
         i = self.index(item)
-        if not isinstance(i, type(None)):
+        self._stubs[item._getattribute('id', None)] = item
+        if i is not None:
             self.__setitem__(i, item)
             return self._cache[i]
         else:
@@ -108,15 +115,16 @@ class UnisCollection(object):
             self._cache.append(item)
             for _,index in self._indices.items():
                 index.update(i, oContext(item, None))
-            if item.selfRef:
-                self._stubs[self._unis.refToUID(item.selfRef)] = item
             self._serve(Events.new, item)
             return item
     
     @trace.info("UnisCollection")
     def remove(self, item):
         self._check_record(item)
-        self._unis.delete(item)
+        try:
+            self._unis.delete(item.getSource(), item._getattribute('id', None))
+        except UnisReferenceError:
+            return
     
     @trace.info("UnisCollection")
     def index(self, item):
@@ -173,13 +181,12 @@ class UnisCollection(object):
             index.update(i, v)
     
     @trace.info("UnisCollection")
-    async def addSources(self, hrefs):
-        new = self._unis.addSources(hrefs)
-        if new:
-            self._complete_cache, self._get_next = self._proto_complete_cache, self._proto_get_next
-            stubs = (self._unis.refToUID(v['selfRef']) for v in await self._unis.getStubs(new) if 'selfRef' in v)
-            self._stubs.update({ k: None for k in stubs if k not in self._stubs })
-            await self._add_subscription(new)
+    async def addSources(self, cids):
+        self._complete_cache, self._get_next = self._proto_complete_cache, self._proto_get_next
+        for v in filter(lambda x: 'selfRef' in x, await self._unis.getStubs(cids)):
+            uid = urlparse(v['selfRef']).path.split('/')[-1]
+            self._stubs[uid] = UnisClient.resolve(v['selfRef'])
+        await self._add_subscription(cids)
     
     @trace.info("UnisCollection")
     def addService(self, service):
@@ -187,9 +194,6 @@ class UnisCollection(object):
     @trace.info("UnisCollection")
     def addCallback(self, cb):
         self._callbacks.append(cb)
-    @trace.info("UnisCollection")
-    def addStub(self, item):
-        self._stubs[self._unis.refToUID(item.selfRef)] = item
     @trace.debug("UnisCollection")
     def _check_record(self, v):
         if self.model._rt_schema["name"] not in v.names:
@@ -212,7 +216,7 @@ class UnisCollection(object):
     @trace.debug("UnisCollection")
     def _proto_get_next(self, ids=None):
         ids = ids or []
-        todo = (k for k in self._stubs.keys() if not self._stubs[k])
+        todo = (_rkey(k,v) for k,v in self._stubs.items() if isinstance(v, str))
         while len(ids) < self._block_size:
             try:
                 ids.append(next(todo))
@@ -222,8 +226,9 @@ class UnisCollection(object):
                 break
         requests = defaultdict(list)
         for v in ids:
-            requests[v[0]].append(v[1][1])
-        results = async.make_async(asyncio.gather, *[self._get_block(k, v, self._block_size) for k,v in requests.items()])
+            requests[v.cid].append(v.uid)
+        futs = [self._get_block(k,v,self._block_size) for k,v in requests.items()]
+        results = async.make_async(asyncio.gather, *futs)
         self._block_size *= self._growth
         for result in itertools.chain(*results):
             model = schemaLoader.get_class(result["$schema"], raw=True)
@@ -231,7 +236,6 @@ class UnisCollection(object):
     
     @trace.debug("UnisCollection")
     async def _get_block(self, source, ids, blocksize):
-        source = (source, (self.name, '0'))
         if len(ids) > blocksize:
             requests = [ids[i:i + blocksize] for i in range(0, len(ids), blocksize)]
             futures = [self._get_block(source, req, blocksize) for req in requests]
@@ -254,7 +258,7 @@ class UnisCollection(object):
                     resource = model(v)
                     resource = self.append(resource)
                 else:
-                    resource = self.get(v['selfRef'])[0]
+                    resource = self.get([v['selfRef']])[0]
                     for k,v in v.items():
                         resource.__dict__[k] = v
                 self.update(resource)
@@ -264,7 +268,7 @@ class UnisCollection(object):
                     v = self._cache[i]
                     v.delete()
                     self._cache[i] = None
-                    del self._stubs[self._unis.refToUID(v.selfRef)]
+                    del self._stubs[v._getattribute('id', None)]
                     self._serve(Events.delete, v)
                     
                 except IndexError:

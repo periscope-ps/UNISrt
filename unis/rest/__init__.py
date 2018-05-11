@@ -1,1 +1,1 @@
-from unis.rest.unis_client import UnisProxy, UnisError, UnisReferenceError
+from unis.rest.unis_client import UnisClient, UnisProxy
