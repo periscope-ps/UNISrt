@@ -54,7 +54,9 @@ if CONFIGFILE == "$RTUSER_CONFIG":
 
 DEFAULT_CONFIG = {
     "unis": [],
-    "services": [],
+    "runtime": {
+        "services": []
+    },
     "cache": {
         "preload": [],
         "mode": "exponential",

@@ -78,13 +78,13 @@ class Runtime(object):
         elif not self.settings['unis']:
             raise settings.ConfigurationError("Runtime configuration missing default UNIS instance")
         for k,v in kwargs.items():
-            self.settings[k] = {**self.settings[k], **v} if isinstance(v, dict) else v 
+            self.settings[k] = {**self.settings[k], **v} if isinstance(v, dict) else v
         
         self.settings['default_source'] = reduce(lambda x,y: y if y['default'] else x, self.settings['unis'])['url']
         self._oal = ObjectLayer(self)
         
         self._oal.addSources(self.settings['unis'])
-        [self.addService(s) for s in self.settings['services']]
+        [self.addService(s) for s in self.settings['runtime']['services']]
         self._oal.preload()
         
     def __getattr__(self, n):
@@ -114,10 +114,9 @@ class Runtime(object):
         instance = service
         if isinstance(service, str):
             import importlib
-            path = service.split(".")[0]
-            service = importlib.import_module(path[0])
-            for comp in path[1:]:
-                service = getattr(module, comp)
+            path = service.split(".")
+            module = importlib.import_module(".".join(path[:-1]))
+            service = getattr(module, path[-1])
         if isinstance(service, type):
             if not issubclass(service, RuntimeService):
                 raise ValueError("Service type must be of type RuntimeService")

@@ -164,7 +164,7 @@ class UnisCollection(object):
             
             for i in subset:
                 record = self._cache[i]
-                if all([v(record._getattribute(k, None, None)) for k,v in non_index.items()]):
+                if all([v(record._getattribute(k, ctx, None)) for k,v in non_index.items()]):
                     yield record
     
     @trace.info("UnisCollection")
