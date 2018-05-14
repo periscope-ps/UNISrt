@@ -113,6 +113,8 @@ class _unistype(object):
             if isinstance(b, _unistype):
                 return (isinstance(a, _unistype) and a._rt_raw == b._rt_raw) or a == b._rt_raw
             return (isinstance(a, _unistype) and a._rt_raw == b) or a == b
+        if isinstance(v, Context):
+            v = v.getObject()
         if n in self._rt_restricted:
             raise AttributeError("Cannot change restricted attribute {}".format(n))
         if hasattr(type(self), n):
@@ -183,10 +185,14 @@ class List(_unistype):
         return self._lift(self._rt_ls[i], self._rt_reference, ctx)._rt_raw
     @trace.debug("list")
     def _setitem(self, i, v, ctx):
+        if isinstance(v, Context):
+            v = v.getObject()
         self._rt_ls[i] = v
         self._update(self._rt_reference, ctx)
     @trace.info("List")
     def append(self, v, ctx):
+        if isinstance(v, Context):
+            v = v.getObject()
         self._rt_ls.append(v)
         self._update(self._rt_reference, ctx)
     @trace.info("List")
@@ -207,7 +213,7 @@ class List(_unistype):
             f = [(k,ops[k](v)) for k,v in f.items()]
             def _check(x, k, op):
                 return isinstance(x, _unistype) and hasattr(x, k) and op(getattr(x, k))
-            return (x for x in self if all([_check(x,*v) for v in f]))
+            return (self._lift(x, self._rt_reference, ctx) for x in self if all([_check(x,*v) for v in f]))
     
     @trace.debug("List")
     def _get_reference(self, n):
