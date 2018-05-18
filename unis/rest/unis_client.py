@@ -26,7 +26,6 @@ class ReferenceDict(dict):
         except (KeyError, IndexError):
             raise UnisReferenceError("No unis instance at location - {}".format(n), [n])
 
-loop = asyncio.new_event_loop()
 class UnisProxy(object):
     @trace.debug("UnisProxy")
     def __init__(self, col=None):
@@ -37,8 +36,6 @@ class UnisProxy(object):
         :rtype: None
         """
         self._name = col
-        if not loop.is_running():
-            asyncio.get_event_loop().run_in_executor(None, loop.run_forever)
     
     @trace.info("UnisProxy")
     def shutdown(self):
@@ -46,11 +43,6 @@ class UnisProxy(object):
         
         :rtype: None
         """
-        async def close():
-            [t.cancel() for t in asyncio.Task.all_tasks(loop) if t != asyncio.Task.current_task(loop)]
-            await asyncio.sleep(0.1)
-            loop.stop()
-        asyncio.run_coroutine_threadsafe(close(), loop)
         UnisClient.shutdown()
     
     @trace.info("UnisProxy")
@@ -64,7 +56,7 @@ class UnisProxy(object):
         new = []
         old = copy.copy(list(UnisClient.instances.keys()))
         for s in sources:
-            client = UnisClient(loop=loop, **s).uid
+            client = UnisClient(**s).uid
             if client not in old:
                 new.append(CID(client))
         return new
@@ -243,14 +235,12 @@ class _SingletonOnUID(type):
     
 class UnisClient(metaclass=_SingletonOnUID):
     @trace.debug("UnisClient")
-    def __init__(self, url, loop, **kwargs):
+    def __init__(self, url, **kwargs):
         """
         :param url: Endpoint url for the client
-        :param loop: Asynchronous loop for query execution
         :param **kwargs: Parameters to the client
         
         :type url: str
-        :type loop: AbstractEventLoop
         :type **kwargs: Any
         :rtype: None
         """
@@ -262,13 +252,15 @@ class UnisClient(metaclass=_SingletonOnUID):
                 msg = json.loads(await self._socket.recv())
                 for cb in self._channels[msg['headers']['collection']]:
                     cb(msg['data'], msg['headers']['action'])
-        async def _make_socket():
+        async def _make_socket(loop):
             ref = 'ws{}://{}/subscribe'.format('s' if self._ssl else '', urlparse(url).netloc)
             return await websockets.connect(ref, loop=loop, ssl=self._ssl)
+        self.loop = asyncio.new_event_loop()
+        asyncio.get_event_loop().run_in_executor(None, self.loop.run_forever)
         self._url, self._verify, self._ssl = url, kwargs.get("verify", False), kwargs.get("ssl")
-        self._socket = asyncio.run_coroutine_threadsafe(_make_socket(), loop).result(timeout=1)
+        self._socket = asyncio.run_coroutine_threadsafe(_make_socket(self.loop), self.loop).result(timeout=1)
         self._channels = defaultdict(list)
-        asyncio.run_coroutine_threadsafe(_listen(), loop).add_done_callback(_handle_exception)
+        asyncio.run_coroutine_threadsafe(_listen(), self.loop).add_done_callback(_handle_exception)
     
     @trace.debug("UnisClient")
     async def _do(self, fn, *args, **kwargs):
@@ -380,7 +372,7 @@ class UnisClient(metaclass=_SingletonOnUID):
         async def _add_channel():
             await self._socket.send(json.dumps({'query':{}, 'resourceType': col}))
         self._channels[col].append(cb)
-        asyncio.run_coroutine_threadsafe(_add_channel(), loop)
+        asyncio.run_coroutine_threadsafe(_add_channel(), self.loop)
         return []
     
     @trace.debug("UnisClient")
@@ -429,8 +421,12 @@ class UnisClient(metaclass=_SingletonOnUID):
     
     @trace.debug("UnisClient")
     def _shutdown(self):
+        async def close(loop):
+            [t.cancel() for t in asyncio.Task.all_tasks(loop) if t != asyncio.Task.current_task(loop)]
+            if self._socket:
+                await self._socket.close()
+            loop.stop()
         """
         :rtype: None
         """
-        if self._socket:
-            self._socket.close()
+        asyncio.run_coroutine_threadsafe(close(self.loop), self.loop)

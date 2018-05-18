@@ -70,8 +70,10 @@ class UnisCollection(object):
     @trace.debug("UnisCollection")
     def __setitem__(self, i, item):
         self._check_record(item)
-        if self._cache[i]._getattribute('id', None) != item._getattribute('id', None):
-            raise AttributeError("Resource ids do not match")
+        old_id = self._cache[i]._getattribute('id', None)
+        new_id = item._getattribute('id', None)
+        if old_id != new_id:
+            raise AttributeError("Resource ids {} and {} do not match".format(new_id, old_id))
         
         if getattr(self._cache[i], "ts", 0) < item.ts:
             for k,v in item.__dict__.items():
