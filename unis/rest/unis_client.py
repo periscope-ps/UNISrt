@@ -1,10 +1,12 @@
-import asyncio, requests, websockets
+import asyncio, requests, websockets as ws
 import copy, itertools, json
 
 from aiohttp import ClientSession, ClientResponse
 from collections import defaultdict
 from lace.logging import trace
+from lace.logging import getLogger
 from urllib.parse import urljoin, urlparse
+from websockets.exceptions import ConnectionClosed
 
 from unis.settings import MIME
 from unis.exceptions import ConnectionError, UnisReferenceError
@@ -247,20 +249,44 @@ class UnisClient(metaclass=_SingletonOnUID):
         def _handle_exception(future):
             if not future.cancelled() and future.exception():
                 raise future.exception()
-        async def _listen():
+        async def _listen(loop):
+            opts = { "ssl": 's' if self._ssl else '',
+                     "auth": urlparse(url).netloc}
+            ref = 'ws{ssl}://{auth}/subscribe'.format(**opts)
             while True:
-                msg = json.loads(await self._socket.recv())
-                for cb in self._channels[msg['headers']['collection']]:
-                    cb(msg['data'], msg['headers']['action'])
-        async def _make_socket(loop):
-            ref = 'ws{}://{}/subscribe'.format('s' if self._ssl else '', urlparse(url).netloc)
-            return await websockets.connect(ref, loop=loop, ssl=self._ssl)
+                while not self._socket:
+                    try:
+                        fut = ws.connect(ref, loop=loop, ssl=self._ssl)
+                        self._socket = await asyncio.wait_for(fut, timeout=1)
+                    except OSError:
+                        import time
+                        msg = "[{}]No websocket connection, retrying...".format(urlparse(url).netloc)
+                        time.sleep(1)
+                        getLogger("unisrt").warn(msg)
+                    except asyncio.TimeoutError:
+                        msg = "[{}]No websocket connection, retrying...".format(urlparse(url).netloc)
+                        getLogger("unisrt").warn(msg)
+                
+                try:
+                    while True:
+                        msg = json.loads(await self._socket.recv())
+                        for cb in self._channels[msg['headers']['collection']]:
+                            cb(msg['data'], msg['headers']['action'])
+                except ConnectionClosed:
+                    if self._open:
+                        msg = "[{}]Lost websocket connection, retrying...".format(urlparse(url).netloc)
+                        getLogger("unisrt").warn(msg)
+                        self._socket = None
+                    else:
+                        raise
+        
         self.loop = asyncio.new_event_loop()
+        self._open = True
+        self._socket = None
         asyncio.get_event_loop().run_in_executor(None, self.loop.run_forever)
         self._url, self._verify, self._ssl = url, kwargs.get("verify", False), kwargs.get("ssl")
-        self._socket = asyncio.run_coroutine_threadsafe(_make_socket(self.loop), self.loop).result(timeout=1)
         self._channels = defaultdict(list)
-        asyncio.run_coroutine_threadsafe(_listen(), self.loop).add_done_callback(_handle_exception)
+        asyncio.run_coroutine_threadsafe(_listen(self.loop), self.loop).add_done_callback(_handle_exception)
     
     @trace.debug("UnisClient")
     async def _do(self, fn, *args, **kwargs):
@@ -429,4 +455,5 @@ class UnisClient(metaclass=_SingletonOnUID):
         """
         :rtype: None
         """
+        self._open = False
         asyncio.run_coroutine_threadsafe(close(self.loop), self.loop)
