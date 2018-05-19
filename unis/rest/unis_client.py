@@ -328,7 +328,9 @@ class UnisClient(metaclass=_SingletonOnUID):
         :type **kwargs: Any
         :rtype: List[Dict[str, Any]]
         """
-        async with fn(*args, verify_ssl=self._verify, ssl_context=self._ssl, **kwargs) as resp:
+        async with fn(*args, verify_ssl=self._verify,
+                      ssl_context=self._ssl, timeout=10,
+                      **kwargs) as resp:
             return await self._check_response(resp)
     
     @trace.info("UnisClient")
