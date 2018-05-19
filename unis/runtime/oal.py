@@ -7,7 +7,7 @@ from lace.logging import trace
 from unis.models import schemaLoader
 from unis.models.lists import UnisCollection
 from unis.models.models import Context
-from unis.rest import UnisProxy
+from unis.rest import UnisProxy, UnisClient
 from unis.exceptions import UnisReferenceError
 from unis.utils import async
 
@@ -121,7 +121,7 @@ class ObjectLayer(object):
     @trace.info("OAL")
     def shutdown(self):
         self.flush()
-        [p._unis.shutdown() for p in self._cache.values()]
+        UnisClient.shutdown()
     @trace.debug("OAL")
     def __contains__(self, resource):
         try:

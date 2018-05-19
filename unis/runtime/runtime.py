@@ -73,8 +73,15 @@ class Runtime(object):
             raise settings.ConfigurationError("Runtime configuration missing default UNIS instance")
         for k,v in kwargs.items():
             self.settings[k] = {**self.settings[k], **v} if isinstance(v, dict) else v
-        
-        self.settings['default_source'] = reduce(lambda x,y: y if y['default'] else x, self.settings['unis'])['url']
+
+        default = None
+        for u in self.settings['unis']:
+            if u['default']:
+                default = u['url']
+                break
+        if not default:
+            self.settings['unis'][0]['default'] = True
+        self.settings['default_source'] = default or self.settings['unis'][0]['url']
         self._oal = ObjectLayer(self)
         
         try:
@@ -82,7 +89,7 @@ class Runtime(object):
         except:
             pass
         atexit.register(self.exit_close)
-                
+        
         self._oal.addSources(self.settings['unis'])
         [self.addService(s) for s in self.settings['runtime']['services']]
         self._oal.preload()
@@ -91,7 +98,9 @@ class Runtime(object):
         try:
             return super(Runtime, self).__getattribute__(n)
         except AttributeError:
-            return getattr(self._oal, n)
+            if self.__dict__.get('_oal'):
+                return getattr(self._oal, n)
+            raise
             
     @property
     @trace.info("Runtime")
@@ -137,7 +146,7 @@ class Runtime(object):
     @trace.info("Runtime")
     def shutdown(self, sig=None, frame=None):
         self.log.info("Tearing down connection to UNIS...")
-        if getattr(self, "_oal", None):
+        if self.__dict__.get('_oal'):
             self._oal.shutdown()
         self.log.info("Teardown complete.")
     def __contains__(self, model):

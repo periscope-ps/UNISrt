@@ -41,14 +41,6 @@ class UnisProxy(object):
         self._name = col
     
     @trace.info("UnisProxy")
-    def shutdown(self):
-        """ Shutdown the background listener for this proxy
-        
-        :rtype: None
-        """
-        UnisClient.shutdown()
-    
-    @trace.info("UnisProxy")
     def addSources(self, sources):
         """ Add a remote data source to this proxy.  Returns a list of client identifiers.
         :param sources: List of remote endpoints to connect to
@@ -60,6 +52,8 @@ class UnisProxy(object):
         old = copy.copy(list(UnisClient.instances.keys()))
         for s in sources:
             client = UnisClient(**s)
+            if client.virtual and s['default']:
+                raise ConnectionError("Failed to connect to default client", 404)
             if not client.virtual and client.uid not in old:
                 new.append(CID(client.uid))
         return new
