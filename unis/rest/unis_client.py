@@ -1,10 +1,11 @@
-import asyncio, requests, websockets as ws
+import asyncio, requests, socket, websockets as ws
 import copy, itertools, json
 
 from aiohttp import ClientSession, ClientResponse
 from collections import defaultdict
 from lace.logging import trace
 from lace.logging import getLogger
+from requests.exceptions import ConnectionError as RequestsConnectionError
 from urllib.parse import urljoin, urlparse
 from websockets.exceptions import ConnectionClosed
 
@@ -58,9 +59,9 @@ class UnisProxy(object):
         new = []
         old = copy.copy(list(UnisClient.instances.keys()))
         for s in sources:
-            client = UnisClient(**s).uid
-            if client not in old:
-                new.append(CID(client))
+            client = UnisClient(**s)
+            if not client.virtual and client.uid not in old:
+                new.append(CID(client.uid))
         return new
     
     @trace.info("UnisProxy")
@@ -188,11 +189,18 @@ class UnisProxy(object):
 
 
 class _SingletonOnUID(type):
-    fqdns, instances = ReferenceDict(), {}
+    fqdns, instances, virtuals = ReferenceDict(), {}, {}
     def __call__(cls, url, *args, **kwargs):
         url = urlparse(url)
         authority = "{}://{}".format(url.scheme, url.netloc)
-        uuid = cls.fqdns[url.netloc] = CID(cls.fqdns.get(url.netloc) or cls.get_uuid(authority))
+        try:
+            uuid = cls.fqdns[url.netloc] = CID(cls.fqdns.get(url.netloc) or cls.get_uuid(authority))
+        except RequestsConnectionError:
+            kwargs['virtual'] = True
+            kwargs['url'] = authority
+            cls.virtuals[authority] = cls.virtuals.get(url) or super().__call__(*args, **kwargs)
+            return cls.virtuals[authority]
+        
         if uuid not in cls.instances:
             kwargs.update({'url': authority})
             cls.instances[uuid] = super().__call__(*args, **kwargs)
@@ -246,48 +254,74 @@ class UnisClient(metaclass=_SingletonOnUID):
         :type **kwargs: Any
         :rtype: None
         """
-        def _handle_exception(future):
-            if not future.cancelled() and future.exception():
-                raise future.exception()
-        async def _listen(loop):
-            opts = { "ssl": 's' if self._ssl else '',
-                     "auth": urlparse(url).netloc}
-            ref = 'ws{ssl}://{auth}/subscribe'.format(**opts)
-            while True:
-                while not self._socket:
-                    try:
-                        fut = ws.connect(ref, loop=loop, ssl=self._ssl)
-                        self._socket = await asyncio.wait_for(fut, timeout=1)
-                    except OSError:
-                        import time
-                        msg = "[{}]No websocket connection, retrying...".format(urlparse(url).netloc)
-                        time.sleep(1)
-                        getLogger("unisrt").warn(msg)
-                    except asyncio.TimeoutError:
-                        msg = "[{}]No websocket connection, retrying...".format(urlparse(url).netloc)
-                        getLogger("unisrt").warn(msg)
-                
-                try:
-                    while True:
-                        msg = json.loads(await self._socket.recv())
-                        for cb in self._channels[msg['headers']['collection']]:
-                            cb(msg['data'], msg['headers']['action'])
-                except ConnectionClosed:
-                    if self._open:
-                        msg = "[{}]Lost websocket connection, retrying...".format(urlparse(url).netloc)
-                        getLogger("unisrt").warn(msg)
-                        self._socket = None
-                    else:
-                        raise
-        
         self.loop = asyncio.new_event_loop()
-        self._open = True
-        self._socket = None
+        self._open, self._socket = True, None
+        self._virtual = kwargs.get('virtual', False)
         asyncio.get_event_loop().run_in_executor(None, self.loop.run_forever)
         self._url, self._verify, self._ssl = url, kwargs.get("verify", False), kwargs.get("ssl")
         self._channels = defaultdict(list)
-        asyncio.run_coroutine_threadsafe(_listen(self.loop), self.loop).add_done_callback(_handle_exception)
-    
+        
+        if not self._virtual:
+            f = asyncio.run_coroutine_threadsafe(self._listen(self.loop), self.loop)
+            f.add_done_callback(self._handle_exception)
+
+    @property
+    def virtual(self):
+        return self._virtual
+    @virtual.setter
+    def virtual(self, v):
+        self._virtual = v
+        if not v:
+            if self._socket is None:
+                f = asyncio.run_coroutine_threadsafe(self._listen(self.loop), self.loop)
+                f.add_done_callback(self._handle_exception)
+    async def check(self):
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            url = urlparse(self._url)
+            sock.connect((url.hostname, url.port))
+            return True
+        except socket.error:
+            return False
+        finally:
+            sock.close()
+
+    def _handle_exception(self, future):
+        if not future.cancelled() and future.exception():
+            raise future.exception()
+    async def _listen(self, loop):
+        opts = { "ssl": 's' if self._ssl else '',
+                 "auth": urlparse(self._url).netloc}
+        ref = 'ws{ssl}://{auth}/subscribe'.format(**opts)
+        self._socket = False
+        while True:
+            while not self._socket:
+                try:
+                    fut = ws.connect(ref, loop=loop, ssl=self._ssl)
+                    self._socket = await asyncio.wait_for(fut, timeout=1)
+                except OSError:
+                    import time
+                    msg = "[{}]No websocket connection, retrying...".format(urlparse(self._url).netloc)
+                    time.sleep(1)
+                    getLogger("unisrt").warn(msg)
+                except asyncio.TimeoutError:
+                    msg = "[{}]No websocket connection, retrying...".format(urlparse(self._url).netloc)
+                    getLogger("unisrt").warn(msg)
+            
+            try:
+                while True:
+                    msg = json.loads(await self._socket.recv())
+                    for cb in self._channels[msg['headers']['collection']]:
+                        cb(msg['data'], msg['headers']['action'])
+            except ConnectionClosed:
+                if self._open:
+                    msg = "[{}]Lost websocket connection, retrying...".format(urlparse(url).netloc)
+                    getLogger("unisrt").warn(msg)
+                    self._socket = False
+                else:
+                    raise
+        
+
     @trace.debug("UnisClient")
     async def _do(self, fn, *args, **kwargs):
         """ Execute a remote call
@@ -442,6 +476,8 @@ class UnisClient(metaclass=_SingletonOnUID):
         """
         for c in cls.instances.values():
             c._shutdown()
+        for c in cls.virtuals.values():
+            c._shutdown()
         _SingletonOnUID.fqdns = ReferenceDict()
         _SingletonOnUID.instances = ReferenceDict()
     
@@ -451,6 +487,8 @@ class UnisClient(metaclass=_SingletonOnUID):
             [t.cancel() for t in asyncio.Task.all_tasks(loop) if t != asyncio.Task.current_task(loop)]
             if self._socket:
                 await self._socket.close()
+            else:
+                await asyncio.sleep(0.1)
             loop.stop()
         """
         :rtype: None
