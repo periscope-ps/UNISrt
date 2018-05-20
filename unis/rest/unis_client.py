@@ -199,6 +199,7 @@ class _SingletonOnUID(type):
             kwargs.update({'url': authority})
             cls.instances[uuid] = super().__call__(*args, **kwargs)
             cls.instances[uuid].uid = uuid
+            cls.instances[uuid].connect()
             return cls.instances[uuid]
         return cls.instances[uuid]
     
@@ -255,10 +256,6 @@ class UnisClient(metaclass=_SingletonOnUID):
         self._url, self._verify, self._ssl = url, kwargs.get("verify", False), kwargs.get("ssl")
         self._channels = defaultdict(list)
         
-        if not self._virtual:
-            f = asyncio.run_coroutine_threadsafe(self._listen(self.loop), self.loop)
-            f.add_done_callback(self._handle_exception)
-
     @property
     def virtual(self):
         return self._virtual
@@ -267,8 +264,7 @@ class UnisClient(metaclass=_SingletonOnUID):
         self._virtual = v
         if not v:
             if self._socket is None:
-                f = asyncio.run_coroutine_threadsafe(self._listen(self.loop), self.loop)
-                f.add_done_callback(self._handle_exception)
+                self.connect()
     async def check(self):
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
@@ -332,6 +328,13 @@ class UnisClient(metaclass=_SingletonOnUID):
                       ssl_context=self._ssl, timeout=10,
                       **kwargs) as resp:
             return await self._check_response(resp)
+    
+    @trace.info("UnisClient")
+    def connect(self):
+        if not self._virtual:
+            f = asyncio.run_coroutine_threadsafe(self._listen(self.loop), self.loop)
+            f.add_done_callback(self._handle_exception)
+
     
     @trace.info("UnisClient")
     async def getResources(self, sess):
