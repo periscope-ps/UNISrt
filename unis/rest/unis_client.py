@@ -305,7 +305,7 @@ class UnisClient(metaclass=_SingletonOnUID):
                         cb(msg['data'], msg['headers']['action'])
             except ConnectionClosed:
                 if self._open:
-                    msg = "[{}]Lost websocket connection, retrying...".format(urlparse(url).netloc)
+                    msg = "[{}]Lost websocket connection, retrying...".format(urlparse(self._url).netloc)
                     getLogger("unisrt").warn(msg)
                     self._socket = False
                 else:
