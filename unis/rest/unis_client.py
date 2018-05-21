@@ -331,7 +331,7 @@ class UnisClient(metaclass=_SingletonOnUID):
     
     @trace.info("UnisClient")
     def connect(self):
-        if not self._virtual:
+        if not self._virtual and not self._socket:
             f = asyncio.run_coroutine_threadsafe(self._listen(self.loop), self.loop)
             f.add_done_callback(self._handle_exception)
 
