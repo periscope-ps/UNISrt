@@ -132,7 +132,7 @@ class _unistype(object):
         elif isinstance(v, dict):
             if '$schema' in v or 'href' in v:
                 if remote and ctx:
-                    v = ctx.insert(v) if "$schema" in v else ctx.find(v['href'])[0]
+                    return ctx.insert(v) if "$schema" in v else ctx.find(v['href'])[0]
                 else:
                     return v
             else:
