@@ -237,7 +237,10 @@ class _SingletonOnUID(type):
             if uuid not in cls.instances:
                 raise
         return CID(uuid)
-    
+
+
+class VirtualClient(metaclass=_SingletonOnUID):
+    pass
 class UnisClient(metaclass=_SingletonOnUID):
     @trace.debug("UnisClient")
     def __init__(self, url, **kwargs):

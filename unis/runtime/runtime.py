@@ -9,6 +9,9 @@ from functools import reduce
 from lace.logging import trace
 from lace import logging
 
+# Turn off lace
+trace.remove()
+
 from unis import settings
 from unis.services import RuntimeService
 from unis.runtime.oal import ObjectLayer
