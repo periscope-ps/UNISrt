@@ -144,7 +144,7 @@ class Runtime(object):
             raise ValueError("Service object must be of type RuntimeService - {}".format(type(instance)))
         if type(instance) not in self._services:
             self._services.append(service)
-            instance.attach(self._oal)
+            instance.attach(self)
     
     def sig_close(self, sig=None, frame=None):
         self.shutdown()
