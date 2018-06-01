@@ -264,7 +264,13 @@ class UnisCollection(object):
                     resource = model(v)
                     resource = self.append(resource)
                 else:
-                    resource = self.get([v['selfRef']])[0]
+                    try:
+                        resource = self.get([v['selfRef']])[0]
+                    except UnisReferenceError:
+                        uid = urlparse(v['selfRef']).path.split('/')[-1]
+                        cid = UnisClient.resolve(v['selfRef'])
+                        self._proto_get_next([_rkey(uid, cid)])
+                        resource = self.get([v['selfRef']])[0]
                     for k,v in v.items():
                         resource.__dict__[k] = v
                 self.update(resource)

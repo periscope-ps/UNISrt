@@ -10,11 +10,12 @@ from lace.logging import trace
 from lace import logging
 
 # Turn off lace
-trace.remove()
+#trace.remove()
 
 from unis import settings
 from unis.services import RuntimeService
 from unis.runtime.oal import ObjectLayer
+from unis.exceptions import ConnectionError
 
 class Runtime(object):
     def build_settings(self):
@@ -85,17 +86,23 @@ class Runtime(object):
         if not default:
             self.settings['unis'][0]['default'] = True
         self.settings['default_source'] = default or self.settings['unis'][0]['url']
-        self._oal = ObjectLayer(self)
+        self._oal = ObjectLayer(self.settings)
         
         try:
-            signal.signal(signal.SIGINT, self.sig_close)
-        except:
-            pass
-        atexit.register(self.exit_close)
+            self._oal.addSources(self.settings['unis'])
         
-        self._oal.addSources(self.settings['unis'])
-        [self.addService(s) for s in self.settings['runtime']['services']]
-        self._oal.preload()
+            try:
+                signal.signal(signal.SIGINT, self.sig_close)
+            except:
+                pass
+            atexit.register(self.exit_close)
+
+            [self.addService(s) for s in self.settings['runtime']['services']]
+            self._oal.preload()
+        except Exception:
+            self.shutdown()
+            raise
+
         
     def __getattr__(self, n):
         try:
@@ -137,10 +144,9 @@ class Runtime(object):
             raise ValueError("Service object must be of type RuntimeService - {}".format(type(instance)))
         if type(instance) not in self._services:
             self._services.append(service)
-            instance.attach(self)
+            instance.attach(self._oal)
     
     def sig_close(self, sig=None, frame=None):
-        signal.signal(signal.SIGTERM, signal.SIG_DFL)
         self.shutdown()
         raise KeyboardInterrupt
     def exit_close(self):
@@ -149,6 +155,7 @@ class Runtime(object):
     @trace.info("Runtime")
     def shutdown(self, sig=None, frame=None):
         self.log.info("Tearing down connection to UNIS...")
+        signal.signal(signal.SIGTERM, signal.SIG_DFL)
         if self.__dict__.get('_oal'):
             self._oal.shutdown()
         self.log.info("Teardown complete.")

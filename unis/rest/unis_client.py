@@ -139,14 +139,14 @@ class UnisProxy(object):
         """
         async with ClientSession() as sess:
             return await UnisClient.instances[src].delete("/".join(self._name, rid), sess)
-    
+
     @trace.info("UnisProxy")
     async def subscribe(self, src, cb):
         """ Subscribe to push messages from a data store.  Returns a list of dictionaries.
         :param src: List of client identifiers for target data stores
         :param cb: Callback function for data updates
         
-        :type src: CID
+        :type src: List[CID]
         :type rid: Callable[[Dict[str, Any], str], None]
         :rtype: List[Dict[str, Any]]
         """
@@ -292,6 +292,8 @@ class UnisClient(metaclass=_SingletonOnUID):
                 try:
                     fut = ws.connect(ref, loop=loop, ssl=self._ssl)
                     self._socket = await asyncio.wait_for(fut, timeout=1)
+                    for col in self._channels.keys():
+                        await self._socket.send(json.dumps({'query':{}, 'resourceType': col}))
                 except OSError:
                     import time
                     msg = "[{}]No websocket connection, retrying...".format(urlparse(self._url).netloc)
@@ -300,7 +302,6 @@ class UnisClient(metaclass=_SingletonOnUID):
                 except asyncio.TimeoutError:
                     msg = "[{}]No websocket connection, retrying...".format(urlparse(self._url).netloc)
                     getLogger("unisrt").warn(msg)
-            
             try:
                 while True:
                     msg = json.loads(await self._socket.recv())
@@ -327,9 +328,8 @@ class UnisClient(metaclass=_SingletonOnUID):
         :type **kwargs: Any
         :rtype: List[Dict[str, Any]]
         """
-        async with fn(*args, verify_ssl=self._verify,
-                      ssl_context=self._ssl, timeout=10,
-                      **kwargs) as resp:
+        async with fn(*args, verify_ssl=self._verify, ssl_context=self._ssl,
+                      timeout=10, **kwargs) as resp:
             return await self._check_response(resp)
     
     @trace.info("UnisClient")
@@ -481,7 +481,8 @@ class UnisClient(metaclass=_SingletonOnUID):
         for c in cls.virtuals.values():
             c._shutdown()
         _SingletonOnUID.fqdns = ReferenceDict()
-        _SingletonOnUID.instances = ReferenceDict()
+        _SingletonOnUID.instances = {}
+        _SingletonOnUID.virtuals = {}
     
     @trace.debug("UnisClient")
     def _shutdown(self):
@@ -490,7 +491,7 @@ class UnisClient(metaclass=_SingletonOnUID):
             if self._socket:
                 await self._socket.close()
             else:
-                await asyncio.sleep(0.1)
+                await asyncio.sleep(0)
             loop.stop()
         """
         :rtype: None

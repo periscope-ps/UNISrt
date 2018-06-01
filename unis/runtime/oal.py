@@ -15,8 +15,8 @@ from urllib.parse import urlparse
 
 class ObjectLayer(object):
     @trace.debug("OAL")
-    def __init__(self, runtime):
-        self.settings, self._cache, self._pending = runtime.settings, {}, set()
+    def __init__(self, settings):
+        self.settings, self._cache, self._pending = settings, {}, set()
     
     def __getattr__(self, n):
         try:
@@ -82,6 +82,8 @@ class ObjectLayer(object):
     def addSources(self, hrefs):
         proxy = UnisProxy()
         clients = proxy.addSources(hrefs)
+        if not clients:
+            return
         for r in async.make_async(proxy.getResources, clients):
             ref = (urlparse(r['href']).path.split('/')[1], r['targetschema']['items']['href'])
             if ref[0] not in ['events', 'data']:
