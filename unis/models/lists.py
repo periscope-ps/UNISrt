@@ -43,10 +43,11 @@ class UnisCollection(object):
     @classmethod
     @trace.debug("UnisCollection")
     def get_collection(cls, name, model, runtime):
-        collection = cls.collections.get(name, None) or cls(name, model)
+        namespace = "{}::{}".format(name, runtime.settings['namespace'])
+        collection = cls.collections.get(namespace, None) or cls(name, model)
         collection._growth = max(collection._growth, runtime.settings['cache']['growth'])
         collection._subscribe |= runtime.settings['proxy']['subscribe']
-        cls.collections[name] = collection
+        cls.collections[namespace] = collection
         return UnisCollection.Context(collection, runtime)
     
     def __init__(self, name, model):

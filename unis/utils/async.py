@@ -11,10 +11,14 @@ def make_async(coro, *args, **kwargs):
         
     if loop.is_running():
         new_loop = asyncio.new_event_loop()
+        def _complete(future):
+            if not future.cancelled() and future.exception():
+                raise future.exception()
+            new_loop.stop()
         loop.run_in_executor(None, new_loop.run_forever)
         fut = asyncio.run_coroutine_threadsafe(_mock(), new_loop)
-        fut.add_done_callback(lambda f: new_loop.stop())
-        result = fut.result(10)
+        fut.add_done_callback(_complete)
+        result = fut.result()
         new_loop.close()
         return result
     else:

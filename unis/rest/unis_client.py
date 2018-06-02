@@ -41,11 +41,13 @@ class UnisProxy(object):
         self._name = col
     
     @trace.info("UnisProxy")
-    def addSources(self, sources):
+    def addSources(self, sources, ns):
         """ Add a remote data source to this proxy.  Returns a list of client identifiers.
         :param sources: List of remote endpoints to connect to
+        :param ns: Namespace fort the source.
         
         :type sources: List[Dict[str, Any]]
+        :type ns: str
         :rtype: List[CID]
         """
         new = []

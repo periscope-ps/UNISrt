@@ -81,7 +81,7 @@ class ObjectLayer(object):
     @trace.info("OAL")
     def addSources(self, hrefs):
         proxy = UnisProxy()
-        clients = proxy.addSources(hrefs)
+        clients = proxy.addSources(hrefs, self.settings['namespace'])
         if not clients:
             return
         for r in async.make_async(proxy.getResources, clients):

@@ -10,7 +10,7 @@ from lace.logging import trace
 from lace import logging
 
 # Turn off lace
-#trace.remove()
+trace.remove()
 
 from unis import settings
 from unis.services import RuntimeService
@@ -46,7 +46,7 @@ class Runtime(object):
                     self.settings[section].update({k:tys.get(v, _ls(v.split(','))) for k,v in tmpConfig.items(section)})
     
     @trace.debug("Runtime")
-    def __init__(self, unis=None, **kwargs):
+    def __init__(self, unis=None, name="default", **kwargs):
         def _unis_config(unis):
             if not isinstance(unis, dict):
                 return { "url": unis, "default": False, "verify": False, "ssl": None, "enabled": True }
@@ -75,6 +75,7 @@ class Runtime(object):
             self.settings['unis'] = [_unis_config(u) for u in unis]
         elif not self.settings['unis']:
             raise settings.ConfigurationError("Runtime configuration missing default UNIS instance")
+        self.settings['namespace'] = name
         for k,v in kwargs.items():
             self.settings[k] = {**self.settings[k], **v} if isinstance(v, dict) else v
 
