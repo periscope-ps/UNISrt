@@ -51,13 +51,14 @@ class UnisProxy(object):
         :rtype: List[CID]
         """
         new = []
-        old = copy.copy(list(UnisClient.instances.keys()))
+        old = [c.uid for c in list(UnisClient.instances.values()) if ns in c.namespaces]
         for s in sources:
             client = UnisClient(**s)
             if client.virtual and s['default']:
                 raise ConnectionError("Failed to connect to default client", 404)
             if not client.virtual and client.uid not in old:
                 new.append(CID(client.uid))
+            client.namespaces.add(ns)
         return new
     
     @trace.info("UnisProxy")
@@ -254,6 +255,7 @@ class UnisClient(metaclass=_SingletonOnUID):
         :type **kwargs: Any
         :rtype: None
         """
+        self.namespaces = set()
         self.loop = asyncio.new_event_loop()
         self._open, self._socket = True, None
         self._virtual = kwargs.get('virtual', False)
