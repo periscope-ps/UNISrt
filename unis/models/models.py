@@ -364,6 +364,14 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
             else:
                 raise SkipResource()
         return result
+
+    @trace.info("UnisObject")
+    def clone(self, ctx):
+        d = self.to_JSON(ctx)
+        d.update(**{'selfRef': '', 'id': ''})
+        model = type(self)
+        return model(d)
+    
     @trace.none
     def __repr__(self):
         return "<{}.{} {}>".format(self.__class__.__module__, self.__class__.__name__, self.__dict__.keys())

@@ -16,26 +16,29 @@ from urllib.parse import urlparse
 class ObjectLayer(object):
     @trace.debug("OAL")
     def __init__(self, settings):
-        self.settings, self._cache, self._pending = settings, {}, set()
+        self.settings, self._pending = settings, set()
     
     def __getattr__(self, n):
         try:
             return super(ObjectLayer, self).__getattribute__(n)
         except AttributeError:
             try:
-                return self._cache[n]
+                return self._cache(n)
             except KeyError:
                 raise AttributeError("{n} not found in ObjectLayer".format(n = n))
+
+    def _cache(self, n=None):
+        return UnisCollection.from_name(n, self)
     
     @trace.debug("OAL")
     def find(self, href):
         try:
-            res = self._cache[urlparse(href).path.split('/')[1]].get([href])
+            res = self._cache(urlparse(href).path.split('/')[1]).get([href])
             return res
         except UnisReferenceError as e:
             new_sources = [{'url': r, 'default': False, 'enabled': True} for r in e.hrefs]
             self.addSources(new_sources)
-            return self._cache[urlparse(href).path.split('/')[1]].get([href])
+            return self._cache(urlparse(href).path.split('/')[1]).get([href])
     
     @trace.info("OAL")
     def flush(self):
@@ -56,7 +59,7 @@ class ObjectLayer(object):
     def _do_update(self, pending):
         request = {}
         for (cid, collection), reslist in pending.items():
-            self._cache[collection].locked = True
+            self._cache(collection).locked = True
             items = []
             for item in reslist:
                 item.validate()
@@ -74,9 +77,9 @@ class ObjectLayer(object):
                     r = r if isinstance(r, Context) else Context(r, self)
                     resp = next(o for o in response if o['id'] == r.id)
                     r.__dict__["selfRef"] = resp["selfRef"]
-                    self._cache[col].updateIndex(r)
+                    self._cache(col).updateIndex(r)
                     self._pending.remove(r)
-                self._cache[col].locked = False
+                self._cache(col).locked = False
     
     @trace.info("OAL")
     def addSources(self, hrefs):
@@ -88,14 +91,13 @@ class ObjectLayer(object):
             ref = (urlparse(r['href']).path.split('/')[1], r['targetschema']['items']['href'])
             if ref[0] not in ['events', 'data']:
                 model = schemaLoader.get_class(ref[1], raw=True)
-                col = UnisCollection.get_collection(ref[0], model, self)
-                self._cache[col.name] = col
-        async.make_async(asyncio.gather, *[c.addSources(clients) for c in self._cache.values()])
+                UnisCollection.get_collection(ref[0], model, self)
+        async.make_async(asyncio.gather, *[c.addSources(clients) for c in self._cache()])
     
     @trace.info("OAL")
     def preload(self):
         _p = lambda c: c.name in self.settings['cache']['preload'] or self.settings['cache']['mode'] == 'greedy'
-        values = [c.load() for c in self._cache.values() if _p(c)]
+        values = [c.load() for c in self._cache() if _p(c)]
         
     @trace.info("OAL")
     def insert(self, res, uid=None):
@@ -106,19 +108,19 @@ class ObjectLayer(object):
             
         res.id = uid or res.id or str(uuid.uuid4())
         res.setRuntime(self)
-        self._cache[self.getModel(res.names)].append(res.getObject())
+        self._cache(self.getModel(res.names)).append(res.getObject())
         return res
         
     @trace.info("OAL")
     def getModel(self, names):
         try:
-            return next(c.name for c in self._cache.values() if c.model._rt_schema["name"] in list(names))
+            return next(c.name for c in self._cache() if c.model._rt_schema["name"] in list(names))
         except StopIteration:
             raise ValueError("Resource type {n} not found in ObjectLayer".format(n=names))
     
     @trace.info("OAL")
     def about(self):
-        return list(self._cache.keys())
+        return [c.name for c in self._cache()]
     
     @trace.info("OAL")
     def shutdown(self):
@@ -127,7 +129,7 @@ class ObjectLayer(object):
     @trace.debug("OAL")
     def __contains__(self, resource):
         try:
-            col = next(c for c in self._cache.values() if c.model._rt_schema["name"] in resource.names)
-            return isinstance(resource, type) or resource in self._cache[col.name]
+            col = next(c for c in self._cache() if c.model._rt_schema["name"] in resource.names)
+            return isinstance(resource, type) or resource in self._cache(col.name)
         except StopIteration:
             return False

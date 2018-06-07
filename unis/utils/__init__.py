@@ -44,7 +44,10 @@ class Index(object):
             self._keys.pop(i)
             self._indices.pop(i)
             self._items.pop(i)
-        key = getattr(item, self.key, None)
+        try:
+            key = getattr(item, self.key)
+        except AttributeError:
+            return
         i = bisect.bisect_left(self._keys, key)
         self._keys.insert(i, key)
         self._indices.insert(i, index)

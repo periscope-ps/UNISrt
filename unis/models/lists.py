@@ -43,13 +43,23 @@ class UnisCollection(object):
     @classmethod
     @trace.debug("UnisCollection")
     def get_collection(cls, name, model, runtime):
-        namespace = "{}::{}".format(name, runtime.settings['namespace'])
+        namespace = "{}::{}".format(runtime.settings['namespace'], name)
         collection = cls.collections.get(namespace, None) or cls(name, model)
         collection._growth = max(collection._growth, runtime.settings['cache']['growth'])
         collection._subscribe |= runtime.settings['proxy']['subscribe']
         cls.collections[namespace] = collection
         return UnisCollection.Context(collection, runtime)
-    
+    @classmethod
+    def from_name(cls, name, runtime):
+        if name:
+            namespace = "{}::{}".format(runtime.settings['namespace'], name)
+            return UnisCollection.Context(cls.collections[namespace], runtime)
+        else:
+            results = []
+            for ns,col in cls.collections.items():
+                if ns.startswith(runtime.settings['namespace']):
+                    results.append(UnisCollection.Context(col, runtime))
+            return results
     def __init__(self, name, model):
         self._complete_cache, self._get_next = self._proto_complete_cache, self._proto_get_next
         self.name, self.model = name, model
@@ -136,10 +146,7 @@ class UnisCollection(object):
         if item.id:
             return self._indices['id'].index(item)
         else:
-            try:
-                return self._cache.index(item.getObject())
-            except ValueError:
-                return None
+            return None
     
     @trace.info("UnisCollection")
     def where(self, pred, ctx):
@@ -176,10 +183,11 @@ class UnisCollection(object):
     
     @trace.info("UnisCollection")
     def createIndex(self, k):
-        index = Index(k)
-        self._indices[k] = index
-        for i, v in enumerate(self._cache):
-            index.update(i, oContext(v, None))
+        if k not in self._indices:
+            index = Index(k)
+            self._indices[k] = index
+            for i, v in enumerate(self._cache):
+                index.update(i, oContext(v, None))
     
     @trace.info("UnisCollection")
     def updateIndex(self, v):
