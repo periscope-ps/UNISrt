@@ -370,7 +370,7 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
         d = self.to_JSON(ctx)
         d.update(**{'selfRef': '', 'id': ''})
         model = type(self)
-        return model(d)
+        return Context(model(d), ctx)
     
     @trace.none
     def __repr__(self):
