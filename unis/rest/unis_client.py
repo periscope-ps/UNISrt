@@ -34,11 +34,11 @@ class ReferenceDict(dict):
 
 class UnisProxy(object):
     """
+    :param str col: Name of the collection owning this proxy
+    
     :class:`UnisProxy <UnisProxy>` represents a collection of connections to remote data
     stores all relating to a provided collection **col** of resources.  This object
     maintains collection level metadata for threads and connection pooling.
-    
-    :param str col: Name of the collection owning this proxy
     """
     @trace.debug("UnisProxy")
     def __init__(self, col=None):
@@ -47,19 +47,17 @@ class UnisProxy(object):
     @trace.info("UnisProxy")
     def addSources(self, sources, ns):
         """
-        Add a remote data source to this proxy.  Returns a list of client identifiers.
-        
         :param list[dict] sources: List of remote endpoints to connect to
         :param str ns: Namespace fort the source.
         :return: list of :class:`ClientIDs <CID>`.
         
+        Add a remote data source to this proxy.  Returns a list of client identifiers.
         The **sources** dictionary includes the following fields:
         
         * **url:** *str* scheme and authority pair to the client i.e. ``http://localhost:8888``.
         * **virtual:** (optional) Indicates a client as a virtual (disconnected) instance.
         * **verify:** (optional) If true, verify the SSL certificate.
         * **ssl:** (optional) *str* path to a file containing the SSL certificate.
-        
         """
         new = []
         old = [c.uid for c in list(UnisClient.instances.values()) if ns in c.namespaces]
@@ -75,11 +73,12 @@ class UnisProxy(object):
     @trace.info("UnisProxy")
     async def getResources(self, src=None):
         """
-        Query remote data for collection types.  Returns a list of dictionaries.
-        
         :param src: List of client identifiers to query.
         :type src: list[:class:`ClientIDs <CID>`]
         :return: list of dictionaries containing collection descriptions.
+        :rtype: coroutine
+
+        Query remote data for collection types.  Returns a list of dictionaries.
         """
         src = src or []
         async with ClientSession() as sess:
@@ -88,12 +87,13 @@ class UnisProxy(object):
     @trace.info("UnisProxy")
     async def getStubs(self, src):
         """
-        Query minimal cache data for this proxy.  This function must be called when creating
-        a new collection.   Returns a list of dictionaries.
-        
         :param src: List of client identifiers to query.
         :type src: list[:class:`ClientIDs <CID>`]
         :return: list of dictionaries containing selfRefs for each resource in the collection.
+        :rtype: coroutine
+
+        Query minimal cache data for this proxy.  This function must be called when creating
+        a new collection.   Returns a list of dictionaries.
         """
         async with ClientSession() as sess:
             return await self._gather(self._collect_fn(src, "getStubs"), self._name, sess=sess)
@@ -101,14 +101,15 @@ class UnisProxy(object):
     @trace.info("UnisProxy")
     async def get(self, src=None, **kwargs): 
         """
+        :param src: List of client identifiers to request.
+        :param str \*\*kwargs: Request parameters to remote data store.
+        :type src: list[:class:`ClientID <CID>`]
+        :return: list of dictionaries containing resources matching the request.
+        :rtype: coroutine
+        
         Request the full contents of a set of records.  Returns a list of dictionaries.
-        
-        :param src: List of client identifiers to request
-        :param \*\*kwargs: Request parameters to remote data store
-        
-        :type src: List[CID]
-        :type \*\*kwargs: str
-        :rtype: List[Dict[str, Any]]
+        The kwargs may contain a filter for limiting the results to resources that satisfy
+        logical relationships in a ``key: value`` style.
         """
         src = src or []
         async with ClientSession() as sess:
@@ -116,12 +117,14 @@ class UnisProxy(object):
 
     @classmethod
     def post(cls, cols):
-        """ Submit the contents of a set of records to a data source.  Returns a list of dictionaries.
-        
+        """ 
         :param cols: Dictionary containing the resources to be submitted.
-
-        :type cols: Dict[Tuple[CID, str], List[UnisObject]]
-        :rtype: List[Dict[str, Any]]
+        :type cols: dict[tuple[:class:`ClientID <CID>`, str], List[:class:`UnisObject <unis.models.UnisObject>`]]
+        :return: list of dictionaries containing the updated values for the posted resources.
+        
+        Submit the contents of a set of records to a data source.  The ``cols`` parameter is a dictionary wherein 
+        :class:`UnisObjects <unis.models.UnisObject>` are keyed by a (:class:`ClientID <CID>`, ``collection_name``) pair.
+        The resulting dictionaries contain the entire resource including all fields whether altered or not.
         """
         async def _f():
             async with ClientSession() as sess:
@@ -132,45 +135,54 @@ class UnisProxy(object):
     
     @trace.info("UnisProxy")
     async def put(self, src, rid, data):
-        """ Submit the contents of a set of records to update a data source.  
+        """ 
+        :param src: Client identifier for target data store.
+        :param str rid: Resource identifier for resource to update.
+        :param dict[str,str] data: Fields to update in the resource.
+        :type src: :class:`ClientID <CID>`
+        :return: list of dictionaries containing the altered resources.
+        :rtype: coroutine
+        
+        Submit the contents of a set of records to update a data source. 
+        This update replaces old records in-situ and does not generate a new version.
+        Recommended for only small continuous changes such as touching a resource.
         Returns a list of dictionaries.
-        
-        :param src: Client identifier for target data store
-        :param rid: Resource identifier for resource to update
-        :param data: Fields to update in the resource
-        
-        :type src: CID
-        :type rid: str
-        :type data: Dict[str, Any]
-        :rtype: List[Dict[str, Any]]
         """
         async with ClientSession() as sess:
             return await UnisClient.instances[src].put("/".join([self._name, rid]), data, sess)
     
     @trace.info("UnisProxy")
     async def delete(self, src, rid):
-        """ Delete a resource from a data store.  Returns a list of dictionaries.
+        """
+        :param src: Client identifier for target data store.
+        :param str rid: Resource identifier for resource to update.
+        :type src: :class:`ClientID <CID>`
+        :return: list of dictionaries containing the deleted resource.
+        :rtype: coroutine
         
-        :param src: Client identifier for target data store
-        :param rid: Resource identifier for resource to update
-        
-        :type src: CID
-        :type rid: str
-        :rtype: List[Dict[str, Any]]
+        Delete a resource from a data store.  Returns a list of dictionaries.
         """
         async with ClientSession() as sess:
             return await UnisClient.instances[src].delete("/".join(self._name, rid), sess)
 
     @trace.info("UnisProxy")
     async def subscribe(self, src, cb):
-        """ Subscribe to push messages from a data store.  Returns a list of dictionaries.
-        
+        """ 
         :param src: List of client identifiers for target data stores
         :param cb: Callback function for data updates
+        :type src: list[:class:`ClientID <CID>`]
+        :type cb: callable
+        :return: An empty list.
+        :rtype: coroutine
         
-        :type src: List[CID]
-        :type rid: Callable[[Dict[str, Any], str], None]
-        :rtype: List[Dict[str, Any]]
+        Subscribe to push messages from a data store.  Returns a list of dictionaries.
+        
+        ``callback`` must have the following signiture:
+        
+        **Parameters:** 
+        
+        * **resource** (*dict*) - dictionary representation of the resource.
+        *  **action** (*str*) - The action [``PUT``, ``POST``] generating the event.
         """
         return await self._gather(self._collect_fn(src, "subscribe"), self._name, cb)
     
@@ -265,15 +277,18 @@ class _SingletonOnUID(type):
 class VirtualClient(metaclass=_SingletonOnUID):
     pass
 class UnisClient(metaclass=_SingletonOnUID):
+    """
+    :param str url: Endpoint url for the client
+    :param bool virtual: Use a client as a virtual (disconnected) instance
+    :param bool verify: Verify SSL certificate
+    :param str ssl: File containing the ssl certificate
+    
+    :class:`UnisClient <UnisClient>` maintains the connection to a specific data store.
+    This includes keeping a websocket and associated threads alive for subscription events
+    and poviding restful functions for individual requests to the associated data store.
+    """
     @trace.debug("UnisClient")
     def __init__(self, url, **kwargs):
-        """
-        :param str url: Endpoint url for the client
-        :param bool virtual: Use a client as a virtual (disconnected) instance
-        :param bool verify: Verify SSL certificate
-        :param str ssl: File containing the ssl certificate
-        :rtype: None
-        """
         self.namespaces = set()
         self.loop = asyncio.new_event_loop()
         self._open, self._socket = True, None
@@ -292,6 +307,12 @@ class UnisClient(metaclass=_SingletonOnUID):
             if self._socket is None:
                 self.connect()
     async def check(self):
+        """
+        :rtype: boolean
+        
+        Attempt to ping the remote data store.  Returns True if a response is
+        recieved from the remote data store otherwise returns false.
+        """
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
             url = urlparse(self._url)
@@ -367,9 +388,9 @@ class UnisClient(metaclass=_SingletonOnUID):
     async def getResources(self, sess):
         """
         :param sess: Session object for request
-        
-        :type sess: ClientSession
-        :rtype: List[Dict[str, Any]]
+        :type sess: :class:`aiohttp.ClientSession`
+        :return: List of dictionaries containing the resource endpoints available at this data store.
+        :rtype: coroutine
         """
         url, hdr = self._get_conn_args("")
         return await self._do(sess.get, self._url, headers=hdr)
@@ -377,12 +398,11 @@ class UnisClient(metaclass=_SingletonOnUID):
     @trace.info("UnisClient")
     async def getStubs(self, col, sess):
         """
-        :param col: Name of the collection to retrieve stubs from
+        :param str col: Name of the collection to retrieve stubs from
         :param sess: Session object for request
-        
-        :type col: str
-        :type sess: ClientSession
-        :rtype: List[Dict[str, Any]]
+        :type sess: :class:`aiohttp.ClientSession`
+        :return: List of dictionaries containing the selfRefs for resources in a given collection.
+        :rtype: coroutine
         """
         url, hdr = self._get_conn_args(col, fields="selfRef")
         return await self._do(sess.get, url, headers=hdr)
@@ -390,14 +410,12 @@ class UnisClient(metaclass=_SingletonOnUID):
     @trace.info("UnisClient")
     async def get(self, col, sess, **kwargs):
         """
-        :param col: Name of the collection to retrieve stubs from
+        :param str col: Name of the collection to retrieve stubs from
         :param sess: Session object for request
-        :param kwargs: Keyword arguments to the request
-        
-        :type col: str
-        :type sess: ClientSession
-        :type kwargs: Any
-        :rtype: List[Dict[str, Any]]
+        :param \*\*kwargs: Keyword arguments to the request
+        :type sess: :class:`aiohttp.ClientSession`
+        :return: List of dictionaries containing the resources matching the conditions in \*\*kwargs.
+        :rtype: coroutine
         """
         url, hdr = self._get_conn_args(col, **kwargs)
         return await self._do(sess.get, url, headers=hdr)
@@ -405,14 +423,12 @@ class UnisClient(metaclass=_SingletonOnUID):
     @trace.info("UnisClient")
     async def post(self, col, data, sess):
         """
-        :param col: Name of the collection to retrieve stubs from
-        :param data: Dictionary containing the data to send to store
+        :param str col: Name of the collection to retrieve stubs from
+        :param dict[str,str] data: Dictionary containing the data to send to store
         :param sess: Session object for request
-        
-        :type col: str
-        :type data: Dict[str, Any]
-        :type sess: ClientSession
-        :rtype: List[Dict[str, Any]]
+        :type sess: :class:`aiohttp.ClientSession`
+        :return: List of dictionaries containing the resources posted to the store.
+        :rtype: coroutine
         """
         url, hdr = self._get_conn_args(col)
         return await self._do(sess.post, url, data=json.dumps(data), headers=hdr)
@@ -420,14 +436,12 @@ class UnisClient(metaclass=_SingletonOnUID):
     @trace.info("UnisClient")
     async def put(self, col, data, sess):
         """
-        :param col: Name of the collection to retrieve stubs from
-        :param data: Dictionary containing the data to send to store
+        :param str col: Name of the collection to retrieve stubs from
+        :param dict[str,str] data: Dictionary containing the data to send to store
         :param sess: Session object for request
-        
-        :type col: str
-        :type data: Dict[str, Any]
-        :type sess: ClientSession
-        :rtype: List[Dict[str, Any]]
+        :type sess: :class:`aiohttp.ClientSession`
+        :return: List of dictionaries containing the resources posted to the store.
+        :rtype: coroutine
         """
         url, hdr = self._get_conn_args(col)
         return await self._do(sess.put, url, data=json.dumps(data), headers=hdr)
@@ -435,12 +449,11 @@ class UnisClient(metaclass=_SingletonOnUID):
     @trace.info("UnisClient")
     async def delete(self, col, sess):
         """
-        :param col: Name of the collection to retrieve stubs from
+        :param str col: Name of the collection to retrieve stubs from
         :param sess: Session object for request
-        
-        :type col: str
-        :type sess: ClientSession
-        :rtype: List[Dict[str, Any]]
+        :type sess: :class:`aiohttp.ClientSession`
+        :return: List of dictionaries containing the resources removed from the store.
+        :rtype: coroutine
         """
         url, hdr = self._get_conn_args(col)
         return await self._do(sess.delete, url, headers=hdr)
@@ -448,12 +461,9 @@ class UnisClient(metaclass=_SingletonOnUID):
     @trace.info("UnisClient")
     async def subscribe(self, col, cb):
         """
-        :param col: Name of the collection to retrieve stubs from
-        :param cb: Callback function for messages
-        
-        :type col: str
-        :type cb: Callable[..., None]
-        :rtype: List[Dict[str, Any]]
+        :param str col: Name of the collection to retrieve stubs from
+        :param callable cb: Callback function for messages
+        :rtype: coroutine
         """
         async def _add_channel():
             await self._socket.send(json.dumps({'query':{}, 'resourceType': col}))

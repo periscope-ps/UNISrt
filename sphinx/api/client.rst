@@ -21,9 +21,3 @@ will resolve to the same instance given that ``localhost`` resolves to ``192.168
 
 .. automodule:: unis.rest.unis_client
    :members:
-
-.. autoclass:: UnisProxy
-   :members:
-
-.. autoclass:: UnisClient
-   :members:
