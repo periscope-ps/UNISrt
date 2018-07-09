@@ -33,15 +33,15 @@ class ReferenceDict(dict):
             raise UnisReferenceError("No unis instance at location - {}".format(n), [n])
 
 class UnisProxy(object):
+    """
+    :class:`UnisProxy <UnisProxy>` represents a collection of connections to remote data
+    stores all relating to a provided collection **col** of resources.  This object
+    maintains collection level metadata for threads and connection pooling.
+    
+    :param str col: Name of the collection owning this proxy
+    """
     @trace.debug("UnisProxy")
     def __init__(self, col=None):
-        """ Internal initializiation method
-        
-        :param col: Name of the collection owning this proxy
-        
-        :type col: str
-        :rtype: None
-        """
         self._name = col
     
     @trace.info("UnisProxy")
@@ -49,16 +49,15 @@ class UnisProxy(object):
         """
         Add a remote data source to this proxy.  Returns a list of client identifiers.
         
-        :param sources: List of remote endpoints to connect to
+        :param list[dict] sources: List of remote endpoints to connect to
         :param str ns: Namespace fort the source.
-        :type sources: list[dict]
-        :return: list of :class:`ClientIDs <CID>`
+        :return: list of :class:`ClientIDs <CID>`.
         
         The **sources** dictionary includes the following fields:
         
-        * **url:** *str* scheme and authority pair to the client i.e. ``http://localhost:8888``
-        * **virtual:** (optional) Indicates a client as a virtual (disconnected) instance
-        * **verify:** (optional) If true, verify the SSL certificate
+        * **url:** *str* scheme and authority pair to the client i.e. ``http://localhost:8888``.
+        * **virtual:** (optional) Indicates a client as a virtual (disconnected) instance.
+        * **verify:** (optional) If true, verify the SSL certificate.
         * **ssl:** (optional) *str* path to a file containing the SSL certificate.
         
         """
@@ -78,8 +77,9 @@ class UnisProxy(object):
         """
         Query remote data for collection types.  Returns a list of dictionaries.
         
-        :param list[CID] src: List of client identifiers to query        
-        :rtype: List[Dict[str, Any]]
+        :param src: List of client identifiers to query.
+        :type src: list[:class:`ClientIDs <CID>`]
+        :return: list of dictionaries containing collection descriptions.
         """
         src = src or []
         async with ClientSession() as sess:
@@ -91,8 +91,9 @@ class UnisProxy(object):
         Query minimal cache data for this proxy.  This function must be called when creating
         a new collection.   Returns a list of dictionaries.
         
-        :param List[CID] src: List of client identifiers to query
-        :rtype: List[Dict[str, Any]]
+        :param src: List of client identifiers to query.
+        :type src: list[:class:`ClientIDs <CID>`]
+        :return: list of dictionaries containing selfRefs for each resource in the collection.
         """
         async with ClientSession() as sess:
             return await self._gather(self._collect_fn(src, "getStubs"), self._name, sess=sess)
@@ -103,10 +104,10 @@ class UnisProxy(object):
         Request the full contents of a set of records.  Returns a list of dictionaries.
         
         :param src: List of client identifiers to request
-        :param **kwargs: Request parameters to remote data store
+        :param \*\*kwargs: Request parameters to remote data store
         
         :type src: List[CID]
-        :type **kwargs: str
+        :type \*\*kwargs: str
         :rtype: List[Dict[str, Any]]
         """
         src = src or []

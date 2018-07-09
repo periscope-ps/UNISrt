@@ -197,7 +197,11 @@ class List(_unistype):
         self._update(self._rt_reference, ctx)
     @trace.info("List")
     def remove(self, v, ctx):
-        return self._rt_ls.remove(v)
+        if isinstance(v, Context):
+            v = v.getObject()
+        result = self._rt_ls.remove(v)
+        self._update(self._rt_reference, ctx)
+        return result
     @trace.info("List")
     def where(self, f, ctx):
         if isinstance(pred, types.FunctionType):
