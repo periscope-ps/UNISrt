@@ -14,16 +14,19 @@ from unis.exceptions import ConnectionError, UnisReferenceError
 from unis.utils import async
 
 class CID(str):
+    """
+    The :class:`ClientID <CID>` class is used to uniquely identify a client instance.
+    :class:`ClientID <CID>` is distinguished from a python string for typing purposes.
+    """
     pass
 
 class ReferenceDict(dict):
+    """
+    :class:`ReferenceDict <ReferenceDict>` inherits from the builtin dict class
+    but raises a :class:`UnisReferenceError <unis.exceptions.UnisReferenceError>` 
+    on ``KeyError`` or ``IndexError``.
+    """
     def __getitem__(self, n):
-        """ Internal object get item method
-        :param n: Name to look up in the object
-        
-        :type n: str
-        :rtype: Any
-        """
         try:
             return super(ReferenceDict, self).__getitem__(n)
         except (KeyError, IndexError):
@@ -33,6 +36,7 @@ class UnisProxy(object):
     @trace.debug("UnisProxy")
     def __init__(self, col=None):
         """ Internal initializiation method
+        
         :param col: Name of the collection owning this proxy
         
         :type col: str
@@ -42,13 +46,21 @@ class UnisProxy(object):
     
     @trace.info("UnisProxy")
     def addSources(self, sources, ns):
-        """ Add a remote data source to this proxy.  Returns a list of client identifiers.
-        :param sources: List of remote endpoints to connect to
-        :param ns: Namespace fort the source.
+        """
+        Add a remote data source to this proxy.  Returns a list of client identifiers.
         
-        :type sources: List[Dict[str, Any]]
-        :type ns: str
-        :rtype: List[CID]
+        :param sources: List of remote endpoints to connect to
+        :param str ns: Namespace fort the source.
+        :type sources: list[dict]
+        :return: list of :class:`ClientIDs <CID>`
+        
+        The **sources** dictionary includes the following fields:
+        
+        * **url:** *str* scheme and authority pair to the client i.e. ``http://localhost:8888``
+        * **virtual:** (optional) Indicates a client as a virtual (disconnected) instance
+        * **verify:** (optional) If true, verify the SSL certificate
+        * **ssl:** (optional) *str* path to a file containing the SSL certificate.
+        
         """
         new = []
         old = [c.uid for c in list(UnisClient.instances.values()) if ns in c.namespaces]
@@ -63,10 +75,10 @@ class UnisProxy(object):
     
     @trace.info("UnisProxy")
     async def getResources(self, src=None):
-        """ Query remote data for collection types.  Returns a list of dictionaries.
-        :param src: List of client identifiers to query
+        """
+        Query remote data for collection types.  Returns a list of dictionaries.
         
-        :type src: List[CID]
+        :param list[CID] src: List of client identifiers to query        
         :rtype: List[Dict[str, Any]]
         """
         src = src or []
@@ -75,11 +87,11 @@ class UnisProxy(object):
     
     @trace.info("UnisProxy")
     async def getStubs(self, src):
-        """ Query minimal cache data for this proxy.  This function must be called when creating
+        """
+        Query minimal cache data for this proxy.  This function must be called when creating
         a new collection.   Returns a list of dictionaries.
-        :param src: List of client identifiers to query
         
-        :type src: List[CID]
+        :param List[CID] src: List of client identifiers to query
         :rtype: List[Dict[str, Any]]
         """
         async with ClientSession() as sess:
@@ -87,10 +99,12 @@ class UnisProxy(object):
     
     @trace.info("UnisProxy")
     async def get(self, src=None, **kwargs): 
-        """ Request the full contents of a set of records.  Returns a list of dictionaries.
+        """
+        Request the full contents of a set of records.  Returns a list of dictionaries.
         
         :param src: List of client identifiers to request
         :param **kwargs: Request parameters to remote data store
+        
         :type src: List[CID]
         :type **kwargs: str
         :rtype: List[Dict[str, Any]]
@@ -104,7 +118,8 @@ class UnisProxy(object):
         """ Submit the contents of a set of records to a data source.  Returns a list of dictionaries.
         
         :param cols: Dictionary containing the resources to be submitted.
-        :type src: Dict[Tuple[CID, str], List[UnisObject]]
+
+        :type cols: Dict[Tuple[CID, str], List[UnisObject]]
         :rtype: List[Dict[str, Any]]
         """
         async def _f():
@@ -118,6 +133,7 @@ class UnisProxy(object):
     async def put(self, src, rid, data):
         """ Submit the contents of a set of records to update a data source.  
         Returns a list of dictionaries.
+        
         :param src: Client identifier for target data store
         :param rid: Resource identifier for resource to update
         :param data: Fields to update in the resource
@@ -133,6 +149,7 @@ class UnisProxy(object):
     @trace.info("UnisProxy")
     async def delete(self, src, rid):
         """ Delete a resource from a data store.  Returns a list of dictionaries.
+        
         :param src: Client identifier for target data store
         :param rid: Resource identifier for resource to update
         
@@ -146,6 +163,7 @@ class UnisProxy(object):
     @trace.info("UnisProxy")
     async def subscribe(self, src, cb):
         """ Subscribe to push messages from a data store.  Returns a list of dictionaries.
+        
         :param src: List of client identifiers for target data stores
         :param cb: Callback function for data updates
         
@@ -226,6 +244,7 @@ class _SingletonOnUID(type):
     def resolve(cls, url):
         """ Attempts to find a uuid for a url string, if the url string corosponds to an
         unregistered instance, it will throw a UnisReferenceError.
+        
         :param url: Endpoint url for the client
         
         :type url: str
@@ -248,11 +267,10 @@ class UnisClient(metaclass=_SingletonOnUID):
     @trace.debug("UnisClient")
     def __init__(self, url, **kwargs):
         """
-        :param url: Endpoint url for the client
-        :param **kwargs: Parameters to the client
-        
-        :type url: str
-        :type **kwargs: Any
+        :param str url: Endpoint url for the client
+        :param bool virtual: Use a client as a virtual (disconnected) instance
+        :param bool verify: Verify SSL certificate
+        :param str ssl: File containing the ssl certificate
         :rtype: None
         """
         self.namespaces = set()
@@ -323,6 +341,7 @@ class UnisClient(metaclass=_SingletonOnUID):
     @trace.debug("UnisClient")
     async def _do(self, fn, *args, **kwargs):
         """ Execute a remote call
+        
         :param fn: Function to call
         :param *args: Positional arguments
         :param **kwargs: Keyword arguments
@@ -368,15 +387,15 @@ class UnisClient(metaclass=_SingletonOnUID):
         return await self._do(sess.get, url, headers=hdr)
 
     @trace.info("UnisClient")
-    async def get(self, col, sess, **kwargs): 
+    async def get(self, col, sess, **kwargs):
         """
         :param col: Name of the collection to retrieve stubs from
         :param sess: Session object for request
-        :param **kwargs: Keyword arguments to the request
+        :param kwargs: Keyword arguments to the request
         
         :type col: str
         :type sess: ClientSession
-        :type **kwargs: Any
+        :type kwargs: Any
         :rtype: List[Dict[str, Any]]
         """
         url, hdr = self._get_conn_args(col, **kwargs)
