@@ -14,6 +14,13 @@ from unis.utils import async
 from urllib.parse import urlparse
 
 class ObjectLayer(object):
+    """
+    The :class:`ObjectLayer <ObjectLayer>` contains the collections of 
+    resources and provides functionality for inserting and removing resources.
+    All functions documented herein have passthrough to the :class:`Runtime <Runtime>`
+    object associated with the :class:`ObjectLayer <ObjectLayer>` and should be called
+    indirectly from the :class:`Runtime <Runtime>` object.
+    """
     @trace.debug("OAL")
     def __init__(self, settings):
         self.settings, self._pending = settings, set()

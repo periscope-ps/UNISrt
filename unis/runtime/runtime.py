@@ -18,7 +18,45 @@ from unis.runtime.oal import ObjectLayer
 from unis.exceptions import ConnectionError
 
 class Runtime(object):
-    def build_settings(self):
+    """
+    :param unis: data store(s) to maintain.
+    :param str name: The name of the current runtime for namespacing.
+    :param dict runtime: Runtime configuration options.
+    :param dict cache: Caching configuration options.
+    :param dict proxy: Proxy configuration options.
+    :param dict measurements: Measurement configuration options.
+    
+    The :class:`Runtime <Runtime>` object maintains the configuration settings
+    for the Unis Runime and acts as the container for the 
+    :class:`ObjectAbstractionLayer <unis.runtime.oal.ObjectLayer>`.
+    The :class:`Runtime <Runtime>` also provides functionality for adding and removing
+    :class:`RuntimeServices <unis.services.RuntimeService>`.
+    
+    **Configuration options**
+    
+    1. **runtime**
+   
+    * **services:** List of service classes as strings to add to the runtime.
+    
+    2. **cache**
+    
+    * **preload:** List of collections as strings to preload on startup.
+    * **mode:** (*exponential*) Mode as string detemines how new resources are queried.
+    * **growth:** (*2*) Value as integer determines how many new resources are queried per request.
+    
+    3. **proxy**
+    
+    * **threads:** (*10*) Number of threads used by proxies.
+    * **batch:** (*1000*) Batching size for remote requests.
+    * **subscribe:** (*True*) Boolean indicates whether runtime should maintain a subscription to data stores.
+    * **defer_update:** (*True*) Boolean switching runtime mode between *deferred mode* and *immediate mode*.
+    
+    4. **measurements**
+    
+    * **read_history:** (*True*) Read in full history of measurements when measurement is added.
+    * **subscribe:** (*True*) Subscribe to recieve measurements in realtime.
+    """
+    def _build_settings(self):
         def _ls(v):
             for i, x in enumerate(v):
                 try:
@@ -67,7 +105,7 @@ class Runtime(object):
             self.log.warn("No event loop found, creating event loop for runtime")
             asyncio.set_event_loop(asyncio.new_event_loop())
             
-        self.build_settings()
+        self._build_settings()
         self._services = []
         
         if unis:
@@ -93,10 +131,10 @@ class Runtime(object):
             self._oal.addSources(self.settings['unis'])
         
             try:
-                signal.signal(signal.SIGINT, self.sig_close)
+                signal.signal(signal.SIGINT, self._sig_close)
             except:
                 pass
-            atexit.register(self.exit_close)
+            atexit.register(self._exit_close)
 
             [self.addService(s) for s in self.settings['runtime']['services']]
             self._oal.preload()
@@ -112,18 +150,46 @@ class Runtime(object):
             if self.__dict__.get('_oal'):
                 return getattr(self._oal, n)
             raise
-            
+    
     @property
-    @trace.info("Runtime")
     def collections(self):
+        """
+        :return: list of strings
+        
+        Collections lists the names of all collection types maintained by the runtime.
+        """
         return [x.name for x in self._oal._cache.values()]
         
     @trace.info("Runtime")
     def find(self, href):
+        """
+        :param str href: link to the reference to locate.
+        :return: :class:`UnisObject <unis.models.models.UnisObject>`
+        
+        ``find`` will locate any existing resource and return it as a :class:`UnisObject <unis.models.models.UnisObject>`.
+        The resource will be resolved whether it is located in the local :class:`UnisCollection <unis.models.lists.UnisCollection>`
+        or in a remote data store.
+        """
         return self._oal.find(href)
     
     @trace.info("Runtime")
     def insert(self, resource, commit=False, publish_to=None):
+        """
+        :param resource: Resource to be added to the runtime for tracking.
+        :param bool commit: (optional) Indicates whether the resource should be marked for insertion into a remote data store. Default ``False``.
+        :param bool publish_to: (optional) If commit is ``True``, this indicates which remote data store to commit to.  If not provided, 
+        :type resource: :class:`UnisObject <unis.models.models.UnisObject>`
+        :return: :class:`UnisObject <unis.models.models.UnisObject>`
+        the default store from the :class:`Runtime <Runtime>` settings.
+        
+        ``insert`` adds an object that inherits from :class:`UnisObject <unis.models.models.UnisObject>` to a :class:`Runtime <Runtime>` for tracking.
+        This will use the inheritance chain from the underlying json schema describing the object to determine which collection to place the object.
+        See :class:`UnisObject <unis.models.models.UnisObject>` for more information on resource typing.
+        
+        The behavior of ``commit`` depends on the ``defer_update`` setting.  In either mode, setting ``commit`` to True will mark the object for publication
+        to a remote data store.  In ``immediate_mode``, the resource will be sent to the data store at this point.  In ``deferred_mode`` this will not take
+        place until :meth:`flush <unis.runtime.oal.OAL.flush>` is called.
+        """
         if commit:
             self._oal.insert(resource).commit(publish_to=publish_to)
             return resource
@@ -131,6 +197,14 @@ class Runtime(object):
     
     @trace.info("Runtime")
     def addService(self, service):
+        """
+        :param service: Serivce to be added to the runtime.
+        :type service: str or :class:`RuntimeService <unis.services.RuntimeService>`
+        
+        ``addService`` takes a string path to a :class:`RuntimeService <unis.services.RuntimeService>` class,
+        a :class:`RuntimeService <unis.services.RuntimeService>` class or object.  In the case that the ``service``
+        is a string or class, a service object will be generated with no parameters.
+        """
         instance = service
         if isinstance(service, str):
             import importlib
@@ -146,15 +220,22 @@ class Runtime(object):
         if type(instance) not in self._services:
             self._services.append(service)
             instance.attach(self)
-    
-    def sig_close(self, sig=None, frame=None):
+            
+    def _sig_close(self, sig=None, frame=None):
         self.shutdown()
         raise KeyboardInterrupt
-    def exit_close(self):
+    def _exit_close(self):
         self.shutdown()
         
     @trace.info("Runtime")
     def shutdown(self, sig=None, frame=None):
+        """
+        :param sig: (optional) This param is required for internal use and should not be used.
+        :param frame: (optional) This param is required for internal use and should not be used.
+        :return: None
+        
+        Shutdown the runtime, removing connections from remote instances.
+        """
         self.log.info("Tearing down connection to UNIS...")
         signal.signal(signal.SIGTERM, signal.SIG_DFL)
         if self.__dict__.get('_oal'):
