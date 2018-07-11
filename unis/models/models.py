@@ -299,7 +299,7 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
         if ref in self._rt_remote and ctx and self._rt_live:
             self.__dict__['ts'] = int(time.time() * 1000000)
             self._rt_collection.update(self)
-            ctx.update(Context(self, ctx))
+            ctx._update(Context(self, ctx))
     @trace.debug("UnisObject")
     def _get_reference(self, n):
         return n

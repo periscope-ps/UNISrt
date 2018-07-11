@@ -335,7 +335,7 @@ class UnisClient(metaclass=_SingletonOnUID):
             while not self._socket:
                 try:
                     fut = ws.connect(ref, loop=loop, ssl=self._ssl)
-                    self._socket = await asyncio.wait_for(fut, timeout=1)
+                    self._socket = await asyncio.wait_for(fut, timeout=1, loop=loop)
                     for col in self._channels.keys():
                         await self._socket.send(json.dumps({'query':{}, 'resourceType': col}))
                 except OSError:

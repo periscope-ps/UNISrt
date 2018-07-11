@@ -21,6 +21,17 @@ class _sparselist(list):
 
 _rkey = namedtuple('ResourceKey', ['uid', 'cid'])
 class UnisCollection(object):
+    """
+    :param str name: The name of the collection.
+    :param runtime: The runtime associated with this collection.
+    :type runtime: :class:`Runtime <unis.Runtime>`
+    
+    The :class:`UnisCollection <UnisCollection>` maintains the local cache for a corrosponding endpoint
+    in the constituent remote data store.  It provides functionality for searching and filtering resources
+    by property.
+    
+    .. warning:: Do not call this directly, use get_collection to generate correctly namespaced instance.
+    """
     class Context(object):
         def __init__(self, obj, rt):
             self._obj, self._rt = obj, rt
@@ -43,6 +54,16 @@ class UnisCollection(object):
     @classmethod
     @trace.debug("UnisCollection")
     def get_collection(cls, name, model, runtime):
+        """
+        :param str name: The name of the collection.
+        :param model: The class of resources to be stored in the collection.
+        :param runtime: The :class:`Runtime <unis.Runtime>` instance linked to the collection.
+        :type model: :class:`UnisObject <unis.models.models.UnisObject>` class
+        :type runtime: :class:`Runtime <unis.Runtime>`
+        
+        Factory constructor for :class:`UnisCollection <UnisCollection>`.  This function is used
+        to generate a collection using the namespace from the provided :class:`Runtime <unis.Runtime>`.
+        """
         namespace = "{}::{}".format(runtime.settings['namespace'], name)
         collection = cls.collections.get(namespace, None) or cls(name, model)
         collection._growth = max(collection._growth, runtime.settings['cache']['growth'])

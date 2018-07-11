@@ -34,27 +34,21 @@ class Runtime(object):
     
     **Configuration options**
     
-    1. **runtime**
-   
-    * **services:** List of service classes as strings to add to the runtime.
+    * **runtime**
+        * **services:** List of service classes as strings to add to the runtime.
+    * **cache**
+        * **preload:** List of collections as strings to preload on startup.
+        * **mode:** (*exponential*) Mode as string detemines how new resources are queried.
+        * **growth:** (*2*) Value as integer determines how many new resources are queried per request.
     
-    2. **cache**
-    
-    * **preload:** List of collections as strings to preload on startup.
-    * **mode:** (*exponential*) Mode as string detemines how new resources are queried.
-    * **growth:** (*2*) Value as integer determines how many new resources are queried per request.
-    
-    3. **proxy**
-    
-    * **threads:** (*10*) Number of threads used by proxies.
-    * **batch:** (*1000*) Batching size for remote requests.
-    * **subscribe:** (*True*) Boolean indicates whether runtime should maintain a subscription to data stores.
-    * **defer_update:** (*True*) Boolean switching runtime mode between *deferred mode* and *immediate mode*.
-    
-    4. **measurements**
-    
-    * **read_history:** (*True*) Read in full history of measurements when measurement is added.
-    * **subscribe:** (*True*) Subscribe to recieve measurements in realtime.
+    * **proxy**
+        * **threads:** (*10*) Number of threads used by proxies.
+        * **batch:** (*1000*) Batching size for remote requests.
+        * **subscribe:** (*True*) Boolean indicates whether runtime should maintain a subscription to data stores.
+        * **defer_update:** (*True*) Boolean switching runtime mode between *deferred mode* and *immediate mode*.
+    * **measurements**
+        * **read_history:** (*True*) Read in full history of measurements when measurement is added.
+        * **subscribe:** (*True*) Subscribe to recieve measurements in realtime.
     """
     def _build_settings(self):
         def _ls(v):
@@ -137,7 +131,7 @@ class Runtime(object):
             atexit.register(self._exit_close)
 
             [self.addService(s) for s in self.settings['runtime']['services']]
-            self._oal.preload()
+            self._oal._preload()
         except Exception:
             self.shutdown()
             raise
@@ -161,18 +155,6 @@ class Runtime(object):
         return [x.name for x in self._oal._cache.values()]
         
     @trace.info("Runtime")
-    def find(self, href):
-        """
-        :param str href: link to the reference to locate.
-        :return: :class:`UnisObject <unis.models.models.UnisObject>`
-        
-        ``find`` will locate any existing resource and return it as a :class:`UnisObject <unis.models.models.UnisObject>`.
-        The resource will be resolved whether it is located in the local :class:`UnisCollection <unis.models.lists.UnisCollection>`
-        or in a remote data store.
-        """
-        return self._oal.find(href)
-    
-    @trace.info("Runtime")
     def insert(self, resource, commit=False, publish_to=None):
         """
         :param resource: Resource to be added to the runtime for tracking.
@@ -191,9 +173,9 @@ class Runtime(object):
         place until :meth:`flush <unis.runtime.oal.OAL.flush>` is called.
         """
         if commit:
-            self._oal.insert(resource).commit(publish_to=publish_to)
+            self._oal._insert(resource).commit(publish_to=publish_to)
             return resource
-        return self._oal.insert(resource)
+        return self._oal._insert(resource)
     
     @trace.info("Runtime")
     def addService(self, service):

@@ -17,9 +17,37 @@ class ObjectLayer(object):
     """
     The :class:`ObjectLayer <ObjectLayer>` contains the collections of 
     resources and provides functionality for inserting and removing resources.
-    All functions documented herein have passthrough to the :class:`Runtime <Runtime>`
+    All functions documented herein have passthrough to the :class:`Runtime <unis.runtime.Runtime>`
     object associated with the :class:`ObjectLayer <ObjectLayer>` and should be called
-    indirectly from the :class:`Runtime <Runtime>` object.
+    indirectly from the :class:`Runtime <unis.runtime.Runtime>` object.
+    
+    The :class:`ObjectLayer <ObjectLayer>` includes properties for each collection of resource
+    types as indicated by its consituent client data stores.  Because of this, it is impossible
+    to fully document these properties.  The :attr:`Runtime.collections <unis.Runtime.collections>`
+    property may be used to examine a list of these properties.  In practise, most applications will
+    have out-of-band knowledge of what collections it requires.  The following are an incomplete list
+    of potential :class:`UnisCollection <unis.models.lists.UnisCollection>` caches.
+    
+    .. attribute:: nodes
+        
+        :class:`UnisCollection <unis.models.lists.UnisCollection>` containing cached resources that are associated
+        with remote data store ``nodes`` endpoints.
+        
+        .. note:: This is an example of many possible automatically generated properties.
+    
+    .. attribute:: links
+        
+        :class:`UnisCollection <unis.models.lists.UnisCollection>` containing cached resources that are associated
+        with remote data store ``links`` endpoints.
+        
+        .. note:: This is an example of many possible automatically generated properties.
+    
+    .. attribute:: ports
+        
+        :class:`UnisCollection <unis.models.lists.UnisCollection>` containing cached resources that are associated
+        with remote data store ``ports`` endpoints.
+        
+        .. note:: This is an example of many possible automatically generated properties.
     """
     @trace.debug("OAL")
     def __init__(self, settings):
@@ -39,6 +67,14 @@ class ObjectLayer(object):
     
     @trace.debug("OAL")
     def find(self, href):
+        """
+        :param str href: link to the reference to locate.
+        :return: :class:`UnisObject <unis.models.models.UnisObject>`
+        
+        ``find`` will locate any existing resource and return it as a :class:`UnisObject <unis.models.models.UnisObject>`.
+        The resource will be resolved whether it is located in the local :class:`UnisCollection <unis.models.lists.UnisCollection>`
+        or in a remote data store.
+        """
         try:
             res = self._cache(urlparse(href).path.split('/')[1]).get([href])
             return res
@@ -49,13 +85,19 @@ class ObjectLayer(object):
     
     @trace.info("OAL")
     def flush(self):
+        """
+        When the containing runtime is set to ``deferred_mode``, flush forces all locally staged
+        changes to each modified resource's respective remote data store.  In ``immediate_mode``
+        the backend update happens automatically as soon as a :class:`UnisObject <unis.models.models.UnisObject>`
+        is modified and the flush function need not be called.
+        """
         if self._pending:
             cols = defaultdict(list)
             [cols[r.getSource(), r.getCollection().name].append(r) for r in self._pending]
             self._do_update(cols)
     
     @trace.info("OAL")
-    def update(self, res):
+    def _update(self, res):
         if res.selfRef:
             if res not in self._pending:
                 self._pending.add(res)
@@ -90,6 +132,14 @@ class ObjectLayer(object):
     
     @trace.info("OAL")
     def addSources(self, hrefs):
+        """
+        :param list[str] hrefs: list of remote data store urls
+        
+        ``addSource`` includes a new remote data store to be tracked and managed by the
+        runtime.  This function is called automatically when a new :class:`Runtime <unis.Runtime>`
+        is created and when a new remote store is detected by reference in a accessed property.
+        This function may be used to add new data stores manually, but should do so sparingly.
+        """
         proxy = UnisProxy()
         clients = proxy.addSources(hrefs, self.settings['namespace'])
         if not clients:
@@ -102,24 +152,32 @@ class ObjectLayer(object):
         async.make_async(asyncio.gather, *[c.addSources(clients) for c in self._cache()])
     
     @trace.info("OAL")
-    def preload(self):
+    def _preload(self):
         _p = lambda c: c.name in self.settings['cache']['preload'] or self.settings['cache']['mode'] == 'greedy'
         values = [c.load() for c in self._cache() if _p(c)]
         
     @trace.info("OAL")
-    def insert(self, res, uid=None):
+    def _insert(self, res):
         try:
             res = schemaLoader.get_class(res["$schema"]) if isinstance(res, dict) else res
         except KeyError:
             raise ValueError("No schema in dict, cannot continue")
             
-        res.id = uid or res.id or str(uuid.uuid4())
+        res.id = res.id or str(uuid.uuid4())
         res.setRuntime(self)
         self._cache(self.getModel(res.names)).append(res.getObject())
         return res
         
     @trace.info("OAL")
     def getModel(self, names):
+        """
+        :param list[str] names: list of potential names for a model.
+        :return: string collection name
+        
+        ``getModel`` determines which collection is associated with a given resource by resource name.
+        In order to support json schema style inheritence, each resource contains a list of names
+        similar to the python MRO.
+        """
         try:
             return next(c.name for c in self._cache() if c.model._rt_schema["name"] in list(names))
         except StopIteration:
@@ -127,6 +185,11 @@ class ObjectLayer(object):
     
     @trace.info("OAL")
     def about(self):
+        """
+        :return: list of collection names
+        
+        Returns a list including all names for each collection in the :class:`ObjectLayer <ObjectLayer>`.
+        """
         return [c.name for c in self._cache()]
     
     @trace.info("OAL")
