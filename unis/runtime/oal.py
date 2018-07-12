@@ -15,15 +15,15 @@ from urllib.parse import urlparse
 
 class ObjectLayer(object):
     """
-    The :class:`ObjectLayer <ObjectLayer>` contains the collections of 
+    The :class:`ObjectLayer <unis.runtime.oal.ObjectLayer>` contains the collections of 
     resources and provides functionality for inserting and removing resources.
-    All functions documented herein have passthrough to the :class:`Runtime <unis.runtime.Runtime>`
-    object associated with the :class:`ObjectLayer <ObjectLayer>` and should be called
-    indirectly from the :class:`Runtime <unis.runtime.Runtime>` object.
+    All functions documented herein have passthrough to the :class:`Runtime <unis.runtime.runtime.Runtime>`
+    object associated with the :class:`ObjectLayer <unis.runtime.oal.ObjectLayer>` and should be called
+    indirectly from the :class:`Runtime <unis.runtime.runtime.Runtime>` object.
     
-    The :class:`ObjectLayer <ObjectLayer>` includes properties for each collection of resource
+    The :class:`ObjectLayer <unis.runtime.oal.ObjectLayer>` includes properties for each collection of resource
     types as indicated by its consituent client data stores.  Because of this, it is impossible
-    to fully document these properties.  The :attr:`Runtime.collections <unis.Runtime.collections>`
+    to fully document these properties.  The :attr:`Runtime.collections <unis.runtime.runtime.Runtime.collections>`
     property may be used to examine a list of these properties.  In practise, most applications will
     have out-of-band knowledge of what collections it requires.  The following are an incomplete list
     of potential :class:`UnisCollection <unis.models.lists.UnisCollection>` caches.
@@ -136,7 +136,7 @@ class ObjectLayer(object):
         :param list[str] hrefs: list of remote data store urls
         
         ``addSource`` includes a new remote data store to be tracked and managed by the
-        runtime.  This function is called automatically when a new :class:`Runtime <unis.Runtime>`
+        runtime.  This function is called automatically when a new :class:`Runtime <unis.runtime.runtime.Runtime>`
         is created and when a new remote store is detected by reference in a accessed property.
         This function may be used to add new data stores manually, but should do so sparingly.
         """
@@ -188,7 +188,7 @@ class ObjectLayer(object):
         """
         :return: list of collection names
         
-        Returns a list including all names for each collection in the :class:`ObjectLayer <ObjectLayer>`.
+        Returns a list including all names for each collection in the :class:`ObjectLayer <unis.runtime.oal.ObjectLayer>`.
         """
         return [c.name for c in self._cache()]
     

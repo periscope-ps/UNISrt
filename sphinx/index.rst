@@ -6,9 +6,9 @@
 Welcome to UNIS Runtime's documentation!
 ========================================
 
-Contents:
-
-This is guide stuff
+*************
+Guides/HowTos
+*************
 
 .. toctree::
    :maxdepth: 2
@@ -16,8 +16,9 @@ This is guide stuff
    guides/guides.rst
 
 
-This is api stuff
-   
+****
+API
+****
 .. toctree::
    :maxdepth: 2
 

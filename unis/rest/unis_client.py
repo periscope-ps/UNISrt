@@ -15,8 +15,8 @@ from unis.utils import async
 
 class CID(str):
     """
-    The :class:`ClientID <CID>` class is used to uniquely identify a client instance.
-    :class:`ClientID <CID>` is distinguished from a python string for typing purposes.
+    The Client Identifier [:class:`CID <unis.rest.unis_client.CID>`] class is used to uniquely identify a client instance.
+    :class:`CID <unis.rest.unis_client.CID>` is distinguished from a python string for typing purposes.
     """
     pass
 
@@ -36,7 +36,7 @@ class UnisProxy(object):
     """
     :param str col: Name of the collection owning this proxy
     
-    :class:`UnisProxy <UnisProxy>` represents a collection of connections to remote data
+    :class:`UnisProxy <unis.rest.unis_client.UnisProxy>` represents a collection of connections to remote data
     stores all relating to a provided collection **col** of resources.  This object
     maintains collection level metadata for threads and connection pooling.
     """
@@ -49,7 +49,7 @@ class UnisProxy(object):
         """
         :param list[dict] sources: List of remote endpoints to connect to
         :param str ns: Namespace fort the source.
-        :return: list of :class:`ClientIDs <CID>`.
+        :return: list of :class:`CIDs <unis.rest.unis_client.CID>`.
         
         Add a remote data source to this proxy.  Returns a list of client identifiers.
         The **sources** dictionary includes the following fields:
@@ -74,7 +74,7 @@ class UnisProxy(object):
     async def getResources(self, src=None):
         """
         :param src: List of client identifiers to query.
-        :type src: list[:class:`ClientIDs <CID>`]
+        :type src: list[:class:`CIDs <unis.rest.unis_client.CID>`]
         :return: list of dictionaries containing collection descriptions.
         :rtype: coroutine
 
@@ -88,7 +88,7 @@ class UnisProxy(object):
     async def getStubs(self, src):
         """
         :param src: List of client identifiers to query.
-        :type src: list[:class:`ClientIDs <CID>`]
+        :type src: list[:class:`CIDs <unis.rest.unis_client.CID>`]
         :return: list of dictionaries containing selfRefs for each resource in the collection.
         :rtype: coroutine
 
@@ -103,7 +103,7 @@ class UnisProxy(object):
         """
         :param src: List of client identifiers to request.
         :param str \*\*kwargs: Request parameters to remote data store.
-        :type src: list[:class:`ClientID <CID>`]
+        :type src: list[:class:`CID <unis.rest.unis_client.CID>`]
         :return: list of dictionaries containing resources matching the request.
         :rtype: coroutine
         
@@ -119,11 +119,11 @@ class UnisProxy(object):
     def post(cls, cols):
         """ 
         :param cols: Dictionary containing the resources to be submitted.
-        :type cols: dict[tuple[:class:`ClientID <CID>`, str], List[:class:`UnisObject <unis.models.UnisObject>`]]
+        :type cols: dict[tuple[:class:`CID <unis.rest.unis_client.CID>`, str], List[:class:`UnisObject <unis.models.models.UnisObject>`]]
         :return: list of dictionaries containing the updated values for the posted resources.
         
         Submit the contents of a set of records to a data source.  The ``cols`` parameter is a dictionary wherein 
-        :class:`UnisObjects <unis.models.UnisObject>` are keyed by a (:class:`ClientID <CID>`, ``collection_name``) pair.
+        :class:`UnisObjects <unis.models.models.UnisObject>` are keyed by a (:class:`CID <unis.rest.unis_client.CID>`, ``collection_name``) pair.
         The resulting dictionaries contain the entire resource including all fields whether altered or not.
         """
         async def _f():
@@ -139,7 +139,7 @@ class UnisProxy(object):
         :param src: Client identifier for target data store.
         :param str rid: Resource identifier for resource to update.
         :param dict[str,str] data: Fields to update in the resource.
-        :type src: :class:`ClientID <CID>`
+        :type src: :class:`CID <unis.rest.unis_client.CID>`
         :return: list of dictionaries containing the altered resources.
         :rtype: coroutine
         
@@ -156,7 +156,7 @@ class UnisProxy(object):
         """
         :param src: Client identifier for target data store.
         :param str rid: Resource identifier for resource to update.
-        :type src: :class:`ClientID <CID>`
+        :type src: :class:`CID <unis.rest.unis_client.CID>`
         :return: list of dictionaries containing the deleted resource.
         :rtype: coroutine
         
@@ -170,7 +170,7 @@ class UnisProxy(object):
         """ 
         :param src: List of client identifiers for target data stores
         :param cb: Callback function for data updates
-        :type src: list[:class:`ClientID <CID>`]
+        :type src: list[:class:`CID <unis.rest.unis_client.CID>`]
         :type cb: callable
         :return: An empty list.
         :rtype: coroutine
@@ -283,7 +283,7 @@ class UnisClient(metaclass=_SingletonOnUID):
     :param bool verify: Verify SSL certificate
     :param str ssl: File containing the ssl certificate
     
-    :class:`UnisClient <UnisClient>` maintains the connection to a specific data store.
+    :class:`UnisClient <unis.rest.unis_client.UnisClient>` maintains the connection to a specific data store.
     This includes keeping a websocket and associated threads alive for subscription events
     and poviding restful functions for individual requests to the associated data store.
     """

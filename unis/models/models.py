@@ -16,6 +16,10 @@ from unis.settings import SCHEMA_CACHE_DIR
 from unis.utils import async
 
 class SkipResource(Exception):
+    """
+    Special exception used by :class:`UnisObject <unis.models.models.UnisObject>`
+    to identify invalid or incomplete resources and remove them from iteration.
+    """
     pass
 
 class _attr(object):
@@ -27,6 +31,16 @@ class _attr(object):
         self.__values__[obj] = v
     
 class Context(object):
+    """
+    :param obj: :class:`UnisObject <unis.models.models.UnisObject>` referenced by the context.
+    :param runtime: :class:`Runtime <unis.runtime.runtime.Runtime>` associated with the context.
+    :type obj: :class:`UnisObject <unis.models.models.UnisObject>`
+    :type runtime: :class:`Runtime <unis.runtime.runtime.Runtime>`
+    
+    Wrapper class linking :class:`UnisObjects <unis.models.models.UnisObject>` to
+    :class:`Runtimes <unis.runtime.runtime.Runtime>`
+    """
+    
     def __init__(self, obj, runtime):
         self._obj, self._rt = obj, runtime
     def __getattribute__(self, n):
@@ -68,10 +82,32 @@ class Context(object):
         return hash(self._obj)
     
     def getRuntime(self):
+        """
+        :return: :class:`Runtime <unis.runtime.runtime.Runtime>` associated with the 
+        :class:`Context <unis.models.models.Context>`.
+        
+        Get the :class:`Runtime <unis.runtime.runtime.Runtime>` associated with the 
+        :class:`Context <unis.models.models.Context>`.
+        """
         return self._rt
     def setRuntime(self, runtime):
+        """
+        :param runtime: Instance associated with the 
+        :class:`Context <unis.models.models.Context>`.
+        :type runtime: :class:`Runtime <unis.runtime.runtime.Runtime>`
+        
+        Set the :class:`Runtime <unis.runtime.runtime.Runtime>` associated with the 
+        :class:`Context <unis.models.models.Context>`.
+        """
         self._rt = runtime
     def getObject(self):
+        """
+        :return: :class:`UnisObject <unis.models.models.UnisObject>` associated with the 
+        :class:`Context <unis.models.models.Context>`.
+        
+        Get the raw :class:`UnisObject <unis.models.models.UnisObject>` associated with the 
+        :class:`Context <unis.models.models.Context>`.
+        """
         return self._obj
 
 class _nodefault(object): pass
@@ -159,6 +195,13 @@ class _unistype(object):
         return super().__repr__()
     
 class Primitive(_unistype):
+    """
+    :param list v: The value of the object.
+    :param ref: The owner of the object.
+    :type ref: :class:`UnisObject <unis.models.models.UnisObject>`
+    
+    A runtime type representation of a python ``number``, ``string``, and ``boolean``.
+    """
     @trace.debug("Primitive")
     def __init__(self, v, ref):
         super(Primitive, self).__init__(v, ref)
@@ -168,12 +211,26 @@ class Primitive(_unistype):
         return self._rt_reference
     @trace.info("Primitive")
     def to_JSON(self, ctx, top):
+        """
+        :param ctx: Context of the current operation.
+        :param bool top: Indicates if this is the first ``to_JSON`` call in the chain.
+        :returns: string or number value of the :class:`UnisObject <unis.models.models.Primitive>`
+        
+        Returns the raw value stored in the object.
+        """
         return self._rt_raw
     @trace.none
     def __repr__(self):
         return "<unis.Primitive>"#.format(self._rt_raw)
     
 class List(_unistype):
+    """
+    :param list v: The list of values in the object.
+    :param ref: The owner of the object.
+    :type ref: :class:`UnisObject <unis.models.models.UnisObject>`
+    
+    A runtime type representation of a python ``list``.
+    """
     _rt_ls = _attr()
     @trace.debug("List")
     def __init__(self, v, ref):
@@ -191,12 +248,26 @@ class List(_unistype):
         self._update(self._rt_reference, ctx)
     @trace.info("List")
     def append(self, v, ctx):
+        """
+        :param any v: Value to be appended to the :class:`List <unis.models.models.List>`.
+        :param ctx: Context of the current operation.
+        
+        Append a value to the :class:`List <unis.models.models.List>`.  This value may be of any type.
+        """
         if isinstance(v, Context):
             v = v.getObject()
         self._rt_ls.append(v)
         self._update(self._rt_reference, ctx)
     @trace.info("List")
     def remove(self, v, ctx):
+        """
+        :param any v: Value to be removed from the :class:`List <unis.models.models.List>`.
+        :param ctx: Context of the current operation.
+        :returns: The value removed.
+        
+        Remove a value from the :class:`List <unis.models.models.List>`.  This must be a member of the 
+        :class:`List <unis.models.models.List>`.
+        """
         if isinstance(v, Context):
             v = v.getObject()
         result = self._rt_ls.remove(v)
@@ -204,6 +275,15 @@ class List(_unistype):
         return result
     @trace.info("List")
     def where(self, f, ctx):
+        """
+        :param f: Predicate to filter the list.
+        :param ctx: Context of the current operation.
+        :returns: Generator returning filtered values.
+        
+        Return a subset of the :class:`List <unis.models.models.List>` including only members
+        where ``f`` holds True.  This function takes the same style predicate as
+        :meth:`UnisCollection.where <unis.models.lists.UnisCollection.where>`.
+        """
         if isinstance(pred, types.FunctionType):
             return (v for v in filter(pred, self._rt_ls))
         else:
@@ -224,6 +304,15 @@ class List(_unistype):
         return self._rt_reference
     @trace.info("List")
     def to_JSON(self, ctx, top):
+        """
+        :param ctx: Context of the current operation.
+        :param bool top: Indicates if this is the first ``to_JSON`` call in the chain.
+        :returns: ``list`` containing the values in the object.
+        
+        Returns a plain ``list`` formated version of the object, recursively calling 
+        ``to_JSON`` on all members of the :class:`List <unis.models.models.List>` where
+        applicable.
+        """
         res = []
         for i, item in enumerate(self._rt_ls):
             if isinstance(item, (list, dict)):
@@ -249,6 +338,13 @@ class List(_unistype):
         return "<unis.List {}>".format(self._rt_ls.__repr__())
 
 class Local(_unistype):
+    """
+    :param dict v: The attribute names and values to be included in the object.
+    :param ref: The owner of the object.
+    :type ref: :class:`UnisObject <unis.models.models.UnisObject>`
+    
+    A runtime type representation of a python ``dict``.
+    """
     @trace.debug("Local")
     def __init__(self, v, ref):
         super(Local, self).__init__(v, ref)
@@ -259,6 +355,15 @@ class Local(_unistype):
         return self._rt_reference
     @trace.info("Local")
     def to_JSON(self, ctx, top):
+        """
+        :param ctx: Context of the current operation.
+        :param bool top: Indicates if this is the first ``to_JSON`` call in the chain.
+        :returns: ``dict`` containing the raw respresentation of all child members.
+        
+        Returns a plain ``dict`` formated version of the object, recursively calling 
+        ``to_JSON`` on all members of the :class:`Local <unis.models.models.Local>` where
+        applicable.
+        """
         res = {}
         for k,v in self.__dict__.items():
             if isinstance(v, (list, dict)):
@@ -277,6 +382,17 @@ class _metacontextcheck(type):
         other = other.getObject() if hasattr(other, 'getObject') else other
         return super(_metacontextcheck, self).__instancecheck__(other)
 class UnisObject(_unistype, metaclass=_metacontextcheck):
+    """
+    :param dict v: (optional) A ``dict`` containing all attribute names and values in the resource.
+    :param ref: (optional) A reference to the owner of the object.
+    :type ref: :class:`UnisObject <unis.models.models.UnisObject>`
+    
+    The base class for all runtime resources.  This is used to maintain a record
+    of the construction and state of the internal attributes.
+    
+    All attributes listed in ``v`` are considered to be *remote* attributes and are included in
+    the data store on update.
+    """
     _rt_remote, _rt_collection = _attr(), _attr()
     _rt_restricted, _rt_live = ["ts", "selfRef"], False
     _rt_callback = lambda s,x,e: x
@@ -305,23 +421,63 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
         return n
     @trace.info("UnisObject")
     def touch(self, ctx):
+        """
+        :param ctx: Context of the current operation.
+        
+        Force the :class:`UnisObject <unis.models.models.UnisObject>` to modify its timestamp in the data store.
+        This affects a "keep alive" signal to the data store.
+        """
         if self._getattribute('selfRef', ctx):
             self.__dict__['ts'] = int(time.time() * 1000000)
             cid, rid = self.getSource(), self._getattribute('id', ctx)
             async.make_async(self._rt_collection._unis.put, cid, rid, {'ts': self.ts, 'id': rid})
     @trace.info("UnisObject")
     def getSource(self, ctx=None):
+        """
+        :param ctx: Context of the current operation.
+        :returns: :class:`CID <unis.rest.unis_client.CID>` for this object.
+        
+        Returns the ID of the data store in which the resource is stored.
+        """
         if not self._rt_source:
             raise UnisReferenceError("Attempting to resolve unregistered resource.", [])
         return self._rt_source
     @trace.info("UnisObject")
     def setCollection(self, v, ctx=None):
+        """
+        :param v: Collection to set.
+        :param ctx: Context of the current operation.
+        
+        Sets the :class:`UnisCollection <unis.models.lists.UnisCollection>` that the object
+        belongs to.
+        """
         self._rt_collection = v
     @trace.info("UnisObject")
     def getCollection(self, ctx=None):
+        """
+        :param ctx: Context of the current operation.
+        :returns: :class:`UnisCollection <unis.models.lists.UnisCollection>` that the object belongs to.
+        
+        Returns the collection that the object belongs to.
+        """
         return self._rt_collection
     @trace.info("UnisObject")
     def commit(self, publish_to=None, ctx=None):
+        """
+        :param str publish_to: Data store in which to insert the resource.
+        :param ctx: Context of the current operation.
+        
+        ``commit`` stages the object to be inserted into a remote data store.
+        If the object is already a member of an instance, this function does
+        nothing.  Like any modification to the remote data stores, this function's
+        behavior is dependent of the state of the :class:`Runtime's <unis.runtime.runtime.Runtime>`
+        ``defer_update`` setting.
+        
+        If the calling :class:`Runtime <unis.runtime.runtime.Runtime>` is in ``deferred_mode``, the
+        :class:`UnisObject <unis.models.models.UnisObject>` will only be staged and sent to the remote
+        instance only after a call the :meth:`ObjectLayer.flush <unis.runtime.oal.ObjectLayer>`.  In
+        ``immediate_mode`` the resource will be dispatched immediately.
+        """
         if not ctx:
             raise AttributeError("Failed to aquire runtime context")
         if not self.selfRef and self._rt_collection:
@@ -336,6 +492,15 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
             self._update('id', ctx)
     @trace.info("UnisObject")
     def extendSchema(self, n, v=None, ctx=None):
+        """
+        :param str n: Name of the attribute to add.
+        :param any v: (optional) Value to set to the new attribute.
+        :param ctx: Context of the current operation.
+        
+        Add a new attribute to the internal schema.  Adding an attribute to the schema will cause the corresponding
+        :class:`UnisObject <unis.models.models.UnisObject>` to be marked as pending an update and will include the
+        new attribute in the remote data store.
+        """
         if v:
             self.__dict__[n] = v
         if n not in self._rt_remote:
@@ -343,15 +508,41 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
             self._update(n, ctx)
     @trace.info("UnisObject")
     def addCallback(self, fn, ctx=None):
+        """
+        :param callable fn: Callback function to attach to the :class:`UnisObject <unis.models.models.UnisObject>`.
+        :param ctx: Context of the current operation.
+        
+        Add a callback to the individual :class:`UnisObject <unis.models.models.UnisObject>`.  This callback
+        functions as described in :meth:`UnisCollection.addCallback <unis.models.lists.UnisCollection.addCallback>`.
+        """
         self._rt_callback = lambda s,x,e: fn(Context(x, ctx), e)
     @trace.debug("UnisObject")
     def _callback(self, event, ctx=None):
         self._rt_callback(self, event)
     @trace.info("UnisObject")
     def validate(self, ctx):
+        """
+        :param ctx: Context of the current operation.
+        :raises ValidationError: If :class:`UnisObject <unis.models.models.UnisObject>` fails to validate.
+        
+        Validate the :class:`UnisObject <unis.models.models.UnisObject>` against the JSON Schema used
+        to construct its type.
+        """
         jsonschema.validate(self.to_JSON(ctx), self._rt_schema, resolver=self._rt_resolver)
     @trace.info("UnisObject")
     def to_JSON(self, ctx=None, top=True):
+        """
+        :param ctx: Context of the current operation.
+        :param bool top: Indicates if this is the first ``to_JSON`` call in the chain.
+        :returns: ``dict`` containing the raw respresentation of all child members.
+        
+        Returns a plain ``dict`` formated version of the object, recursively calling 
+        **to_JSON** on all members of the :class:`Local <unis.models.models.Local>` where
+        applicable.
+        
+        If ``top`` is ``False``, **to_JSON** instead returns a dict containing the reference to
+        the resource's remote data store entry.
+        """
         result = {}
         if top:
             for k,v in filter(lambda x: x[0] in self._rt_remote, self.__dict__.items()):
@@ -371,6 +562,14 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
 
     @trace.info("UnisObject")
     def clone(self, ctx):
+        """
+        :param ctx: Context of the current operation.
+        
+        Create an exact clone of the object, clearing the ``selfRef`` and ``id``
+        attributes.
+        
+        .. warning:: Any references made in the object will retain their old value.  This function is insufficient to make a complete clone of a heirarchy of resources.
+        """
         d = self.to_JSON(ctx)
         d.update(**{'selfRef': '', 'id': ''})
         model = type(self)

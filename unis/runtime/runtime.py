@@ -26,11 +26,11 @@ class Runtime(object):
     :param dict proxy: Proxy configuration options.
     :param dict measurements: Measurement configuration options.
     
-    The :class:`Runtime <Runtime>` object maintains the configuration settings
+    The :class:`Runtime <unis.runtime.runtime.Runtime>` object maintains the configuration settings
     for the Unis Runime and acts as the container for the 
     :class:`ObjectAbstractionLayer <unis.runtime.oal.ObjectLayer>`.
-    The :class:`Runtime <Runtime>` also provides functionality for adding and removing
-    :class:`RuntimeServices <unis.services.RuntimeService>`.
+    The :class:`Runtime <unis.runtime.runtime.Runtime>` also provides functionality for adding and removing
+    :class:`RuntimeServices <unis.services.abstract.RuntimeService>`.
     
     **Configuration options**
     
@@ -162,9 +162,9 @@ class Runtime(object):
         :param bool publish_to: (optional) If commit is ``True``, this indicates which remote data store to commit to.  If not provided, 
         :type resource: :class:`UnisObject <unis.models.models.UnisObject>`
         :return: :class:`UnisObject <unis.models.models.UnisObject>`
-        the default store from the :class:`Runtime <Runtime>` settings.
+        the default store from the :class:`Runtime <unis.runtime.runtime.Runtime>` settings.
         
-        ``insert`` adds an object that inherits from :class:`UnisObject <unis.models.models.UnisObject>` to a :class:`Runtime <Runtime>` for tracking.
+        ``insert`` adds an object that inherits from :class:`UnisObject <unis.models.models.UnisObject>` to a :class:`Runtime <unis.runtime.runtime.Runtime>` for tracking.
         This will use the inheritance chain from the underlying json schema describing the object to determine which collection to place the object.
         See :class:`UnisObject <unis.models.models.UnisObject>` for more information on resource typing.
         
@@ -181,10 +181,10 @@ class Runtime(object):
     def addService(self, service):
         """
         :param service: Serivce to be added to the runtime.
-        :type service: str or :class:`RuntimeService <unis.services.RuntimeService>`
+        :type service: str or :class:`RuntimeService <unis.services.abstract.RuntimeService>`
         
-        ``addService`` takes a string path to a :class:`RuntimeService <unis.services.RuntimeService>` class,
-        a :class:`RuntimeService <unis.services.RuntimeService>` class or object.  In the case that the ``service``
+        ``addService`` takes a string path to a :class:`RuntimeService <unis.services.abstract.RuntimeService>` class,
+        a :class:`RuntimeService <unis.services.abstract.RuntimeService>` class or object.  In the case that the ``service``
         is a string or class, a service object will be generated with no parameters.
         """
         instance = service

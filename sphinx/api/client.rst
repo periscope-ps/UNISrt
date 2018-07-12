@@ -9,8 +9,8 @@ connection to a specific endpoint.
 
 The :class:`UnisClient <unis.rest.unis_client.UnisClient>` class is a form of singleton; each remote data store
 has one *and only one* :class:`UnisClient <unis.rest.unis_client.UnisClient>` associated with it.  The singleton
-relationship is maintained through the :class:`ClientID <unis.rest.unis_client.CID>` class which represetns a unique
-ID generated and advertised by the remote data store.  :class:`ClientIDs <unis.rest.unis_client.CID>` are FQDN agnostic
+relationship is maintained through the :class:`CID <unis.rest.unis_client.CID>` class which represetns a unique
+ID generated and advertised by the remote data store.  :class:`CIDs <unis.rest.unis_client.CID>` are FQDN agnostic
 i.e. a :class:`UnisClient <unis.rest.unis_client.UnisClient>` generated from ``http://localhost:8888`` and ``http://192.168.0.1:8888``
 will resolve to the same instance given that ``localhost`` resolves to ``192.168.0.1``.
 
@@ -19,5 +19,19 @@ will resolve to the same instance given that ``localhost`` resolves to ``192.168
    for completeness and development documentation only.
 
 
-.. automodule:: unis.rest.unis_client
+
+*********
+UnisProxy
+*********
+.. autoclass:: unis.rest.unis_client.UnisProxy
    :members:
+
+**********
+UnisClient
+**********
+.. autoclass:: unis.rest.unis_client.CID
+   :members:
+   
+.. autoclass:: unis.rest.unis_client.UnisClient
+   :members:
+

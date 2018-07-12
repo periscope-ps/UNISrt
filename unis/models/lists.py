@@ -24,13 +24,13 @@ class UnisCollection(object):
     """
     :param str name: The name of the collection.
     :param runtime: The runtime associated with this collection.
-    :type runtime: :class:`Runtime <unis.Runtime>`
+    :type runtime: :class:`Runtime <unis.runtime.runtime.Runtime>`
     
     The :class:`UnisCollection <UnisCollection>` maintains the local cache for a corrosponding endpoint
     in the constituent remote data store.  It provides functionality for searching and filtering resources
     by property.
     
-    .. warning:: Do not call this directly, use get_collection to generate correctly namespaced instance.
+    .. warning:: Do not construct UnisCollections directly, use get_collection to generate correctly namespaced instance.
     """
     class Context(object):
         def __init__(self, obj, rt):
@@ -59,10 +59,10 @@ class UnisCollection(object):
         :param model: The class of resources to be stored in the collection.
         :param runtime: The :class:`Runtime <unis.Runtime>` instance linked to the collection.
         :type model: :class:`UnisObject <unis.models.models.UnisObject>` class
-        :type runtime: :class:`Runtime <unis.Runtime>`
+        :type runtime: :class:`Runtime <unis.runtime.runtime.Runtime>`
         
         Factory constructor for :class:`UnisCollection <UnisCollection>`.  This function is used
-        to generate a collection using the namespace from the provided :class:`Runtime <unis.Runtime>`.
+        to generate a collection using the namespace from the provided :class:`Runtime <unis.runtime.runtime.Runtime>`.
         """
         namespace = "{}::{}".format(runtime.settings['namespace'], name)
         collection = cls.collections.get(namespace, None) or cls(name, model)
@@ -72,6 +72,13 @@ class UnisCollection(object):
         return UnisCollection.Context(collection, runtime)
     @classmethod
     def from_name(cls, name, runtime):
+        """
+        :param str name: Name of the collection to query.
+        :param runtime: Instance associated with the collection.
+        :type runtime: :class:`Runtime <unis.runtime.runtime.Runtime>`
+        
+        Locate an existing collection within a runtime by name.
+        """
         if name:
             namespace = "{}::{}".format(runtime.settings['namespace'], name)
             return UnisCollection.Context(cls.collections[namespace], runtime)
@@ -116,14 +123,34 @@ class UnisCollection(object):
     
     @trace.info("UnisCollection")
     def update(self, item):
+        """
+        :param item: Resource to update.
+        
+        .. warning:: This function is for internal use.
+        
+        Dispatch :class:`UnisObject <unis.models.models.UnisObject>` to registered 
+        :class:`RuntimeServices <unis.services.abstract.RuntimeService>` when updates to the resource
+        occur.
+        """
         self._serve(Events.update, item)
     @trace.info("UnisCollection")
     def load(self):
+        """
+        :return: List of :class:`UnisObjects <unis.models.models.UnisObject>`.
+        Force the collection to pull and cache all remote resources matching the collection.
+        """
         self._complete_cache()
         return self._cache.valid_list()
     
     @trace.info("UnisCollection")
     def get(self, hrefs):
+        """
+        :param list[str] hrefs: List of urls to resources to query.
+        :return: List of :class:`UnisObjects <unis.models.models.UnisObject>`
+        
+        Search for one or more resources and include them in the collection.  If the resources
+        are local, they are immediately returned.
+        """
         ids = [urlparse(r).path.split('/')[-1] for r in hrefs]
         try:
             to_get = [_rkey(uid, self._stubs[uid]) for uid in ids if isinstance(self._stubs[uid], str)]
@@ -135,6 +162,17 @@ class UnisCollection(object):
     
     @trace.info("UnisCollection")
     def append(self, item):
+        """
+        :param item: Resource to be added to the collection
+        :type item: :class:`UnisObject <unis.models.models.UnisObject>`
+        :return: :class:`UnisObject <unis.models.models.UnisObject>`
+        
+        Append a resource to the collection.  If the resource already appears in the collection
+        the resource already in the collection is updated with values from the appended instance
+        then returned.
+        
+        .. note:: This function is called automatically by :meth:`ObjectLayer.insert <unis.runtime.oal.ObjectLayer.insert>`
+        """
         self._check_record(item)
         i = self.index(item)
         if i is not None:
@@ -155,6 +193,13 @@ class UnisCollection(object):
     
     @trace.info("UnisCollection")
     def remove(self, item):
+        """
+        :param item: Resource to be removed from the collection
+        :type item: :class:`UnisObject <unis.models.models.UnisObject>`
+        :return: :class:`UnisObject <unis.models.models.UnisObject>`
+        
+        Remove a resource from the collection.
+        """
         self._check_record(item)
         try:
             self._unis.delete(item.getSource(), item._getattribute('id', None))
@@ -163,6 +208,13 @@ class UnisCollection(object):
     
     @trace.info("UnisCollection")
     def index(self, item):
+        """
+        :param item: Resource to be removed from the collection
+        :type item: :class:`UnisObject <unis.models.models.UnisObject>`
+        :return: integer index ofr the resource in the collection
+        
+        Gets the index of the object within the collection.
+        """
         item = item if isinstance(item, oContext) else oContext(item, None)
         if item.id:
             return self._indices['id'].index(item)
@@ -170,7 +222,22 @@ class UnisCollection(object):
             return None
     
     @trace.info("UnisCollection")
-    def where(self, pred, ctx):
+    def where(self, pred, ctx=None):
+        """
+        :param pred: Predicate used to filter resources.
+        :param ctx: This parameter must be left empty when called by external sources.
+        :type pred: callable or dictionary
+        :return: list of :class:`UnisObject <unis.models.models.UnisObject>`
+        
+        ``where`` filters members of the collection by a provided predicate.  The predicate
+        can take one of two forms.  If the predicate is a dictionary, each key corresponds with
+        an attribute in the collection of objects.  The values of the dictionary maybe be a
+        value to compare or another dictionary.  The inner dictionary may have keys in 
+        "gt", "ge", "lt", "le", or "eq".  The value is then compared using the corresponding 
+        comparitor.::
+            pred = {"value": {"gt": 500}, "type": "test_nodes"}
+            valid_nodes = nodes.where(pred)
+        """
         op = {
             "gt": lambda b: lambda a: a > b, 
             "ge": lambda b: lambda a: a >= b,
@@ -204,6 +271,11 @@ class UnisCollection(object):
     
     @trace.info("UnisCollection")
     def createIndex(self, k):
+        """
+        :param str k: Key for the new index
+        
+        Generate an index for faster querying over a specified field.
+        """
         if k not in self._indices:
             index = Index(k)
             self._indices[k] = index
@@ -212,12 +284,26 @@ class UnisCollection(object):
     
     @trace.info("UnisCollection")
     def updateIndex(self, v):
+        """
+        :param v: Resource to update index values.
+        :type v: :class:`UnisObject <unis.models.models.UnisObject>`
+        
+        Update the index values for a modified or new resource.
+        """
         i = self.index(v)
         for key, index in self._indices.items():
             index.update(i, v)
     
     @trace.info("UnisCollection")
     async def addSources(self, cids):
+        """
+        :param list[str] cids: List of :class:`CIDs <unis.rest.unis_client.CID>` to add
+        :rtype: coroutine
+        
+        ``addSources`` includes a new data store with data matching the collection.
+        
+        .. warning:: This function is for internal use only.
+        """
         self._complete_cache, self._get_next = self._proto_complete_cache, self._proto_get_next
         for v in filter(lambda x: 'selfRef' in x, await self._unis.getStubs(cids)):
             uid = urlparse(v['selfRef']).path.split('/')[-1]
@@ -226,9 +312,31 @@ class UnisCollection(object):
     
     @trace.info("UnisCollection")
     def addService(self, service):
+        """
+        :param service: Service to include in the collection.
+        :type service: :class:`RuntimeService <unis.services.abstract.RuntimeService>`
+        
+        Include a service to be run when resources contained in this collection are
+        created, modified, or deleted.
+        
+        .. warning:: This function is for internal use only.
+        """
         self._services.append(service)
     @trace.info("UnisCollection")
     def addCallback(self, cb):
+        """
+        :param callable cb: Function to attach to the collection.
+        
+        Include a callback function when resources in this collection are
+        created, modified, or deleted.
+        
+        ``cb`` must match the prototype
+        
+        **Parameters:**
+        
+        * **resource:** resource to inspect
+        * **type:** event type in ["new", "update", "delete"]
+        """
         self._callbacks.append(cb)
     @trace.debug("UnisCollection")
     def _check_record(self, v):
