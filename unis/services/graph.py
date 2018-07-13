@@ -7,6 +7,9 @@ from unis.models import Node, Link, Port
 # UnisGrapher is a service that connects newly discovered nodes, ports, and links
 # as they are discovered
 class UnisGrapher(RuntimeService):
+    """
+    Builds and maintains a networkx style graph representation of the runtime's topology.
+    """
     targets = [ Node, Link ]
     def update(self, resource):
         if not hasattr(self.runtime, "graph"):

@@ -161,8 +161,7 @@ class Runtime(object):
         :param bool commit: (optional) Indicates whether the resource should be marked for insertion into a remote data store. Default ``False``.
         :param bool publish_to: (optional) If commit is ``True``, this indicates which remote data store to commit to.  If not provided, 
         :type resource: :class:`UnisObject <unis.models.models.UnisObject>`
-        :return: :class:`UnisObject <unis.models.models.UnisObject>`
-        the default store from the :class:`Runtime <unis.runtime.runtime.Runtime>` settings.
+        :return: :class:`UnisObject <unis.models.models.UnisObject>` the default store from the :class:`Runtime <unis.runtime.runtime.Runtime>` settings.
         
         ``insert`` adds an object that inherits from :class:`UnisObject <unis.models.models.UnisObject>` to a :class:`Runtime <unis.runtime.runtime.Runtime>` for tracking.
         This will use the inheritance chain from the underlying json schema describing the object to determine which collection to place the object.

@@ -137,6 +137,7 @@ class UnisCollection(object):
     def load(self):
         """
         :return: List of :class:`UnisObjects <unis.models.models.UnisObject>`.
+        
         Force the collection to pull and cache all remote resources matching the collection.
         """
         self._complete_cache()
@@ -235,6 +236,7 @@ class UnisCollection(object):
         value to compare or another dictionary.  The inner dictionary may have keys in 
         "gt", "ge", "lt", "le", or "eq".  The value is then compared using the corresponding 
         comparitor.::
+        
             pred = {"value": {"gt": 500}, "type": "test_nodes"}
             valid_nodes = nodes.where(pred)
         """

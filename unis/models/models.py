@@ -83,8 +83,7 @@ class Context(object):
     
     def getRuntime(self):
         """
-        :return: :class:`Runtime <unis.runtime.runtime.Runtime>` associated with the 
-        :class:`Context <unis.models.models.Context>`.
+        :return: :class:`Runtime <unis.runtime.runtime.Runtime>` associated with the :class:`Context <unis.models.models.Context>`.
         
         Get the :class:`Runtime <unis.runtime.runtime.Runtime>` associated with the 
         :class:`Context <unis.models.models.Context>`.
@@ -92,8 +91,7 @@ class Context(object):
         return self._rt
     def setRuntime(self, runtime):
         """
-        :param runtime: Instance associated with the 
-        :class:`Context <unis.models.models.Context>`.
+        :param runtime: Instance associated with the :class:`Context <unis.models.models.Context>`.
         :type runtime: :class:`Runtime <unis.runtime.runtime.Runtime>`
         
         Set the :class:`Runtime <unis.runtime.runtime.Runtime>` associated with the 
@@ -102,8 +100,7 @@ class Context(object):
         self._rt = runtime
     def getObject(self):
         """
-        :return: :class:`UnisObject <unis.models.models.UnisObject>` associated with the 
-        :class:`Context <unis.models.models.Context>`.
+        :return: :class:`UnisObject <unis.models.models.UnisObject>` associated with the :class:`Context <unis.models.models.Context>`.
         
         Get the raw :class:`UnisObject <unis.models.models.UnisObject>` associated with the 
         :class:`Context <unis.models.models.Context>`.
