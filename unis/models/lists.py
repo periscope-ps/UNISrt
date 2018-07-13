@@ -228,7 +228,7 @@ class UnisCollection(object):
         :param pred: Predicate used to filter resources.
         :param ctx: This parameter must be left empty when called by external sources.
         :type pred: callable or dictionary
-        :return: list of :class:`UnisObject <unis.models.models.UnisObject>`
+        :return: Generator of :class:`UnisObject <unis.models.models.UnisObject>`
         
         ``where`` filters members of the collection by a provided predicate.  The predicate
         can take one of two forms.  If the predicate is a dictionary, each key corresponds with

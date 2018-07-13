@@ -6,33 +6,90 @@ from lace.logging import trace
 from urllib.parse import urlparse
 
 class Function(object):
-    def __init__(self, fn=None, prior=0, name=None):
+    """
+    :param callable fn: (optional) callback to use in place of apply.
+    :param number initial: (optional) The initial value of the streaming result.
+    :param str name: (optional) The name of the function.
+    
+    Create a :class:`Function <unis.measurements.data.Function>`.  :class:`Functions <unis.measurements.data.Function>`
+    convert standard callback style functions into streaming functions.  ``fn`` must expose the following 
+    interface:
+    
+        **parameters:** 
+    
+        * **value:** The new reading from the measurement.
+        * **prior:** The most recent previous result (starts with ``initial``).
+    
+        **returns:** Number value result of the computation.
+    """
+    def __init__(self, fn=None, initial=0, name=None):
         self.name = name or type(self).__name__.lower()
         self._fn = fn
-        self._prior = prior
+        self._prior = initial
     @property
     def prior(self):
+        """
+        :returns: Integer value of the previous result.
+        
+        Getter for the previous computation result.
+        """
         return self._prior
     @prior.setter
     def prior(self, x):
+        """
+        :param number x: Value from the previous computation
+        
+        Setter for the previous computation result.
+        """
         self._prior = x
     def apply(self, x, ts):
+        """
+        :param number x: The new reading from the measurement.
+        :param int ts: The timestamp of the new reading.
+        :returns: Number value of the streaming computation.
+        
+        Apply the computation to the value recieved from the stream.
+        """
         return self._fn(x, self._prior)
     def postprocess(self, x):
+        """
+        :param number x: The most recently computed result.
+        :returns: A non-streaming result for a compution.
+        
+        Some streaming computations require a final analysis to be done
+        on the value when returning a result which does not change the
+        actual value of the streaming result.
+        
+        Overriding :meth:`Function.postprocess <unis.measurements.data.Function.postprocess>`
+        allows for this type of stream postprocessing.
+        """
         return x
 
 class Last(Function):
+    """
+    Return the last measurement as is, discard previous measurement when
+    a new one is recieved.
+    """
     def apply(self, x, ts):
         return x
 class Min(Function):
+    """
+    Return the minimum value seen so far from the stream.
+    """
     def __init__(self):
         super(Min, self).__init__(None, math.inf)
     def apply(self, x, ts):
         return min(self.prior, x)
 class Max(Function):
+    """
+    Return the maximum value seen so far from the stream.
+    """
     def apply(self, x, ts):
         return max(self.prior, x)
 class Mean(Function):
+    """
+    Return the streaming mean value of the data.
+    """
     def __init__(self):
         super(Mean, self).__init__()
         self.count, self.total = 0, 0
@@ -40,6 +97,9 @@ class Mean(Function):
         self.count, self.total = self.count+1, self.total+1
         return self.total / self.count
 class Jitter(Function):
+    """
+    Returns the jitter of the stream.
+    """
     def __init__(self):
         super(Jitter, self).__init__()
         self.count, self.mean = 0, 0
@@ -52,6 +112,15 @@ class Jitter(Function):
         return x / max(self.count - 1, 1)
 
 class DataCollection(object):
+    """ 
+    :param str source: href pointing to the data source to analyze.
+    :param rt: Instance owning this measurement.
+    :param fns: List of initial functions.
+    :type rt: :class:`Runtime <unis.runtime.runtime.Runtime>`
+    :type fns: list[callable or :class:`Function <unis.measurements.data.Function>`]
+    
+    Collection of measurement values from a specific remote data source.
+    """
     @trace.debug("DataCollection")
     def __init__(self, source, rt, fns=None):
         source = urlparse(source)
@@ -64,6 +133,13 @@ class DataCollection(object):
         list(map(lambda f: self.attachFunction(f[0], f[1]), (fns or {}).items()))
     @trace.info("DataCollection")
     def attachFunction(self, fn, name="", doc=""):
+        """
+        :param fn: Function to attach to the data stream.
+        :param str name: (optional) New attribute name to associate with the function.
+        :param str doc: (optional) Document string for the attribute.
+        
+        Attach a function to the data stream.
+        """
         def _get(self):
             self.load()
             return fn.postprocess(fn.prior)
