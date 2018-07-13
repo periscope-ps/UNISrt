@@ -109,10 +109,11 @@ class ObjectLayer(object):
         request = {}
         for (cid, collection), reslist in pending.items():
             self._cache(collection).locked = True
-            items = []
-            for item in reslist:
-                item.validate()
-                items.append(item.to_JSON())
+            valid = all([i.validate for i in reslist])
+            items = [i.to_JSON() for i in reslist]
+            for item in items:
+                if 'ts' in item:
+                    del item['ts']
             request[(cid, collection)] = items
         
         response = []

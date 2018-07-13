@@ -404,13 +404,10 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
     
     @trace.debug("UnisObject")
     def _setattr(self, n, v, ctx):
-        if n in self.__dict__:
-            self.__dict__['ts'] = int(time.time() * 1000000)
         super(UnisObject, self)._setattr(n, v, ctx)
     @trace.debug("UnisObject")
     def _update(self, ref, ctx):
         if ref in self._rt_remote and ctx and self._rt_live:
-            self.__dict__['ts'] = int(time.time() * 1000000)
             self._rt_collection.update(self)
             ctx._update(Context(self, ctx))
     @trace.debug("UnisObject")
@@ -425,9 +422,8 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
         This affects a "keep alive" signal to the data store.
         """
         if self._getattribute('selfRef', ctx):
-            self.__dict__['ts'] = int(time.time() * 1000000)
             cid, rid = self.getSource(), self._getattribute('id', ctx)
-            async.make_async(self._rt_collection._unis.put, cid, rid, {'ts': self.ts, 'id': rid})
+            async.make_async(self._rt_collection._unis.put, cid, rid, {'id': rid})
     @trace.info("UnisObject")
     def getSource(self, ctx=None):
         """
@@ -484,7 +480,6 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
             except UnisReferenceError:
                 ctx.addSources([{'url': url, 'default': False, 'enabled': True}])
                 self._rt_source = UnisClient.resolve(url)
-            self.__dict__['ts'] = int(time.time() * 1000000)
             self.__dict__['selfRef'] = "{}/{}/{}".format(url, self._rt_collection.name, self._getattribute('id', ctx))
             self._update('id', ctx)
     @trace.info("UnisObject")
