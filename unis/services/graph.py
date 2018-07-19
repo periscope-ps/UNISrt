@@ -11,9 +11,12 @@ class UnisGrapher(RuntimeService):
     Builds and maintains a networkx style graph representation of the runtime's topology.
     """
     targets = [ Node, Link ]
+
+    def attach(self, runtime):
+        super().attach(runtime)
+        self.runtime.graph = Graph(db=self.runtime)
+    
     def update(self, resource):
-        if not hasattr(self.runtime, "graph"):
-            self.runtime.graph = Graph(db=self.runtime)
         if isinstance(resource, Node):
             if not hasattr(resource, "svg"):
                 resource.svg = { "x": 0, "y": 0, "active": False }
