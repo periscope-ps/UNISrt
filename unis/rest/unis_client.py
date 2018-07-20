@@ -219,14 +219,16 @@ class UnisProxy(object):
 class _SingletonOnUID(type):
     fqdns, instances, virtuals = ReferenceDict(), {}, {}
     def __call__(cls, url, *args, **kwargs):
-        url = urlparse(url)
-        authority = "{}://{}".format(url.scheme, url.netloc)
+        ref = urlparse(url)
+        authority = "{}://{}".format(ref.scheme, ref.netloc)
+        if not ref.netloc:
+            raise ValueError("invalid url - {}".format(url))
         try:
-            uuid = cls.fqdns[url.netloc] = CID(cls.fqdns.get(url.netloc) or cls.get_uuid(authority))
+            uuid = cls.fqdns[ref.netloc] = CID(cls.fqdns.get(ref.netloc) or cls.get_uuid(authority))
         except RequestsConnectionError:
             kwargs['virtual'] = True
             kwargs['url'] = authority
-            cls.virtuals[authority] = cls.virtuals.get(url) or super().__call__(*args, **kwargs)
+            cls.virtuals[authority] = cls.virtuals.get(authority) or super().__call__(*args, **kwargs)
             return cls.virtuals[authority]
         
         if uuid not in cls.instances:

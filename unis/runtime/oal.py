@@ -75,13 +75,13 @@ class ObjectLayer(object):
         The resource will be resolved whether it is located in the local :class:`UnisCollection <unis.models.lists.UnisCollection>`
         or in a remote data store.
         """
+        col = urlparse(href).path.split('/')[1]
         try:
-            res = self._cache(urlparse(href).path.split('/')[1]).get([href])
-            return res
+            return self._cache(col).get([href])
         except UnisReferenceError as e:
             new_sources = [{'url': r, 'default': False, 'enabled': True} for r in e.hrefs]
             self.addSources(new_sources)
-            return self._cache(urlparse(href).path.split('/')[1]).get([href])
+            return self._cache(col).get([href])
     
     @trace.info("OAL")
     def flush(self):
