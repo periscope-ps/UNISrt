@@ -18,33 +18,32 @@ import os
 import sys
 import unittest
 
-RUN_UNIT_TESTING = True
-RUN_INTEGRATION_TESTING = False
-
 UNIT_TEST_MODULES = [
-    'unis.test.rest.ProxyTest',
-    'unis.test.rest.ClientTest',
-    'unis.test.models.UnisObjectTest',
-    'unis.test.models.ContextTest',
-    'unis.test.models.CollectionTest',
-    'unis.test.runtime.UnisServiceTest',
-    'unis.test.runtime.OALTest',
-    'unis.test.runtime.RuntimeTest'
+    #'unis.test.rest.ProxyTest',
+    #'unis.test.rest.ClientTest',
+    #'unis.test.models.UnisObjectTest',
+    #'unis.test.models.ContextTest',
+    #'unis.test.models.CollectionTest',
+    #'unis.test.runtime.UnisServiceTest',
+    #'unis.test.runtime.OALTest',
+    #'unis.test.runtime.RuntimeTest',
+    'unis.test.utils.IndexTest',
+    'unis.test.utils.UniqueIndexTest'
 ]
 
 INTEGRATION_TEST_MODULES = []
 
-def main():
+def main(integration=False, unit=False):
     #Setting up path names
-    UNIS_ROOT = os.path.dirname(os.path.abspath(__file__)) + os.sep
-    sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(UNIS_ROOT))))
+    PERISCOPE_ROOT = os.path.dirname(os.path.abspath(__file__)) + os.sep
+    sys.path.append(PERISCOPE_ROOT)
     test_modules = []
     
-    if RUN_UNIT_TESTING:
+    if unit:
         test_modules.extend(UNIT_TEST_MODULES)
-    if RUN_INTEGRATION_TESTING:
+    if integration:
         test_modules.extend(INTEGRATION_TEST_MODULES)
-    
+
     tsuite = unittest.defaultTestLoader.loadTestsFromNames(test_modules)
     runner = unittest.TextTestRunner()
     ret = not runner.run(tsuite).wasSuccessful()
@@ -56,10 +55,6 @@ if __name__ == '__main__':
                         choices=["all", "unit", "integration"], default="unit")
     args = parser.parse_args()
 
-    if args.test == "all":
-        RUN_INTEGRATION_TESTING = True
-    elif args.test == "integration":
-        RUN_INTEGRATION_TESTING = True
-        RUN_UNIT_TESTING = False
-
-    main()
+    integration = args.test in ['all', 'integration']
+    unit = args.test in ['all', 'unit']
+    main(integration, unit)

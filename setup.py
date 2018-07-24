@@ -40,7 +40,7 @@ class tester(Command):
 
     def run(self):
         import unis.test.runtests as tests
-        return tests.main()
+        return tests.main(True, True)
 
 setup(
     name = "unisrt",

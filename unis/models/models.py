@@ -106,6 +106,14 @@ class Context(object):
         :class:`Context <unis.models.models.Context>`.
         """
         return self._obj
+    def setObject(self, res):
+        """
+        :param res: Resource instance maintained by the :class:`Context <unis.models.models.Context>`.
+        :type res: :class:`UnisObject <unis.models.models.UnisObject>`
+    
+        set the resource associated with the :class:`Context <unis.models.models.Context>`.
+        """
+        self._obj = res
 
 class _nodefault(object): pass
 class _unistype(object):
@@ -187,6 +195,9 @@ class _unistype(object):
     @trace.info("unistype")
     def to_JSON(self, ctx, top):
         raise NotImplemented()
+    @trace.info("unistype")
+    def merge(self, other, ctx):
+        raise NotImplemented()
     @trace.none
     def __repr__(self):
         return super().__repr__()
@@ -216,6 +227,15 @@ class Primitive(_unistype):
         Returns the raw value stored in the object.
         """
         return self._rt_raw
+    def merge(self, other, ctx):
+        """
+        :param other: Instance to merge with the :class:`Primitive <unis.models.models.Primitive>`.
+        :type other: :class:`Primitive <unis.models.models.Primitive>`
+        
+        Merges two :class:`Primitives <unis.models.models.Primitive>`, the passed in instance overwrites
+        the calling instance where conflicts occur.
+        """
+        self._rt_raw = other.rt_raw
     @trace.none
     def __repr__(self):
         return "<unis.Primitive>"#.format(self._rt_raw)
@@ -320,6 +340,18 @@ class List(_unistype):
             except SkipResource:
                 pass
         return res
+    @trace.info("List")
+    def merge(self, other, ctx):
+        """
+        :param other: Instance to merge with the :class:`List <unis.models.models.List>`.
+        :type other: :class:`List <unis.models.models.List>`
+        
+        Merges two :class:`Lists <unis.models.models.List>`, the passed in instance overwrites
+        the calling instance where conflicts occur.
+        """
+        for v in other:
+            self.append(v)
+    
     @trace.debug("List")
     def _iter(self, ctx):
         self._rt_ls = [self._lift(x, self._rt_reference, ctx) for x in self._rt_ls]
@@ -370,6 +402,17 @@ class Local(_unistype):
             except SkipResource:
                 pass
         return res
+    @trace.info("Local")
+    def merge(self, other, ctx):
+        """
+        :param other: Instance to merge with the :class:`Local <unis.models.models.Local>`.
+        :type other: :class:`Local <unis.models.models.Local>`
+        
+        Merges two :class:`Locals <unis.models.models.Local>`, the passed in instance overwrites
+        the calling instance where conflicts occur.
+        """
+        for k,v in other.__dict__.items():
+            self.__dict__[k] = v
     @trace.none
     def __repr__(self):
         return "<unis.Local {}>".format(self.__dict__.__repr__())
@@ -413,6 +456,11 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
     @trace.debug("UnisObject")
     def _get_reference(self, n):
         return n
+
+    @trace.info("UnisObject")
+    def _delete(self, ctx):
+        self.__dict__['selfRef'] = ''
+        self._rt_source = None
     @trace.info("UnisObject")
     def touch(self, ctx):
         """
@@ -552,6 +600,29 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
                 raise SkipResource()
         return result
 
+    @trace.info("UnisObject")
+    def merge(self, other, ctx):
+        """
+        :param other: Instance to merge with the :class:`UnisObject <unis.models.models.UnisObject>`.
+        :type other: :class:`UnisObject <unis.models.models.UnisObject>`
+        
+        Merges two :class:`UnisObject <unis.models.models.UnisObject>`, the instance with the highest
+        timestamp takes priority.
+        """
+        a, b = self, other if self.ts < other.ts else other, self
+        for k,v in b.__dict__.items():
+            if k in a.__dict__:
+                if isinstance(b.__dict__[k], (list, dict)):
+                    a.__dict__[k] = a._lift(v, a._get_reference(k), ctx, False)
+                if isinstance(a.__dict__[k], _unistype):
+                    a.__dict__[k].merge(v, ctx)
+                else:
+                    a.__dict__[k] = v
+            else:
+                a.__dict__[k] = v
+        for n in b._rt_remote:
+            a._rt_remote.add(n)
+    
     @trace.info("UnisObject")
     def clone(self, ctx):
         """

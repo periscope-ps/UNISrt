@@ -23,9 +23,9 @@ import unittest
 import unittest.mock as mock
 from unittest.mock import MagicMock, Mock
 
-from unis.models.settings import SCHEMAS
+from unis.settings import SCHEMAS
 from unis.models import Node, Exnode, Extent
-from unis.models.models import CACHE, UnisObject, UnisList, schemaLoader, LocalObject
+from unis.models.models import _CACHE, UnisObject, UnisList, schemaLoader, LocalObject
 from unis.models.lists import UnisCollection
 
 class UnisObjectTest(unittest.TestCase):
@@ -139,7 +139,7 @@ class NetworkResourceTest(unittest.TestCase):
         self.assertIsInstance(node2, Node)
         self.assertEqual(getattr(node1, '$schema'), SCHEMAS['Node'])
         self.assertEqual(getattr(node2, '$schema'), SCHEMAS['Node'])
-        self.assertEqual(node1._schema, CACHE[SCHEMAS['Node']])
+        self.assertEqual(node1._schema, _CACHE[SCHEMAS['Node']])
         
     def test_validate(self):
         from jsonschema.exceptions import ValidationError

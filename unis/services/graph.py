@@ -15,7 +15,7 @@ class UnisGrapher(RuntimeService):
     def attach(self, runtime):
         super().attach(runtime)
         self.runtime.graph = Graph(db=self.runtime)
-    
+
     def update(self, resource):
         if isinstance(resource, Node):
             if not hasattr(resource, "svg"):
@@ -46,15 +46,13 @@ class UnisGrapher(RuntimeService):
                 if isinstance(resource.endpoints[1], Port):
                     resource.endpoints[1].link = resource
                 if len(resource.endpoints) == 2 and all(map(lambda x: hasattr(x, "node"), resource.endpoints)):
-                    if not self.runtime.graph.hasEdge(resource.endpoints[0].node, resource.endpoints[1]):
+                    if not self.runtime.graph.hasEdge(resource.endpoints[0].node, resource.endpoints[1].node):
                         self.runtime.graph.edges.append((resource.endpoints[0].node, resource.endpoints[1].node))
-                    if not self.runtime.graph.hasEdge(resource.endpoints[1].node, resource.endpoints[0]):
+                    if not self.runtime.graph.hasEdge(resource.endpoints[1].node, resource.endpoints[0].node):
                         self.runtime.graph.edges.append((resource.endpoints[1].node, resource.endpoints[0].node))
         
     
     def new(self, resource):
-        if not hasattr(self.runtime, "graph"):
-            self.runtime.graph = Graph(db=self.runtime)
         if isinstance(resource, Node):
             if not hasattr(resource, "svg"):
                 resource.svg = { "x": 0, "y": 0, "active": False }

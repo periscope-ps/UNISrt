@@ -166,7 +166,7 @@ class ObjectLayer(object):
             
         res.id = res.id or str(uuid.uuid4())
         res.setRuntime(self)
-        self._cache(self.getModel(res.names)).append(res.getObject())
+        res.setObject(self._cache(self.getModel(res.names)).append(res.getObject()))
         return res
         
     @trace.info("OAL")

@@ -27,7 +27,7 @@ import unis.runtime
 import unis.runtime.oal
 
 from unis.models import Node
-from unis.models.settings import SCHEMAS
+from unis.settings import SCHEMAS
 from unis.services import RuntimeService
 from unis.runtime.oal import ObjectLayer
 from unis.runtime import Runtime
@@ -43,9 +43,9 @@ class _TestService(RuntimeService):
 
 class UnisServiceTest(unittest.TestCase):
     @patch.object(unis.runtime.oal.UnisProxy, 'getResources', return_value = [{ "href": "#/nodes", "targetschema": { "items": { "href": SCHEMAS["Node"] } } },
-                                                                               { "href": "#/links", "targetschema": { "items": { "href": SCHEMAS["Link"] } } }]) 
+                                                                               { "href": "#/links", "targetschema": { "items": { "href": SCHEMAS["Link"] } } }])
     @patch.object(unis.runtime.oal.UnisProxy, 'post', return_value = {"selfRef": "http://localhost:8888/nodes/test", "id": "1", "v": 1})
-    @patch.object(unis.runtime.oal.UnisCollection, 'updateIndex')    
+    @patch.object(unis.runtime.oal.UnisCollection, 'updateIndex')
     def test_attach_service(self, ui_mock, p_mock, gr_mock):
         rt = Runtime()
         service = _TestService([Node])

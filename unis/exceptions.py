@@ -21,3 +21,10 @@ class ConnectionError(UnisError):
         super(ConnectionError, self).__init__(msg)
         self.status = code
 
+
+class CollectionIndexError(UnisError):
+    """
+    Exception thrown when an index attempts to access a resource
+    not currently in the Index.
+    """
+    pass

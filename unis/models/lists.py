@@ -7,11 +7,11 @@ from collections import defaultdict, namedtuple
 from lace.logging import trace
 from urllib.parse import urlparse
 
-from unis.exceptions import UnisReferenceError
+from unis.exceptions import UnisReferenceError, CollectionIndexError
 from unis.models import schemaLoader
 from unis.models.models import Context as oContext
 from unis.rest import UnisProxy, UnisClient
-from unis.utils import Events, Index, async
+from unis.utils import Events, Index, UniqueIndex, async
 
 class _sparselist(list):
     def __len__(self):
@@ -95,8 +95,8 @@ class UnisCollection(object):
         self._block_size = 10
         self._growth, self._subscribe = 0, False
         self._stubs, self._cache = {}, _sparselist()
-        self.createIndex("id")
-        self.createIndex("selfRef")
+        self.createIndex("id", unique=True)
+        self.createIndex("selfRef", unique=True)
         self._loop = asyncio.get_event_loop()
         self._callbacks = []
         
@@ -109,17 +109,10 @@ class UnisCollection(object):
     @trace.debug("UnisCollection")
     def __setitem__(self, i, item):
         self._check_record(item)
-        old_id = self._cache[i]._getattribute('id', None)
-        new_id = item._getattribute('id', None)
-        if old_id != new_id:
-            raise AttributeError("Resource ids {} and {} do not match".format(new_id, old_id))
-        
-        if getattr(self._cache[i], "ts", 0) < item.ts:
-            for k,v in item.__dict__.items():
-                self._cache[i].__dict__[k] = v
-            for _,index in self._indices.items():
-                index.update(i, oContext(self._cache[i], None))
-            self._stubs[item._getattribute('id', None)] = self._cache[i]
+        self._cache[i].merge(item)
+        for k, index in self._indices.items():
+            if self._cache[i]._getattribute(k, None, None) is not None:
+                index.update(i, self._cache[i]._getattribute(k, None))
     
     @trace.info("UnisCollection")
     def update(self, item):
@@ -175,23 +168,25 @@ class UnisCollection(object):
         .. note:: This function is called automatically by :meth:`ObjectLayer.insert <unis.runtime.oal.ObjectLayer.insert>`
         """
         self._check_record(item)
-        i = self.index(item)
-        if i is not None:
-            uid = item._getattribute('id', None)
-            self.__setitem__(i, item)
-            if uid not in self._stubs or isinstance(self._stubs[uid], str):
-                self._stubs[uid] = self._cache[i]
-            return self._cache[i]
-        else:
+        try:
+            i = self.index(item)
+        except CollectionIndexError:
             item.setCollection(self)
             self._stubs[item._getattribute('id', None)] = item
             i = len(self._cache)
             self._cache.append(item)
-            for _,index in self._indices.items():
-                index.update(i, oContext(item, None))
+            for k, index in self._indices.items():
+                if item._getattribute(k, None, None) is not None:
+                    index.update(i, item._getattribute(k, None))
             self._serve(Events.new, item)
             return item
-    
+            
+        uid = item._getattribute('id', None)
+        self.__setitem__(i, item)
+        if uid not in self._stubs or isinstance(self._stubs[uid], str):
+            self._stubs[uid] = self._cache[i]
+        return self._cache[i]
+        
     @trace.info("UnisCollection")
     def remove(self, item):
         """
@@ -217,10 +212,7 @@ class UnisCollection(object):
         Gets the index of the object within the collection.
         """
         item = item if isinstance(item, oContext) else oContext(item, None)
-        if item.id:
-            return self._indices['id'].index(item)
-        else:
-            return None
+        return self._indices['id'].index(item.id)
     
     @trace.info("UnisCollection")
     def where(self, pred, ctx=None):
@@ -256,7 +248,7 @@ class UnisCollection(object):
             subset = set(range(len(self._cache)))
             for k,v in pred.items():
                 v = v if isinstance(v, dict) else { "eq": v }
-                if k in self._indices:
+                if k in self._indices.keys():
                     for f,v in v.items():
                         subset &= self._indices[k].subset(f, v)
                 else:
@@ -266,36 +258,39 @@ class UnisCollection(object):
             for i in subset:
                 record = self._cache[i]
                 try:
-                    if all([v(record._getattribute(k, ctx, None)) for k,v in non_index.items()]):
+                    if all([f(record._getattribute(k, ctx, None)) for k,f in non_index.items()]):
                         yield record
                 except TypeError:
                     pass
     
     @trace.info("UnisCollection")
-    def createIndex(self, k):
+    def createIndex(self, k, unique=False):
         """
         :param str k: Key for the new index
         
         Generate an index for faster querying over a specified field.
         """
         if k not in self._indices:
-            index = Index(k)
-            self._indices[k] = index
+            self._indices[k] = UniqueIndex(k) if unique else Index(k)
             for i, v in enumerate(self._cache):
-                index.update(i, oContext(v, None))
-    
+                if v._getattribute(k, None, None) is not None:
+                    self._indices[k].update(i, v._getattribute(k, None))
+                    
     @trace.info("UnisCollection")
-    def updateIndex(self, v):
+    def updateIndex(self, res):
         """
-        :param v: Resource to update index values.
-        :type v: :class:`UnisObject <unis.models.models.UnisObject>`
+        :param res: Resource to update index values.
+        :type res: :class:`UnisObject <unis.models.models.UnisObject>`
         
         Update the index values for a modified or new resource.
         """
-        i = self.index(v)
-        for key, index in self._indices.items():
+        i = self.index(res)
+        for k, index in self._indices.items():
+            v = getattr(res, k, None)
+            if v is None:
+                index.remove(i)
             index.update(i, v)
-    
+            
     @trace.info("UnisCollection")
     async def addSources(self, cids):
         """
@@ -417,11 +412,13 @@ class UnisCollection(object):
             elif action == 'DELETE':
                 try:
                     i = self._indices['id'].index(v['id'])
-                    v = self._cache[i]
-                    v.delete()
+                    res = self._cache[i]
+                    res._delete(None)
+                    for index in self._indices.values():
+                        index.remove(i)
                     self._cache[i] = None
-                    del self._stubs[v._getattribute('id', None)]
-                    self._serve(Events.delete, v)
+                    del self._stubs[res._getattribute('id', None)]
+                    self._serve(Events.delete, res)
                     
                 except IndexError:
                     raise ValueError("No such element in UNIS to delete")
