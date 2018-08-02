@@ -63,7 +63,7 @@ class UnisGrapher(RuntimeService):
                 if hasattr(port, "address") and getattr(port.address, "type", None) == "ipv4":
                     l4_addr.append(port.address.address)
                 if hasattr(port, "node") and port.node != resource:
-                    raise AttributeError("Port object referenced by two or more Nodes")
+                    raise AttributeError("Port object referenced by two or more Nodes {} and {}".format(port.node.id, resource.id))
                 port.node = resource
             resource.l4_addr = l4_addr
         elif isinstance(resource, Link):

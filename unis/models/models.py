@@ -235,7 +235,7 @@ class Primitive(_unistype):
         Merges two :class:`Primitives <unis.models.models.Primitive>`, the passed in instance overwrites
         the calling instance where conflicts occur.
         """
-        self._rt_raw = other.rt_raw
+        self._rt_raw = other._rt_raw
     @trace.none
     def __repr__(self):
         return "<unis.Primitive>"#.format(self._rt_raw)
@@ -349,8 +349,8 @@ class List(_unistype):
         Merges two :class:`Lists <unis.models.models.List>`, the passed in instance overwrites
         the calling instance where conflicts occur.
         """
-        for v in other:
-            self.append(v)
+        for v in other._rt_ls:
+            self._rt_ls.append(v, ctx)
     
     @trace.debug("List")
     def _iter(self, ctx):
@@ -609,11 +609,11 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
         Merges two :class:`UnisObject <unis.models.models.UnisObject>`, the instance with the highest
         timestamp takes priority.
         """
-        a, b = self, other if self.ts < other.ts else other, self
+        a, b = (self, other) if self.ts < other.ts else (other, self)
         for k,v in b.__dict__.items():
             if k in a.__dict__:
-                if isinstance(b.__dict__[k], (list, dict)):
-                    a.__dict__[k] = a._lift(v, a._get_reference(k), ctx, False)
+                if isinstance(v, (list, dict)):
+                    v = a._lift(v, a._get_reference(k), ctx, False)
                 if isinstance(a.__dict__[k], _unistype):
                     a.__dict__[k].merge(v, ctx)
                 else:

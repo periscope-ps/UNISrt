@@ -109,7 +109,7 @@ class UnisCollection(object):
     @trace.debug("UnisCollection")
     def __setitem__(self, i, item):
         self._check_record(item)
-        self._cache[i].merge(item)
+        self._cache[i].merge(item, None)
         for k, index in self._indices.items():
             if self._cache[i]._getattribute(k, None, None) is not None:
                 index.update(i, self._cache[i]._getattribute(k, None))
