@@ -350,7 +350,7 @@ class List(_unistype):
         the calling instance where conflicts occur.
         """
         for v in other._rt_ls:
-            self._rt_ls.append(v, ctx)
+            self._rt_ls.append(v)
     
     @trace.debug("List")
     def _iter(self, ctx):
