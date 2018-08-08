@@ -24,7 +24,7 @@ UNIT_TEST_MODULES = [
     #'unis.test.models.UnisObjectTest',
     #'unis.test.models.ContextTest',
     #'unis.test.models.CollectionTest',
-    #'unis.test.runtime.UnisServiceTest',
+    'unis.test.services.RuntimeServiceTest',
     #'unis.test.runtime.OALTest',
     #'unis.test.runtime.RuntimeTest',
     'unis.test.utils.IndexTest',

@@ -1,12 +1,11 @@
+from collections import namedtuple, defaultdict
 
 class ServiceMetaclass(type):
     """
     The :class:`ServiceMetaclass <unis.services.abstract.ServiceMetaclass>` handles registration of
-    the overloaded :meth:`RuntimeService.new <unis.services.abstract.RuntimeService.new>`,
-    :meth:`RuntimeService.update <unis.service.abstract.RuntimeService.update>`, and 
-    :meth:`RuntimeService.delete <unis.service.abstract.RuntimeService.delete>` functions.
+    decorated functions for event driven access to runtime resources.
     
-    The decorators also ensure that the :class:`Context <unis.models.models.Context>` is properly
+    Decorators also ensure that the :class:`Context <unis.models.models.Context>` is properly
     configured and resources are set to not update from changes within the service; a precaution
     to prevent event cascades.
     """
@@ -16,60 +15,45 @@ class ServiceMetaclass(type):
                 tmpState = resource._rt_live
                 resource.setRuntime(self.runtime)
                 resource._rt_live = False
-                kwargs[fn](self, resource)
+                fn(self, resource)
                 resource._rt_live = tmpState
             return nf
-        
-        for op in ['new', 'update', 'delete']:
-            if op in kwargs:
-                setattr(cls, op, decoratorFactory(op))
+
+        cls.rt_listeners = defaultdict(lambda: defaultdict(list))
+        for n,op in kwargs.items():
+            if hasattr(op, 'rt_events'):
+                setattr(cls, n, decoratorFactory(op))
+                for event in op.rt_events:
+                    cls.rt_listeners[event.col][event.ty].append(op)
 
 class RuntimeService(metaclass=ServiceMetaclass):
-    """
-    :param list[str] targets: (optional) Set the collections to target for the service.
-
-    Base abstract class for defining new services in a runtime application.
-    """
-    
-    targets = []
-    """
-    ``targets`` is a list of strings containing collection names which should invoke the service.
-    """
-    
-    def __init__(self, targets=None):
-        if targets:
-            for target in targets:
-                self.targets.append(target)
-        super(RuntimeService, self).__init__()
-
-    def attach(self, runtime):
+    def setRuntime(self, runtime):
         """
         :param runtime: The owner of the service.
         :type runtime: :class:`Runtime <unis.runtime.runtime.Runtime>`
         
-        ``attach`` is called by the :class:`Runtime <unis.runtime.runtime.Runtime>` when a class or
-        instance is passed to :meth:`ObjectLayer.addService <unis.runtime.oal.ObjectLayer.addService>`
+        :meth:`RuntimeService.setRuntime <unis.services.RuntimeService.setRuntime>` is called by the 
+        :class:`Runtime <unis.runtime.runtime.Runtime>` when a class or instance is passed to 
+        :meth:`ObjectLayer.addService <unis.runtime.oal.ObjectLayer.addService>`
         to register to service with the runtime's constituent collections.
         """
         self.runtime = runtime
-        if self.targets:
-            for target in self.targets:
-                if target in self.runtime:
-                    collection = self.runtime.getModel(getattr(target, "names", []))
-                    getattr(self.runtime, collection).addService(self)
-        else:
-            for collection in self.runtime.collections:
-                collection.addService(self)
-    
-    def new(self, resource):
-        pass
-    
-    def update(self, resource):
-        pass
-    
-    def delete(self, resource):
+
+    def initialize(self):
         """
+        Can be overridden by inheriting classes to perform one time operations after service construction
+        is complete but before events are handled.
         """
+        pass
+    def attach(self, col):
+        """
+        :param col: The collection to attach this service to.
+        :type col: :class:`UnisCollection <unis.models.lists.UnisCollection>`
         
-        pass
+        Attaches the :class:`RuntimeService <unis.services.abstract.RuntimeService>` to a 
+        :class:`UnisCollection <unis.models.lists.UnisCollection>`.  ``attach`` is called by the
+        runtime when a new collection is generated.
+        """
+        if col.name in self.rt_listeners:
+            col.addCallback(lambda res, ty: [op(res) for op in self.rt_listeners[col.name][ty]])
     

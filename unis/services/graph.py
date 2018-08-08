@@ -1,84 +1,52 @@
-
 from unis.services.abstract import RuntimeService
+from unis.services.event import new_event, update_event
 from unis.services.graphbuilder import Graph
-from unis.models import Node, Link, Port
 
-
-# UnisGrapher is a service that connects newly discovered nodes, ports, and links
-# as they are discovered
 class UnisGrapher(RuntimeService):
-    """
-    Builds and maintains a networkx style graph representation of the runtime's topology.
-    """
-    targets = [ Node, Link ]
-
-    def attach(self, runtime):
-        super().attach(runtime)
+    def initialize(self):
         self.runtime.graph = Graph(db=self.runtime)
 
-    def update(self, resource):
-        if isinstance(resource, Node):
-            if not hasattr(resource, "svg"):
-                resource.svg = { "x": 0, "y": 0, "active": False }
-            if resource not in self.runtime.graph.vertices:
-                self.runtime.graph.vertices.append(resource)
-            l4_addr = []
-            for port in resource.ports:
-                if hasattr(port, "address") and getattr(port.address, "type", None) == "ipv4":
-                    l4_addr.append(port.address.address)
-                if hasattr(port, "node") and port.node != resource:
-                    raise AttributeError("Port object referenced by two or more Nodes {} and {}".format(port.node.id, resource.id))
-                port.node = resource
-            resource.l4_addr = l4_addr
-        elif isinstance(resource, Link):
-            if resource.directed:
-                if isinstance(resource.endpoints.source, Port):
-                    resource.endpoints.source.link = resource
-                if isinstance(resource.endpoints.sink, Port):
-                    resource.endpoints.sink.link = resource
-                    if resource.endpoints.source and resource.endpoints.sink:
-                        edge = (resource.endpoints.source.node, resource.endpoints.sink.node)
-                        if not self.runtime.graph.hasEdge(*edge):
-                            self.runtime.graph.edges.append(edge)
-            else:
-                if isinstance(resource.endpoints[0], Port):
-                    resource.endpoints[0].link = resource
-                if isinstance(resource.endpoints[1], Port):
-                    resource.endpoints[1].link = resource
-                if len(resource.endpoints) == 2 and all(map(lambda x: hasattr(x, "node"), resource.endpoints)):
-                    if not self.runtime.graph.hasEdge(resource.endpoints[0].node, resource.endpoints[1].node):
-                        self.runtime.graph.edges.append((resource.endpoints[0].node, resource.endpoints[1].node))
-                    if not self.runtime.graph.hasEdge(resource.endpoints[1].node, resource.endpoints[0].node):
-                        self.runtime.graph.edges.append((resource.endpoints[1].node, resource.endpoints[0].node))
+    def _get_full_edge(self, start):
+        if hasattr(start, '_graph_tag') or not (hasattr(start, 'link') and hasattr(start, 'node')):
+            raise ValueError("Incomplete start port")
+
+        link, eps = port.link, port.link.endpoints
+        end = eps.sink if link.directed else eps[0] if eps[1] == start else [1]
         
+        if (link.directed and eps.sink == start) or \
+           (not (hasattr(end, 'link') and hasattr(end, 'node'))):
+            raise ValueError("Incomplete end port")
+        return (start.node, end.port)
+
+    def _try_add_edge(self, port):
+        try:
+            edge = self._get_full_edge(port)
+        except ValueError:
+            return False
+        if not self.runtime.graph.hasEdge(*edge):
+            self.runtime.graph.edges.append(edge)
+        return True
     
-    def new(self, resource):
-        if isinstance(resource, Node):
-            if not hasattr(resource, "svg"):
-                resource.svg = { "x": 0, "y": 0, "active": False }
-            if resource not in self.runtime.graph.vertices:
-                self.runtime.graph.vertices.append(resource)
-            l4_addr = []
-            for port in resource.ports:
-                if hasattr(port, "address") and getattr(port.address, "type", None) == "ipv4":
-                    l4_addr.append(port.address.address)
-                if hasattr(port, "node") and port.node != resource:
-                    raise AttributeError("Port object referenced by two or more Nodes {} and {}".format(port.node.id, resource.id))
-                port.node = resource
-            resource.l4_addr = l4_addr
-        elif isinstance(resource, Link):
-            if resource.directed:
-                if isinstance(resource.endpoints.source, Port):
-                    resource.endpoints.source.link = resource
-                if isinstance(resource.endpoints.sink, Port):
-                    resource.endpoints.sink.link = resource
-                    if resource.endpoints.source and resource.endpoints.sink:
-                        self.runtime.graph.edges.append((resource.endpoints.source.node, resource.endpoints.sink.node))
-            else:
-                if isinstance(resource.endpoints[0], Port):
-                    resource.endpoints[0].link = resource
-                if isinstance(resource.endpoints[1], Port):
-                    resource.endpoints[1].link = resource
-                if len(resource.endpoints) == 2 and all(map(lambda x: hasattr(x, "node"), resource.endpoints)):
-                    self.runtime.graph.edges.append((resource.endpoints[0].node, resource.endpoints[1].node))
-                    self.runtime.graph.edges.append((resource.endpoints[1].node, resource.endpoints[0].node))
+    @new_event('links')
+    @update_event('links')
+    def new_links(self, link):
+        ends = link.endpoints
+        a,b = ends.source, ends.sink if link.directed else ends[0], ends[1]
+        a.link = b.link = link
+
+        if self._try_add_edge(a):
+            a._graph_tag = True
+        if not link.directed:
+            if self._try_add_edge(b):
+                b._graph_tag = True
+    
+    @new_event('nodes')
+    @update_event('nodes')
+    def new_nodes(self, node):
+        if resource not in self.runtime.graph.vertices:
+            self.runtime.graph.vertices.append(resource)
+            
+        for p in node.ports:
+            p.node = node
+            if self._try_add_edge(p):
+                p._graph_tag = True

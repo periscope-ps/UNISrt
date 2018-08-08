@@ -1,7 +1,5 @@
 import unittest
 
-from unittest.mock import MagicMock, patch
-
 from unis.exceptions import CollectionIndexError
 from unis.utils import Index, UniqueIndex
 

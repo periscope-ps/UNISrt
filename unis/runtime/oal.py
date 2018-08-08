@@ -51,7 +51,7 @@ class ObjectLayer(object):
     """
     @trace.debug("OAL")
     def __init__(self, settings):
-        self.settings, self._pending = settings, set()
+        self.settings, self._pending, self._services = settings, set(), []
     
     def __getattr__(self, n):
         try:
@@ -149,7 +149,10 @@ class ObjectLayer(object):
             ref = (urlparse(r['href']).path.split('/')[1], r['targetschema']['items']['href'])
             if ref[0] not in ['events', 'data']:
                 model = schemaLoader.get_class(ref[1], raw=True)
-                UnisCollection.get_collection(ref[0], model, self)
+                col = UnisCollection.get_collection(ref[0], model, self)
+                for service in self._services:
+                    service.attach(col)
+                    
         async.make_async(asyncio.gather, *[c.addSources(clients) for c in self._cache()])
     
     @trace.info("OAL")

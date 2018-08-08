@@ -100,8 +100,6 @@ class Runtime(object):
             asyncio.set_event_loop(asyncio.new_event_loop())
             
         self._build_settings()
-        self._services = []
-        
         if unis:
             unis = unis if isinstance(unis, list) else [unis]
             self.settings['unis'] = [_unis_config(u) for u in unis]
@@ -198,9 +196,10 @@ class Runtime(object):
             instance = service()
         if not isinstance(instance, RuntimeService):
             raise ValueError("Service object must be of type RuntimeService - {}".format(type(instance)))
-        if type(instance) not in self._services:
-            self._services.append(service)
-            instance.attach(self)
+        if type(instance) not in self._oal._services:
+            self._oal._services.append(service)
+            instance.setRuntime(self)
+            instance.initialize()
             
     def _sig_close(self, sig=None, frame=None):
         self.shutdown()
