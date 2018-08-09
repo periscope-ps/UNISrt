@@ -12,6 +12,24 @@ from unis.models import Node, Port, Link
 from pprint import pprint
 
 class Graph(object):
+    """
+    :param vertices: A list of :class:`Nodes <unis.models.models.UnisObject>` to add to the graph.
+    :param edges: A list of pairs of :class:`Nodes <unis.models.models.UnisObject>` representing adjacency.
+    :param db: The :class:`Runtime <unis.runtime.runtime.Runtime>` to associate with the graph.
+    :param str subnet: A subnet to assign to the nodes.
+    :param str prefix: A prefix to add to each vertex's name.
+    :type vertices: list[:class:`Node <unis.models.models.UnisObject>`]
+    :type edges: list[tuple(:class:`Node <unis.models.models.UnisObject>`, :class:`Node <unis.models.models.UnisObject>`)]
+    :type db: :class:`Runtime <unis.runtime.runtime.Runtime>`
+    
+    :class:`Graph <unis.services.graphbuilder.Graph>` serves as a catch-all graph
+    handling solution in the mode of networkx.  It interfaces directly with a 
+    ;class:`Runtime <unis.runtime.runtime.Runtime>` and provides more streamlined
+    tools for graph generation, display, and manipulation.
+
+    The `subnet` and `prefix` parameters are used for vertex generation, when new vertices are added,
+    they are given an interface layer 4 IP address and name if not present.
+    """
     def __init__(self, vertices=[], edges=[], db=None, subnet='10.0.0.0/8', prefix=''):
         address, mask = subnet.split("/")
         subnet_size = 4 - int(mask) // 8
@@ -45,6 +63,10 @@ class Graph(object):
         return result
     
     def createVertex(self):
+        """
+        Generate a :class:`Node <unis.models.models.UnisObject>` and add it as 
+        a graph vertex.
+        """
         n = Node({ "name": "{}{}".format(self.prefix, len(self.vertices)) })
         n.svg = {}
         self._rt.insert(n)
@@ -52,8 +74,25 @@ class Graph(object):
         return n
         
     def hasEdge(self, src, dst):
+        """
+        :param src: Vertex on the ingress side of the edge.
+        :param dst: Vertex on the egress side of the edge.
+        :type src: :class:`Node <unis.models.models.UnisObject>`
+        :type dst: :class:`Node <unis.models.models.UnisObject>`
+        :rtype: boolean
+        
+        Checks for the existance of an edge between two :class:`Nodes <unis.models.models.UnisObject>`.
+        """
         return set([str(hash(src)) + str(hash(dst))]) & self._edgeref
     def createEdge(self, src, dst):
+        """
+        :param src: Vertex on the ingress side of the edge.
+        :param dst: Vertex on the egress side of the edge.
+        :type src: :class:`Node <unis.models.models.UnisObject>`
+        :type dst: :class:`Node <unis.models.models.UnisObject>`
+        
+        Adds an edge between two :class:`Nodes <unis.models.models.UnisObject>`.
+        """
         p_src = Port({"index": str(len(src.ports)) })
         p_dst = Port({"index": str(len(dst.ports)) })
         p_src.address.address = self.subnet.format(*self._nextaddr())
@@ -72,6 +111,12 @@ class Graph(object):
         self._rt.insert(l)
     
     def finalize(self, include_svg=False):
+        """
+        :param bool include_svg: Push visual metadata to the data store.
+        
+        Inserts the current graph into a backend store.  This should be used
+        for inter-session reuse of the same graph.
+        """
         for n in self.vertices:
             if include_svg:
                 n.extendSchema('svg')
@@ -81,7 +126,14 @@ class Graph(object):
             n.commit()
         self._rt.flush()
     
-    def spring(self, unitsize, repeat=50):
+    def spring(self, unitsize=10, repeat=50):
+        """
+        :param int unitsize: Spring force factor (recommended between 5-20).
+        :param int repeat: Number of interations to run simulation.
+        
+        Runs a spring simulation over the graph and places planer 
+        positional metadata onto each vertex.
+        """
         # initialize
         for n in self.vertices:
             if self.processing_level == 0 or not hasattr(n, 'svg'):
@@ -144,6 +196,13 @@ class Graph(object):
         self.processing_level += repeat
     
     def dump(self, filename):
+        """
+        :param str filename: Location to save data.
+        
+        Writes positional information for the graph for future reuse.
+        
+        .. warn:: The graph **must** be the same graph to reuse positional metadata.
+        """
         result = { "nodes": {}, "_processing_level": self.processing_level }
         if self.processing_level:
             import json
@@ -153,6 +212,13 @@ class Graph(object):
                 f.write(json.dumps(result))
     
     def load(self, filename):
+        """
+        :param str filename: Filename for the layout.
+        
+        Reads positional information for the graph from a file.
+        
+        .. warn:: The graph **must** be the same graph to reuse positional metadata.
+        """
         import json
         with open(filename) as f:
             layout = json.load(f)
@@ -165,6 +231,13 @@ class Graph(object):
         return True
     
     def svg(self, rules=[], output=None):
+        """
+        :param list rules: List of annotations to add to the graph.
+        :param str output: Filename to save the result
+        :returns: String containing an `svg` visual representation of the graph.
+        
+        Generates a visual representation of the graph in `svg` format for web/visualization use.
+        """
         def _addcircle(a, complete, cls):
             circle = "  <circle id='node-{}' class='{}' data-rules='{}' transform='matrix(1 0 0 1 {} {})' r='{}' stroke='black' stroke-width='2'><title>{}</title></circle>"
             if a not in complete:
@@ -240,7 +313,16 @@ class Graph(object):
         return result
 
     @classmethod
-    def power_graph(cls, size, gamma, db=None, subnet='10.0.0.0/8'):
+    def power_graph(cls, size, gamma=2.5, db=None, subnet='10.0.0.0/8'):
+        """
+        :param int size: Number of vertices in the graph.
+        :param int gamma: Intensity of the connectivity of the graph.
+        :param db: :class:`Runtime <unis.runtime.runtime.Runtime>` to store the graph.
+        :param str subnet: IP range to use for the vertices.
+        
+        Generate a graph containing vertices and edges such that the number of egress edges follows
+        a power distribution over all vertices.  
+        """
         def get_degrees(d=None):
             while not d:
                 while not (d and all([sum(d[:k]) <= (k * (k - 1)) + sum(map(lambda x: min(k, x), d[k + 1:])) for k in range(1, size)]) and sum(d) >= 2*(size-1)):
@@ -276,6 +358,16 @@ class Graph(object):
             
     @classmethod
     def build_graph(cls, size, degree, db=None, subnet='10.0.0.0/8', prefix=''):
+        """
+        :param int size: Number of vertices in the graph.
+        :param int degree: Intensity of the connectivity of the graph. [0-1]
+        :param db: :class:`Runtime <unis.runtime.runtime.Runtime>` to store the graph.
+        :param str subnet: IP range to use for the vertices.
+        :param str prefix: Prefix for the name of generated vertices.
+        
+        Generates a randomly distributed graph where each edge is selected independently
+        at random.
+        """
         degree = max(0, min(degree, 1))
         count = sum(range(size)) * degree
         links = size
@@ -304,6 +396,20 @@ class Graph(object):
         
     @classmethod
     def cluster_graph(cls, size, depth=1, degree=0.5, db=None, subnet='10.0.0.0/8', prefix=''):
+        """
+        :param int size: Number of vertices in the graph.
+        :param int depth: Number of recursions in the cluster.
+        :param int degree: Intensity of the connectivity of the graph. [0-1]
+        :param db: :class:`Runtime <unis.runtime.runtime.Runtime>` to store the graph.
+        :param str subnet: IP range to use for the vertices.
+        :param str prefix: Prefix for the name of generated vertices.
+        
+        Generates a randomly distributed graph where each edge is selected independently
+        at random.  Each cluster is connected by a single edge to each other cluster with
+        a probability of `degree`.  There are `size` clusters of `size` vertices at each
+        depth.  Thus, a `size=5, depth=1` cluster graph contains 25 vertices, while a 
+        `size=5, depth=2` cluster graph contains 125 vertices.
+        """
         def _createname():
             size = 1
             while True:

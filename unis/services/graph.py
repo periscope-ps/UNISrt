@@ -3,6 +3,15 @@ from unis.services.event import new_update_event
 from unis.services.graphbuilder import Graph
 
 class UnisGrapher(RuntimeService):
+    """
+    Automatically generates a :class:`Graph <unis.services.graphbuilder.Graph>`
+    and attachs it to the runtime as a new **graph** attribute.
+
+    `Node` and `Link` objects added to the runtime are automatically added to 
+    the graph as appropriate.  When a new complete edge is detected between
+    two `Nodes`, an edge is added to the graph.
+    """
+    
     def initialize(self):
         self.runtime.graph = Graph(db=self.runtime)
 
@@ -29,6 +38,12 @@ class UnisGrapher(RuntimeService):
     
     @new_update_event('links')
     def new_links(self, link):
+        """
+        :param link: The link resource added or modified in the runtime.
+        
+        Adds a backreference to the Port objects registered to the link
+        and - if a full edge is available - adds an edge to the graph.
+        """
         ends = link.endpoints
         a,b = (ends.source, ends.sink) if link.directed else (ends[0], ends[1])
         a.link = b.link = link
@@ -41,6 +56,13 @@ class UnisGrapher(RuntimeService):
     
     @new_update_event('nodes')
     def new_nodes(self, node):
+        """
+        :param node: The node resource added or modified in the runtime.
+        
+        Adds a backreference to the Port objects registered to the node,
+        registers the node as a vertex and - if a full edge is available - adds
+        an edge to the graph.
+        """
         if node not in self.runtime.graph.vertices:
             self.runtime.graph.vertices.append(node)
 

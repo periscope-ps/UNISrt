@@ -33,9 +33,11 @@ class RuntimeService(metaclass=ServiceMetaclass):
     @property
     def targets(self):
         """
-        Automatically generated list of collections that the service targets.
-        
         :rtype: list[str]
+ 
+        List of collections that the service targets.
+
+        .. note:: Inheriting classes do not need to override this property.
         """
         return list(self.rt_listeners.keys())
 
@@ -46,7 +48,7 @@ class RuntimeService(metaclass=ServiceMetaclass):
         
         :meth:`RuntimeService.setRuntime <unis.services.RuntimeService.setRuntime>` is called by the 
         :class:`Runtime <unis.runtime.runtime.Runtime>` when a class or instance is passed to 
-        :meth:`ObjectLayer.addService <unis.runtime.oal.ObjectLayer.addService>`
+        :meth:`Runtime.addService <unis.runtime.runtime.Runtime.addService>`
         to register to service with the runtime's constituent collections.
         """
         self.runtime = runtime
@@ -65,6 +67,8 @@ class RuntimeService(metaclass=ServiceMetaclass):
         Attaches the :class:`RuntimeService <unis.services.abstract.RuntimeService>` to a 
         :class:`UnisCollection <unis.models.lists.UnisCollection>`.  ``attach`` is called by the
         runtime when a new collection is generated.
+
+        .. note:: This function may be overridden to add special behavior on a per-collection basis.  If this function is overridden, it **must** be called with `super`.
         """
         if col.name in self.rt_listeners:
             col.addCallback(lambda res, ty: [op(self, res) for op in self.rt_listeners[col.name][ty]])
