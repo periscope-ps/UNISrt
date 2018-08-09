@@ -1,5 +1,5 @@
 from unis.services.abstract import RuntimeService
-from unis.services.event import new_event, update_event
+from unis.services.event import new_update_event
 from unis.services.graphbuilder import Graph
 
 class UnisGrapher(RuntimeService):
@@ -27,8 +27,7 @@ class UnisGrapher(RuntimeService):
             self.runtime.graph.edges.append(edge)
         return True
     
-    @new_event('links')
-    @update_event('links')
+    @new_update_event('links')
     def new_links(self, link):
         ends = link.endpoints
         a,b = (ends.source, ends.sink) if link.directed else (ends[0], ends[1])
@@ -40,8 +39,7 @@ class UnisGrapher(RuntimeService):
             if self._try_add_edge(b):
                 b._graph_tag = True
     
-    @new_event('nodes')
-    @update_event('nodes')
+    @new_update_event('nodes')
     def new_nodes(self, node):
         if node not in self.runtime.graph.vertices:
             self.runtime.graph.vertices.append(node)

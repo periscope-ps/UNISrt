@@ -8,6 +8,7 @@ def _reg(events):
         return f
     return _wrapper
 
+
 def new_event(cols):
     """
     :param cols: Name of the :class:`UnisCollection <unis.models.lists.UnisCollection>` associated with the event.
@@ -60,3 +61,54 @@ def delete_event(cols):
     return _reg([Event(col, 'delete') for col in cols])
 
 
+def new_update_event(cols):
+    """
+    :param str cols: Name of the :class:`UnisCollection <unis.models.lists.UnisCollection>` associated with the event.
+    :type cols: str or list[str]
+
+    Shortcut event subscribes to both new and update events.
+    """
+    cols = cols if isinstance(cols, list) else [cols]
+    events = []
+    for col in cols:
+        events.extend([Event(col, 'new'), Event(col, 'update')])
+    return _reg(events)
+
+def new_delete_event(cols):
+    """
+    :param str cols: Name of the :class:`UnisCollection <unis.models.lists.UnisCollection>` associated with the event.
+    :type cols: str or list[str]
+
+    Shortcut event subscribes to both new and delete events.
+    """
+    cols = cols if isinstance(cols, list) else [cols]
+    events = []
+    for col in cols:
+        events.extend([Event(col, 'new'), Event(col, 'delete')])
+    return _reg(events)
+
+def update_delete_event(cols):
+    """
+    :param str cols: Name of the :class:`UnisCollection <unis.models.lists.UnisCollection>` associated with the event.
+    :type cols: str or list[str]
+
+    Shortcut event subscribes to both update and delete events.
+    """
+    cols = cols if isinstance(cols, list) else [cols]
+    events = []
+    for col in cols:
+        events.extend([Event(col, 'update'), Event(col, 'delete')])
+    return _reg(events)
+
+def all_events(cols):
+    """
+    :param str cols: Name of the :class:`UnisCollection <unis.models.lists.UnisCollection>` associated with the event.
+    :type cols: str or list[str]
+
+    Shortcut event subscribes to both new, update and delete events.
+    """
+    cols = cols if isinstance(cols, list) else [cols]
+    events = []
+    for c in cols:
+        events.extend([Event(c, 'new'), Event(c, 'update'), Event(c, 'delete')])
+    return _reg(events)
