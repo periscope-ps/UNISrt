@@ -10,7 +10,7 @@ from lace.logging import trace
 from lace import logging
 
 # Turn off lace
-#trace.remove()
+trace.remove()
 
 from unis import settings
 from unis.services import RuntimeService
@@ -200,7 +200,9 @@ class Runtime(object):
             self._oal._services.append(service)
             instance.setRuntime(self)
             instance.initialize()
-            
+            for target in instance.targets:
+                instance.attach(self._oal._cache(target))
+
     def _sig_close(self, sig=None, frame=None):
         self.shutdown()
         raise KeyboardInterrupt

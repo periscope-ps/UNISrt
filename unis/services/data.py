@@ -9,5 +9,5 @@ class DataService(RuntimeService):
     """
 
     @new_event('metadata')
-    def new_md(self, resource):
-        resource.data = DataCollection(resource.selfRef, self.runtime)
+    def new_md(self, md):
+        md.data = DataCollection(md, self.runtime)

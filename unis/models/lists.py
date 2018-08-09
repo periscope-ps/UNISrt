@@ -42,6 +42,8 @@ class UnisCollection(object):
         def where(self, pred):
             for v in self._obj.where(pred, self._rt):
                 yield oContext(v, self._rt)
+        def load(self):
+            return [oContext(v, self._rt) for v in self._obj.load()]
         def __iter__(self):
             for v in self._obj.__iter__():
                 yield oContext(v, self._rt)
@@ -428,7 +430,7 @@ class UnisCollection(object):
     @trace.debug("UnisCollection")
     async def _from_unis(self, source, start=0, size=None, kwargs={}):
         kwargs.update({"skip": start, "limit": size})
-        result = await self._unis.get(source, **kwargs)
+        result = await self._unis.get([source], **kwargs)
         return result if isinstance(result, list) else [result]
     
     def __repr__(self):

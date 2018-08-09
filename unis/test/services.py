@@ -30,7 +30,7 @@ class _testservice3(RuntimeService):
         pass
 
     @delete_event(["nodes", "links"])
-    def mutli_delete(self, res):
+    def multi_delete(self, res):
         pass
 
 class _testservice4(RuntimeService):
@@ -49,37 +49,37 @@ class RuntimeServiceTest(unittest.TestCase):
     def test_single_service(self):
         service = _testservice2()
         
-        self.assertIn(service.rt_listeners, 'nodes')
+        self.assertIn('nodes', service.rt_listeners)
         for n in ['new', 'update', 'delete']:
             with self.subTest(name=n):
-                self.assertIn(service.rt_listeners['nodes'], n)
-                self.assertIn(service.rt_listeners['nodes'][n], getattr(service, 'single_' + n))
+                self.assertIn(n, service.rt_listeners['nodes'])
+                self.assertIn(getattr(_testservice2, 'single_' + n), service.rt_listeners['nodes'][n])
         
     def test_multi_service(self):
         service = _testservice3()
         
-        self.assertIn(service.rt_listeners, 'nodes')
-        self.assertIn(service.rt_listeners, 'links')
-        self.assertIn(service.rt_listeners['nodes'], 'new')
-        self.assertIn(service.rt_listeners['nodes'], 'update')
-        self.assertIn(service.rt_listeners['nodes'], 'delete')
-        self.assertIn(service.rt_listeners['nodes']['new'], service.multi_new)
-        self.assertIn(service.rt_listeners['nodes']['update'], service.multi_update)
-        self.assertIn(service.rt_listeners['nodes']['delete'], service.multi_delete)
+        self.assertIn('nodes', service.rt_listeners)
+        self.assertIn('links', service.rt_listeners)
+        self.assertIn('new', service.rt_listeners['nodes'])
+        self.assertIn('update', service.rt_listeners['nodes'])
+        self.assertIn('delete', service.rt_listeners['nodes'])
+        self.assertIn(_testservice3.multi_new, service.rt_listeners['nodes']['new'])
+        self.assertIn(_testservice3.multi_update, service.rt_listeners['nodes']['update'])
+        self.assertIn(_testservice3.multi_delete, service.rt_listeners['nodes']['delete'])
 
-        self.assertIn(service.rt_listeners['links'], 'new')
-        self.assertIn(service.rt_listeners['links'], 'update')
-        self.assertIn(service.rt_listeners['links'], 'delete')
-        self.assertIn(service.rt_listeners['links']['new'], service.multi_new)
-        self.assertIn(service.rt_listeners['links']['update'], service.multi_update)
-        self.assertIn(service.rt_listeners['links']['delete'], service.multi_delete)
+        self.assertIn('new', service.rt_listeners['links'])
+        self.assertIn('update', service.rt_listeners['links'])
+        self.assertIn('delete', service.rt_listeners['links'])
+        self.assertIn(_testservice3.multi_new, service.rt_listeners['links']['new'])
+        self.assertIn(_testservice3.multi_update, service.rt_listeners['links']['update'])
+        self.assertIn(_testservice3.multi_delete, service.rt_listeners['links']['delete'])
 
     def test_concurrent_service(self):
         service = _testservice4()
         
-        self.assertIn(service.rt_listeners, 'nodes')
-        self.assertIn(service.rt_listeners['nodes'], 'new')
-        self.assertNotIn(service.rt_listeners['nodes'], 'update')
-        self.assertNotIn(service.rt_listeners['nodes'], 'delete')
-        self.assertIn(service.rt_listeners['nodes']['new'], service.first_new)
-        self.assertIn(service.rt_listeners['nodes']['new'], service.second_new)
+        self.assertIn('nodes', service.rt_listeners)
+        self.assertIn('new', service.rt_listeners['nodes'])
+        self.assertNotIn('update', service.rt_listeners['nodes'])
+        self.assertNotIn('delete', service.rt_listeners['nodes'])
+        self.assertIn(_testservice4.first_new, service.rt_listeners['nodes']['new'])
+        self.assertIn(_testservice4.second_new, service.rt_listeners['nodes']['new'])

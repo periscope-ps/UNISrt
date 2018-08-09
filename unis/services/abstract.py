@@ -1,4 +1,5 @@
 from collections import namedtuple, defaultdict
+from functools import wraps
 
 class ServiceMetaclass(type):
     """
@@ -11,6 +12,7 @@ class ServiceMetaclass(type):
     """
     def __init__(cls, name, bases, kwargs):
         def decoratorFactory(fn):
+            @wraps(fn)
             def nf(self, resource):
                 tmpState = resource._rt_live
                 resource.setRuntime(self.runtime)
@@ -22,11 +24,21 @@ class ServiceMetaclass(type):
         cls.rt_listeners = defaultdict(lambda: defaultdict(list))
         for n,op in kwargs.items():
             if hasattr(op, 'rt_events'):
-                setattr(cls, n, decoratorFactory(op))
+                op = decoratorFactory(op)
+                setattr(cls, n, op)
                 for event in op.rt_events:
                     cls.rt_listeners[event.col][event.ty].append(op)
 
 class RuntimeService(metaclass=ServiceMetaclass):
+    @property
+    def targets(self):
+        """
+        Automatically generated list of collections that the service targets.
+        
+        :rtype: list[str]
+        """
+        return list(self.rt_listeners.keys())
+
     def setRuntime(self, runtime):
         """
         :param runtime: The owner of the service.
@@ -55,5 +67,5 @@ class RuntimeService(metaclass=ServiceMetaclass):
         runtime when a new collection is generated.
         """
         if col.name in self.rt_listeners:
-            col.addCallback(lambda res, ty: [op(res) for op in self.rt_listeners[col.name][ty]])
+            col.addCallback(lambda res, ty: [op(self, res) for op in self.rt_listeners[col.name][ty]])
     

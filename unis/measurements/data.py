@@ -2,6 +2,9 @@ import asyncio
 import math
 import time
 
+from unis.rest import UnisProxy
+from unis.utils import async
+
 from lace.logging import trace
 from urllib.parse import urlparse
 
@@ -122,10 +125,9 @@ class DataCollection(object):
     Collection of measurement values from a specific remote data source.
     """
     @trace.debug("DataCollection")
-    def __init__(self, source, rt, fns=None):
-        source = urlparse(source)
-        self._source = "{}://{}".format(source.scheme, source.netloc)
-        self._href = "data/{}".format(source.path.split('/')[-1])
+    def __init__(self, md, rt, fns=None):
+        self._source = md.getSource()
+        self._unis = UnisProxy("data/{}".format(md.id))
         self._len, self._fn, self._rt = 0, [], rt
         self._at = 0 if rt.settings["measurements"]["read_history"] else int(time.time() * 1000000)
         if not rt.settings["measurements"]["subscribe"]:
@@ -160,7 +162,7 @@ class DataCollection(object):
             sets = list(v.values())
             for s in sets:
                 list(map(self._process, s))
-        make_async(self._rt.metadata._unis.subscribe, self._source, cb, self._href)
+        async.make_async(self._unis.subscribe, [self._source], cb)
         self._subscribe = lambda: True
         return False
     
@@ -168,8 +170,7 @@ class DataCollection(object):
     def load(self):
         if not self._subscribe():
             kwargs = { "sort": "ts:1", "ts": "gt={}".format(self._at) }
-            data = make_async(self._rt.metadata._unis.get, self._source, ref=self._href, **kwargs)
+            data = async.make_async(self._unis.get, [self._source], **kwargs)
             list(map(self._process, data))
             self._at = int(time.time() * 1000000)
-
 

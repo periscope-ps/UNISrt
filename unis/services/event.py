@@ -1,16 +1,18 @@
+from collections import namedtuple
 
 Event = namedtuple('Event', ('col', 'ty'))
 def _reg(events):
     def _wrapper(f):
-        f.events = f.rt_events or []
-        f.events.extend(event)
+        f.rt_events = getattr(f, 'rt_events', [])
+        f.rt_events.extend(events)
         return f
     return _wrapper
 
-def new_event(*cols):
+def new_event(cols):
     """
-    :param str col: Name of the :class:`UnisCollection <unis.models.lists.UnisCollection>` associated with the event.
-    
+    :param cols: Name of the :class:`UnisCollection <unis.models.lists.UnisCollection>` associated with the event.
+    :type cols: str or list[str]
+
     Decorator that associates a :class:`RuntimeService <unis.services.abstract.RuntimeService>` function with a 
     collection.  The decorated function will be registered as a callback with the collection.
     
@@ -20,13 +22,14 @@ def new_event(*cols):
         
         * **resource:** :class:`UnisObject <unis.models.models.UnisObject>` invoking the event.
     """
-    cols = cols if isinstance(list, cols) else [cols]
+    cols = cols if isinstance(cols, list) else [cols]
     return _reg([Event(col, 'new') for col in cols])
 
-def update_event(col):
+def update_event(cols):
     """
-    :param str col: Name of the :class:`UnisCollection <unis.models.lists.UnisCollection>` associated with the event.
-    
+    :param cols: Name of the :class:`UnisCollection <unis.models.lists.UnisCollection>` associated with the event.
+    :type cols: str or list[str]
+
     Decorator that associates a :class:`RuntimeService <unis.services.abstract.RuntimeService>` function with a 
     collection.  The decorated function will be registered as a callback with the collection.
     
@@ -36,13 +39,14 @@ def update_event(col):
         
         * **resource:** :class:`UnisObject <unis.models.models.UnisObject>` invoking the event.
     """
-    cols = cols if isinstance(list, cols) else [cols]
+    cols = cols if isinstance(cols, list) else [cols]
     return _reg([Event(col, 'update') for col in cols])
 
-def delete_event(col):
+def delete_event(cols):
     """
-    :param str col: Name of the :class:`UnisCollection <unis.models.lists.UnisCollection>` associated with the event.
-    
+    :param str cols: Name of the :class:`UnisCollection <unis.models.lists.UnisCollection>` associated with the event.
+    :type cols: str or list[str]
+
     Decorator that associates a :class:`RuntimeService <unis.services.abstract.RuntimeService>` function with a 
     collection.  The decorated function will be registered as a callback with the collection.
     
@@ -52,7 +56,7 @@ def delete_event(col):
         
         * **resource:** :class:`UnisObject <unis.models.models.UnisObject>` invoking the event.
     """
-    cols = cols if isinstance(list, cols) else [cols]
+    cols = cols if isinstance(cols, list) else [cols]
     return _reg([Event(col, 'delete') for col in cols])
 
 

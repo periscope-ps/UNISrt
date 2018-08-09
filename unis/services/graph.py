@@ -10,13 +10,13 @@ class UnisGrapher(RuntimeService):
         if hasattr(start, '_graph_tag') or not (hasattr(start, 'link') and hasattr(start, 'node')):
             raise ValueError("Incomplete start port")
 
-        link, eps = port.link, port.link.endpoints
+        link, eps = start.link, start.link.endpoints
         end = eps.sink if link.directed else eps[0] if eps[1] == start else [1]
         
         if (link.directed and eps.sink == start) or \
            (not (hasattr(end, 'link') and hasattr(end, 'node'))):
             raise ValueError("Incomplete end port")
-        return (start.node, end.port)
+        return (start.node, end.node)
 
     def _try_add_edge(self, port):
         try:
@@ -31,7 +31,7 @@ class UnisGrapher(RuntimeService):
     @update_event('links')
     def new_links(self, link):
         ends = link.endpoints
-        a,b = ends.source, ends.sink if link.directed else ends[0], ends[1]
+        a,b = (ends.source, ends.sink) if link.directed else (ends[0], ends[1])
         a.link = b.link = link
 
         if self._try_add_edge(a):
@@ -43,9 +43,9 @@ class UnisGrapher(RuntimeService):
     @new_event('nodes')
     @update_event('nodes')
     def new_nodes(self, node):
-        if resource not in self.runtime.graph.vertices:
-            self.runtime.graph.vertices.append(resource)
-            
+        if node not in self.runtime.graph.vertices:
+            self.runtime.graph.vertices.append(node)
+
         for p in node.ports:
             p.node = node
             if self._try_add_edge(p):

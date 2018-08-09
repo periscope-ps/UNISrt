@@ -113,7 +113,7 @@ class UnisProxy(object):
         """
         src = src or []
         async with ClientSession() as sess:
-            return await self._gather(self._collect_fn([src], "get"), self._name, sess=sess, **kwargs)
+            return await self._gather(self._collect_fn(src, "get"), self._name, sess=sess, **kwargs)
 
     @classmethod
     def post(cls, cols):
