@@ -17,8 +17,10 @@ class _sparselist(list):
     def __len__(self):
         return len(self.valid_list())
     def valid_list(self):
-        return list(filter(lambda x: not isinstance(x, str), self))
-
+        return list(filter(lambda x: x and not isinstance(x, str), self))
+    def full_length(self):
+        return super(_sparselist, self).__len__()
+    
 _rkey = namedtuple('ResourceKey', ['uid', 'cid'])
 class UnisCollection(object):
     """
@@ -42,6 +44,8 @@ class UnisCollection(object):
         def where(self, pred):
             for v in self._obj.where(pred, self._rt):
                 yield oContext(v, self._rt)
+        def first_where(self, pred):
+            return [oContext(v, self._rt) for v in self._obj.first_where(pred, self._rt)]
         def load(self):
             return [oContext(v, self._rt) for v in self._obj.load()]
         def __iter__(self):
@@ -104,7 +108,7 @@ class UnisCollection(object):
         
     @trace.debug("UnisCollection")
     def __getitem__(self, i):
-        if i >= len(self._cache):
+        if i >= self._cache.full_length():
             self._complete_cache()
         return self._cache[i]
     
@@ -175,7 +179,7 @@ class UnisCollection(object):
         except CollectionIndexError:
             item.setCollection(self)
             self._stubs[item._getattribute('id', None)] = item
-            i = len(self._cache)
+            i = self._cache.full_length()
             self._cache.append(item)
             for k, index in self._indices.items():
                 if item._getattribute(k, None, None) is not None:
@@ -200,7 +204,7 @@ class UnisCollection(object):
         """
         self._check_record(item)
         try:
-            self._unis.delete(item.getSource(), item._getattribute('id', None))
+            self._unis.delete(item.getSource(), item.id)
         except UnisReferenceError:
             return
     
@@ -215,6 +219,22 @@ class UnisCollection(object):
         """
         item = item if isinstance(item, oContext) else oContext(item, None)
         return self._indices['id'].index(item.id)
+
+    @trace.info("UnisCollection")
+    def first_where(self, pred, ctx=None):
+        """
+        :param pred: Predicate used to filter resources.
+        :param ctx: This parameter must be left empty when called by external sources.
+        :type pred: callable or dictionary
+        :return: :class:`UnisObject <unis.models.models.UnisObject>` or None
+        
+        As :func:`UnisCollection.where <unis.models.list.UnisCollection.where>` but returns
+        only the first resource matching the request.
+        """
+        try:
+            return next(self.where(pred, ctx))
+        except StopIteration:
+            return None
     
     @trace.info("UnisCollection")
     def where(self, pred, ctx=None):
@@ -247,7 +267,7 @@ class UnisCollection(object):
                 yield v
         else:
             non_index = {}
-            subset = set(range(len(self._cache)))
+            subset = set(range(self._cache.full_length()))
             for k,v in pred.items():
                 v = v if isinstance(v, dict) else { "eq": v }
                 if k in self._indices.keys():
@@ -448,4 +468,4 @@ class UnisCollection(object):
     @trace.debug("UnisCollection")
     def __iter__(self):
         self._complete_cache()
-        return iter(self._cache)
+        return iter(self._cache.valid_list())

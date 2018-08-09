@@ -152,7 +152,7 @@ class UnisProxy(object):
             return await UnisClient.instances[src].put("/".join([self._name, rid]), data, sess)
     
     @trace.info("UnisProxy")
-    async def delete(self, src, rid):
+    def delete(self, src, rid):
         """
         :param src: Client identifier for target data store.
         :param str rid: Resource identifier for resource to update.
@@ -162,8 +162,10 @@ class UnisProxy(object):
         
         Delete a resource from a data store.  Returns a list of dictionaries.
         """
-        async with ClientSession() as sess:
-            return await UnisClient.instances[src].delete("/".join(self._name, rid), sess)
+        async def awrap():
+            async with ClientSession() as sess:
+                return await UnisClient.instances[src].delete("/".join([self._name, rid]), sess)
+        return async.make_async(awrap)
 
     @trace.info("UnisProxy")
     async def subscribe(self, src, cb):

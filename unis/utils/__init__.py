@@ -194,6 +194,9 @@ class UniqueIndex(object):
         Takes a given index and associates it with a specified value in the
         :class:`UniqueIndex <unis.utils.UniqueIndex>`.
         """
+        if not value:
+            self._reverse[index] = value
+            return
         if value in self._index and self._index[value] != index:
             raise CollectionIndexError("index_{} conflict - {}".format(self.key, value))
         self._reverse[index] = value
