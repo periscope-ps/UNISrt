@@ -201,7 +201,7 @@ class Graph(object):
         
         Writes positional information for the graph for future reuse.
         
-        .. warn:: The graph **must** be the same graph to reuse positional metadata.
+        .. warning:: The graph **must** be the same graph to reuse positional metadata.
         """
         result = { "nodes": {}, "_processing_level": self.processing_level }
         if self.processing_level:
@@ -217,7 +217,7 @@ class Graph(object):
         
         Reads positional information for the graph from a file.
         
-        .. warn:: The graph **must** be the same graph to reuse positional metadata.
+        .. warning:: The graph **must** be the same graph to reuse positional metadata.
         """
         import json
         with open(filename) as f:
