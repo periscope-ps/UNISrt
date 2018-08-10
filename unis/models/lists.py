@@ -202,7 +202,7 @@ class UnisCollection(object):
         
         Remove a resource from the collection.
 
-        ..note:: In the case of resources in back end data stores, this operation will delete the back end resource as well.
+        .. note:: In the case of resources in back end data stores, this operation will delete the back end resource as well.
         """
         self._check_record(item)
         try:
