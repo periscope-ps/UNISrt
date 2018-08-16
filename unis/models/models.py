@@ -67,6 +67,8 @@ class Context(object):
             yield Context(v, self._rt) if isinstance(v, _unistype) else v
     def __dir__(self):
         return dir(self._obj)
+    def __contains__(self, x):
+        return self._obj.__contains__(x, self._rt)
     def __len__(self):
         if hasattr(type(self._obj), '__len__'):
             return self._obj.__len__()
@@ -360,8 +362,11 @@ class List(_unistype):
     def __len__(self):
         return len(self._rt_ls)
     @trace.debug("List")
-    def __contains__(self, v):
-        return v in self._rt_ls
+    def __contains__(self, v, ctx):
+        v = v.to_JSON(ctx, False) if isinstance(v, _unistype) else v
+        def t(x):
+            return v==x.to_JSON(ctx, False) if isinstance(x, _unistype) else v==x
+        return any([t(x) for x in self._rt_ls])
     @trace.none
     def __repr__(self):
         return "<unis.List {}>".format(self._rt_ls.__repr__())

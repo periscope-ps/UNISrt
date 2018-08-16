@@ -45,7 +45,7 @@ class UnisCollection(object):
             for v in self._obj.where(pred, self._rt):
                 yield oContext(v, self._rt)
         def first_where(self, pred):
-            return [oContext(v, self._rt) for v in self._obj.first_where(pred, self._rt)]
+            return oContext(self._obj.first_where(pred, self._rt), self._rt)
         def load(self):
             return [oContext(v, self._rt) for v in self._obj.load()]
         def __iter__(self):

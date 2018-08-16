@@ -109,7 +109,7 @@ class ObjectLayer(object):
         request = {}
         for (cid, collection), reslist in pending.items():
             self._cache(collection).locked = True
-            valid = all([i.validate for i in reslist])
+            valid = all([i.validate() for i in reslist])
             items = [i.to_JSON() for i in reslist]
             for item in items:
                 if 'ts' in item:
