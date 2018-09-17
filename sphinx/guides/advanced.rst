@@ -90,27 +90,27 @@ executions.
 		
     >>> class window(Function):
             def __init__(self, window_size):
-	        self.window = [0] * window_size
-		self.head = 0
-		self.window_size = window_size
-	        super(Function, self).__init__()
+	        self.size = window_size
+	        super(Function, self).__init__(initial=[])
             def apply(self, v, ts):
-	        self.window[self.head] = v
-		self.head = (self.head + 1) % self.window_size
-		return self.window
+	        self.prior.append(v)
+		if len(self.prior) < self.size:
+		    return self.prior
+		else:
+		    return self.prior[self.size:]
     >>> data.attachFunction(window(5))
     >>> data.window
-    [0, 0, 0, 0, 0]
+    []
     >>> data.window
-    [2, 0, 0, 0, 0]
+    [2]
     >>> data.window
-    [2, 10, 0, 0, 0]
+    [2, 10]
     >>> data.window
     [2, 10, 8, 5, 8]
     >>> data.window
-    [5, 10, 8, 5, 8]
+    [10, 8, 5, 8, 5]
 
-The above example shows a cyclical window buffer for a data stream.
+The above example shows a queue window buffer for a data stream.
 
 
 ***************************
