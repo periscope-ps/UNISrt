@@ -164,12 +164,12 @@ Adding new resources
 
 Resources exist in one of three states:
 
-* **Detatched**: Newly created resource not belonging to a runtime.
+* **Detached**: Newly created resource not belonging to a runtime.
 * **Registered**: Resource has been added to a runtime, but only exists within the runtime (it will not be pushed to a remote data store).
 * **Linked**: Resource is linked to a remote data store document.
 
 These three states form a strictly linear relationship.  A resource MUST be
-**detatched** to be **registered**, and a resource MUST be **registered** to
+**detached** to be **registered**, and a resource MUST be **registered** to
 be **linked** to a remote document.  This relationship is also directional,
 you cannot devolve a **linked** resource to a **registered** resource without
 deleting the resource and building a new one.
@@ -182,7 +182,7 @@ deleting the resource and building a new one.
    'description', '$schema', 'id', 'ports', 'urn', 'name', 'rules', 'ts',
    'lifetimes', 'relations', 'location', 'properties'])>
 
-`n` in the above snippet is **detatched** in line 1, and **registered** in line 2.
+`n` in the above snippet is **detached** in line 1, and **registered** in line 2.
 Calling :meth:`UnisObject.commit <unis.models.models.UnisObject.commit>`
 on `n` will **link** it to a record on the *default* UNIS instance.  Note that
 if a record does not exist for an object being linked, one will be created.
@@ -191,7 +191,7 @@ if a record does not exist for an object being linked, one will be created.
    
    >>> n.commit()
 
-You can jump straight from **detatched** to **linked** by using the `commit`
+You can jump straight from **detached** to **linked** by using the `commit`
 parameter of the :meth:`insert <unis.models.lists.UnisCollection.insert>`
 function.
 

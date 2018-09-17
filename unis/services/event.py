@@ -9,6 +9,57 @@ def _reg(events):
     return _wrapper
 
 
+def postflush_event(cols):
+    """
+    :param cols: Name of the :class:`UnisCollection <unis.models.lists.UnisCollection>` associated with the event.
+    :type cols: str or list[str]
+
+    Decorator that associates a :class:`RuntimeService <unis.services.abstract.RuntimeService>` function with a 
+    collection.  The decorated function will be registered as a callback with the collection.
+    
+    Decorated function invoked on when resources are **flushed** to the back end datastore. Decorated function should follow:
+    
+        **Parameters:**
+        
+        * **resource:** :class:`UnisObject <unis.models.models.UnisObject>` invoking the event.
+    """
+    cols = cols if isinstance(cols, list) else [cols]
+    return _reg([Event(col, 'postflush') for col in cols])
+    
+def preflush_event(cols):
+    """
+    :param cols: Name of the :class:`UnisCollection <unis.models.lists.UnisCollection>` associated with the event.
+    :type cols: str or list[str]
+
+    Decorator that associates a :class:`RuntimeService <unis.services.abstract.RuntimeService>` function with a 
+    collection.  The decorated function will be registered as a callback with the collection.
+    
+    Decorated function invoked on when resources are **flushed** to the back end datastore. Decorated function should follow:
+    
+        **Parameters:**
+        
+        * **resource:** :class:`UnisObject <unis.models.models.UnisObject>` invoking the event.
+    """
+    cols = cols if isinstance(cols, list) else [cols]
+    return _reg([Event(col, 'preflush') for col in cols])
+    
+def commit_event(cols):
+    """
+    :param cols: Name of the :class:`UnisCollection <unis.models.lists.UnisCollection>` associated with the event.
+    :type cols: str or list[str]
+
+    Decorator that associates a :class:`RuntimeService <unis.services.abstract.RuntimeService>` function with a 
+    collection.  The decorated function will be registered as a callback with the collection.
+    
+    Decorated function invoked on when resources are **commited** to the back end datastore. Decorated function should follow:
+    
+        **Parameters:**
+        
+        * **resource:** :class:`UnisObject <unis.models.models.UnisObject>` invoking the event.
+    """
+    cols = cols if isinstance(cols, list) else [cols]
+    return _reg([Event(col, 'commit') for col in cols])
+    
 def new_event(cols):
     """
     :param cols: Name of the :class:`UnisCollection <unis.models.lists.UnisCollection>` associated with the event.

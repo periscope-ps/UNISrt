@@ -13,7 +13,7 @@ from urllib.parse import urlparse
 from unis.exceptions import UnisReferenceError
 from unis.rest import UnisClient
 from unis.settings import SCHEMA_CACHE_DIR
-from unis.utils import async
+from unis.utils import async, Events
 
 class SkipResource(Exception):
     """
@@ -443,7 +443,7 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
     _rt_callback = lambda s,x,e: x
     @trace.info("UnisObject")
     def __init__(self, v=None, ref=None):
-        v = v or {}
+        v = {k: (v.getObject() if isinstance(v, Context) else v) for k,v in (v or {}).items()}
         super(UnisObject, self).__init__(v, ref)
         self._rt_parent, self._rt_remote, self._rt_live = self, set(v.keys()) | set(self._rt_defaults.keys()), True
         self.__dict__.update({**self._rt_defaults, **v})
@@ -534,6 +534,7 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
                 ctx.addSources([{'url': url, 'default': False, 'enabled': True}])
                 self._rt_source = UnisClient.resolve(url)
             self.__dict__['selfRef'] = "{}/{}/{}".format(url, self._rt_collection.name, self._getattribute('id', ctx))
+            self._rt_collection._serve(Events.commit, self)
             self._update('id', ctx)
     @trace.info("UnisObject")
     def extendSchema(self, n, v=None, ctx=None):
@@ -620,7 +621,10 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
                 if isinstance(v, (list, dict)):
                     v = a._lift(v, a._get_reference(k), ctx, False)
                 if isinstance(a.__dict__[k], _unistype):
-                    a.__dict__[k].merge(v, ctx)
+                    if isinstance(v, dict):
+                        a.__dict__[k] = v if v.get('selfRef', '') != a.selfRef else a.__dict__[k]
+                    else:
+                        a.__dict__[k].merge(v, ctx)
                 else:
                     a.__dict__[k] = v
             else:

@@ -119,7 +119,29 @@ class UnisCollection(object):
         for k, index in self._indices.items():
             if self._cache[i]._getattribute(k, None, None) is not None:
                 index.update(i, self._cache[i]._getattribute(k, None))
-    
+
+    @trace.info("UnisCollection")
+    def pre_flush(self, items):
+        """
+        :param items: List of items to notify
+        :type items: List[:class:`UnisObject <unis.models.models.UnisObject>`]
+
+        Dispatch :class:`UnisObjects <unis.models.models.UnisObject>` to registered
+        :class:`RuntimeServices <unis.service.abstract.RuntimeService>` before resource is
+        flushed.
+        """
+        [self._serve(Events.preflush, item.getObject()) for item in items]
+    @trace.info("UnisCollection")
+    def post_flush(self, items):
+        """
+        :param items: List of items to notify
+        :type items: List[:class:`UnisObject <unis.models.models.UnisObject>`]
+
+        Dispatch :class:`UnisObjects <unis.models.models.UnisObject>` to registered
+        :class:`RuntimeServices <unis.service.abstract.RuntimeService>` after resource is
+        flushed.
+        """
+        [self._serve(Events.postflush, item.getObject()) for item in items]
     @trace.info("UnisCollection")
     def update(self, item):
         """

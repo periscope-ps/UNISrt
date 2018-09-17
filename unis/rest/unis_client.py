@@ -119,7 +119,7 @@ class UnisProxy(object):
     def post(cls, cols):
         """ 
         :param cols: Dictionary containing the resources to be submitted.
-        :type cols: dict[tuple[:class:`CID <unis.rest.unis_client.CID>`, str], List[:class:`UnisObject <unis.models.models.UnisObject>`]]
+        :type cols: dict[tuple[:class:`CID <unis.rest.unis_client.CID>`, str], List[dict[str, str]]]
         :return: list of dictionaries containing the updated values for the posted resources.
         
         Submit the contents of a set of records to a data source.  The ``cols`` parameter is a dictionary wherein 
@@ -414,7 +414,7 @@ class UnisClient(metaclass=_SingletonOnUID):
     @trace.info("UnisClient")
     async def get(self, col, sess, **kwargs):
         """
-        :param str col: Name of the collection to retrieve stubs from
+        :param str col: Name of the collection to get data from
         :param sess: Session object for request
         :param \*\*kwargs: Keyword arguments to the request
         :type sess: :class:`aiohttp.ClientSession`
@@ -427,7 +427,7 @@ class UnisClient(metaclass=_SingletonOnUID):
     @trace.info("UnisClient")
     async def post(self, col, data, sess):
         """
-        :param str col: Name of the collection to retrieve stubs from
+        :param str col: Name of the collection to post data
         :param dict[str,str] data: Dictionary containing the data to send to store
         :param sess: Session object for request
         :type sess: :class:`aiohttp.ClientSession`
@@ -438,9 +438,19 @@ class UnisClient(metaclass=_SingletonOnUID):
         return await self._do(sess.post, url, data=json.dumps(data), headers=hdr)
 
     @trace.info("UnisClient")
+    def synchronous_post(self, col, data):
+        """
+        :param str col: Name of the collection to post data
+        :param dict[str, str] data: Dictionary containing the data to send to the store
+        :return: List of dictionaries containing the resources posted to the store.
+        """
+        url, hdr = self._get_conn_args(col)
+        return requests.post(url, data=json.dumps(data), headers=hdr)
+    
+    @trace.info("UnisClient")
     async def put(self, col, data, sess):
         """
-        :param str col: Name of the collection to retrieve stubs from
+        :param str col: Name of the collection to put data into
         :param dict[str,str] data: Dictionary containing the data to send to store
         :param sess: Session object for request
         :type sess: :class:`aiohttp.ClientSession`
@@ -453,7 +463,7 @@ class UnisClient(metaclass=_SingletonOnUID):
     @trace.info("UnisClient")
     async def delete(self, col, sess):
         """
-        :param str col: Name of the collection to retrieve stubs from
+        :param str col: Name of the collection to delete resource from
         :param sess: Session object for request
         :type sess: :class:`aiohttp.ClientSession`
         :return: List of dictionaries containing the resources removed from the store.
@@ -465,7 +475,7 @@ class UnisClient(metaclass=_SingletonOnUID):
     @trace.info("UnisClient")
     async def subscribe(self, col, cb):
         """
-        :param str col: Name of the collection to retrieve stubs from
+        :param str col: Name of the collection to subscribe to
         :param callable cb: Callback function for messages
         :rtype: coroutine
         """
@@ -505,7 +515,7 @@ class UnisClient(metaclass=_SingletonOnUID):
                 resp = json.loads(str(await r.read(), 'utf-8'))
                 return resp if isinstance(resp, list) else [resp]
             except Exception as exp:
-                return r.status
+                return [r.status]
         else:
             raise ConnectionError("Error from unis - [{}] {}".format(r.status, r.text), r.status)
     

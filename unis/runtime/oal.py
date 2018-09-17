@@ -108,6 +108,7 @@ class ObjectLayer(object):
     def _do_update(self, pending):
         request = {}
         for (cid, collection), reslist in pending.items():
+            self._cache(collection).pre_flush(reslist)
             self._cache(collection).locked = True
             valid = all([i.validate() for i in reslist])
             items = [i.to_JSON() for i in reslist]
@@ -123,6 +124,7 @@ class ObjectLayer(object):
             raise
         finally:
             for (_, col), items in pending.items():
+                self._cache(col).post_flush(items)
                 for r in items:
                     r = r if isinstance(r, Context) else Context(r, self)
                     resp = next(o for o in response if o['id'] == r.id)

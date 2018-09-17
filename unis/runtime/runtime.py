@@ -49,6 +49,8 @@ class Runtime(object):
     * **measurements**
         * **read_history:** (*True*) Read in full history of measurements when measurement is added.
         * **subscribe:** (*True*) Subscribe to recieve measurements in realtime.
+        * **batch_size:** (*0*) Specifies the number of new measurements to take before pushing to measurement store. (This takes precedence over **batch_until**)
+        * **batch_until:** (*0*) Specifies the amount of time to wait for new measurements before pushing to measurement store.
     """
     def _build_settings(self):
         def _ls(v):

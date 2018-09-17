@@ -6,6 +6,7 @@ from unis.rest import UnisProxy
 from unis.utils import async
 
 from lace.logging import trace
+from threading import Timer
 from urllib.parse import urlparse
 
 class Function(object):
@@ -128,11 +129,46 @@ class DataCollection(object):
     def __init__(self, md, rt, fns=None):
         self._source = md.getSource()
         self._unis = UnisProxy("data/{}".format(md.id))
+        self._mid = md.id
         self._len, self._fn, self._rt = 0, [], rt
         self._at = 0 if rt.settings["measurements"]["read_history"] else int(time.time() * 1000000)
+        self._pending = []
+        self._batch = int(rt.settings["measurements"].get("batch_size", 0))
+        self._batch_delay = int(rt.settings["measurements"].get("batch_until", 0))
+        self._timer = None
+        self.read_only = False
+        
         if not rt.settings["measurements"]["subscribe"]:
             self._subscribe = lambda: False
         list(map(lambda f: self.attachFunction(f[0], f[1]), (fns or {}).items()))
+
+    @trace.info("DataCollection")
+    def append(self, val, ts=0):
+        """
+        :param Any val: The value to append to the measurement
+        :param int ts: The timestamp of the measurement in microseconds
+
+        Add a data point to the corresponding measurement.
+        """
+        def cb():
+            if self._pending:
+                self._push()
+            self._timer = None
+
+        if self.read_only:
+            raise AttributeError("Dataset is read only until measurement is flushed")
+        self._pending.append({'ts': ts or int(time.time() * 1000000), 'value': val})
+        if len(self._pending) >= self._batch:
+            self._push()
+        elif self._batch_delay and not self._timer:
+            self._timer = Timer(self._batch_delay / 1000.0, cb)
+
+    @trace.info("DataCollection")
+    def _push(self):
+        data = {'mid': self._mid, 'data': self._pending}
+        self._unis.post({(self._source, self._unis._name): [data]})
+        self._pending = []
+        
     @trace.info("DataCollection")
     def attachFunction(self, fn, name="", doc=""):
         """
