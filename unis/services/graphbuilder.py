@@ -73,7 +73,7 @@ class Graph(object):
         self.vertices.append(n)
         return n
         
-    def hasEdge(self, src, dst):
+    def hasEdge(self, src, dst, link=None):
         """
         :param src: Vertex on the ingress side of the edge.
         :param dst: Vertex on the egress side of the edge.
@@ -105,9 +105,9 @@ class Graph(object):
         self._edgeref.add(str(hash(dst)) + str(hash(src)))
         src.ports.append(p_src)
         dst.ports.append(p_dst)
-        self.edges.append((src, dst))
-        self.edges.append((dst, src))
         l = Link({ "directed": False, "endpoints": [p_src, p_dst] })
+        self.edges.append((src, dst, l))
+        self.edges.append((dst, src, l))
         self._rt.insert(l)
     
     def finalize(self, include_svg=False):
@@ -162,7 +162,7 @@ class Graph(object):
                     forces[n.name][adj.name] = (mag * math.cos(angle), mag * math.sin(angle), 'repulsive', mag, angle)
             
             # Attractive
-            for a,b in self.edges:
+            for a,b,_ in self.edges:
                 if a != b:
                     d = math.sqrt(pow(b.svg.x - a.svg.x, 2) + pow(b.svg.y - a.svg.y, 2)) / unitsize
                     mag = 2 * math.log(d / 1) * unitsize
@@ -253,34 +253,36 @@ class Graph(object):
         result =  "<svg id='f-svg' width='{}' height='{}' transform='matrix(1 0 0 1 -300 -300)'>".format(width, height)
         result += "  <defs><mask id='clipper' maskUnits='userSpaceOnUse'><rect height='100%' width='100%' fill='white'></rect>{}</mask></defs>"
         result += "  <rect height='100%' width='100%' fill='rgb(253,246,227)'/>"
-        line   =  "  <line {{}} x1='{}' y1='{}' x2='{}' y2='{}' style='stroke:rgb({{}});stroke-width:{{}}'/>"
+        path   =  "  <path {{}} d='M{},{}L{},{}' stroke='rgb({{}})' fill='transparent' stroke-width='{{}}'></path>"
+        text   =  "  <text><textPath href='#{}' dominant-baseline='ideographic' startOffset='50%' text-anchor='middle'>{}</textPath></text>"
         
         # Draw lines
         complete = set()
-        for p, path in enumerate(rules):
+        for p, prules in enumerate(rules):
             color = ",".join(map(str, next(palette)));
-            for i in range(len(path)):
-                if i < len(path) - 1:
-                    a, b = (path[i][0], path[i + 1][0])
+            for i in range(len(prules)):
+                if i < len(prules) - 1:
+                    a, b = (prules[i][0], prules[i + 1][0])
                     if (a, b) not in complete:
-                        l  = line.format(a.svg.x, a.svg.y, b.svg.x, b.svg.y)
+                        l  = path.format(a.svg.x, a.svg.y, b.svg.x, b.svg.y)
                         result += l.format("", "0,0,0", 3) + l.format("", color, 1)
                     complete |= set([(a, b), (b, a)])
                 
-                if path[i][1]:
-                    a = path[i][0]
+                if prules[i][1]:
+                    a = prules[i][0]
                     x,y = (a.svg.x + (36 * ((i % 2 * 2) - 1)), a.svg.y + (10 * ((i % 2 * 2) - 1)))
-                    l = line.format(a.svg.x, a.svg.y, x, y)
+                    l = path.format(a.svg.x, a.svg.y, x, y)
                     result += l.format("id='rule-{}-{}-line' class='rules {}' opacity='0.6' mask='url(#clipper)'".format(p, i, a.name.replace('.', "")), "0,0,0", 1)
         
-        for a, b in self.edges:
-            result += "" if (a,b) in complete else line.format(a.svg.x, a.svg.y, b.svg.x, b.svg.y).format("", "0,0,0", 3)
-        
+        for a, b, l in self.edges:
+            result += "" if (a,b) in complete else path.format(a.svg.x, a.svg.y, b.svg.x, b.svg.y).format("id='{}-{}-edge'".format(a.name.replace('.', ""), b.name.replace('.', "")), "0,0,0", 3) 
+            result += text.format('{}-{}-edge'.format(a.name.replace('.', ""), b.name.replace('.', "")), getattr(l, 'capacity', ""))
+       
         # Draw circles
         complete = set()
-        for path in rules:
-            for i in range(len(path)):
-                r, complete = _addcircle(path[i][0], complete, "active")
+        for prules in rules:
+            for i in range(len(prules)):
+                r, complete = _addcircle(prules[i][0], complete, "active")
                 result += r
         for a in self.vertices:
             r, complete = _addcircle(a, complete, '')
@@ -295,12 +297,12 @@ class Graph(object):
         </g>'''
         
         masks = ""
-        for p, path in enumerate(rules):
-            for i in range(len(path)):
-                if path[i][1]:
-                    a = path[i][0]
+        for p, prules in enumerate(rules):
+            for i in range(len(prules)):
+                if prules[i][1]:
+                    a = prules[i][0]
                     x,y = (a.svg.x - 26 + (36 * ((i % 2 * 2) - 1)), (a.svg.y - 17 + (27 * ((i % 2 * 2) - 1))))
-                    text = "".join(["<tspan dy='1.2em' x='8'>" + line + "</tspan>" for line in path[i][1].split("\n")])
+                    text = "".join(["<tspan dy='1.2em' x='8'>" + line + "</tspan>" for line in prules[i][1].split("\n")])
                     result += group.format(re.sub('[.<>:]', '', a.name), p, i, x, y, text)
                     masks  += "<rect width='73' height='34' id='mask-rule-{}-{}' transform='matrix(1 0 0 1 {} {})'></rect>".format(p, i, x, y)
         

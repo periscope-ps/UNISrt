@@ -237,7 +237,7 @@ class Primitive(_unistype):
         Merges two :class:`Primitives <unis.models.models.Primitive>`, the passed in instance overwrites
         the calling instance where conflicts occur.
         """
-        self._rt_raw = other._rt_raw
+        self._rt_raw = other._rt_raw if isinstance(other, _unistype) else other
     @trace.none
     def __repr__(self):
         return "<unis.Primitive>"#.format(self._rt_raw)

@@ -25,7 +25,7 @@ class UnisGrapher(RuntimeService):
         if (link.directed and eps.sink == start) or \
            (not (hasattr(end, 'link') and hasattr(end, 'node'))):
             raise ValueError("Incomplete end port")
-        return (start.node, end.node)
+        return (start.node, end.node, link)
 
     def _try_add_edge(self, port):
         try:
