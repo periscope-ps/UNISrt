@@ -20,9 +20,9 @@ class UnisGrapher(RuntimeService):
             raise ValueError("Incomplete start port")
 
         link, eps = start.link, start.link.endpoints
-        end = eps.sink if link.directed else eps[0] if eps[1] == start else [1]
+        end = eps.sink if link.directed else eps[0] if eps[1] == start else eps[1]
         
-        if (link.directed and eps.sink == start) or \
+        if (link.directed and end == start) or \
            (not (hasattr(end, 'link') and hasattr(end, 'node'))):
             raise ValueError("Incomplete end port")
         return (start.node, end.node, link)

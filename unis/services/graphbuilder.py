@@ -109,6 +109,21 @@ class Graph(object):
         self.edges.append((src, dst, l))
         self.edges.append((dst, src, l))
         self._rt.insert(l)
+    def getEdge(self, src, dst, directed=False):
+        """
+        :param src: Vertex on the ingress side of the edge.
+        :param dst: Vertex on the egress side of the edge.
+        :param bool directed: Only detect directed edges with the given src and dst
+        :type src: :class:`Node <unis.models.models.UnisObject>`
+        :type src: :class:`Node <unis.models.models.UnisObject>`
+        :rtype: :class:`Node <unis.models.models.UnisObject>` or NoneType
+
+        Find the edge between two vertices, if any.
+        """
+        for n1, n2, l in self.edges:
+            if (n1 == src and n2 == dst) or (not directed and (n2 == src and n1 == dst)):
+                return l
+        return None
     
     def finalize(self, include_svg=False):
         """
@@ -265,7 +280,7 @@ class Graph(object):
                     a, b = (prules[i][0], prules[i + 1][0])
                     if (a, b) not in complete:
                         l  = path.format(a.svg.x, a.svg.y, b.svg.x, b.svg.y)
-                        result += l.format("", "0,0,0", 3) + l.format("", color, 1)
+                        result += l.format("id='{}-{}-edge'".format(*list(sorted([a.name.replace('.', ""), b.name.replace('.', "")]))), "0,0,0", 3) + l.format("", color, 1)
                     complete |= set([(a, b), (b, a)])
                 
                 if prules[i][1]:
@@ -275,8 +290,9 @@ class Graph(object):
                     result += l.format("id='rule-{}-{}-line' class='rules {}' opacity='0.6' mask='url(#clipper)'".format(p, i, a.name.replace('.', "")), "0,0,0", 1)
         
         for a, b, l in self.edges:
-            result += "" if (a,b) in complete else path.format(a.svg.x, a.svg.y, b.svg.x, b.svg.y).format("id='{}-{}-edge'".format(a.name.replace('.', ""), b.name.replace('.', "")), "0,0,0", 3) 
-            result += text.format('{}-{}-edge'.format(a.name.replace('.', ""), b.name.replace('.', "")), getattr(l, 'capacity', ""))
+            names = list(sorted([a.name.replace('.', ""), b.name.replace('.', "")]))
+            result += "" if (a,b) in complete else path.format(a.svg.x, a.svg.y, b.svg.x, b.svg.y).format("id='{}-{}-edge'".format(*names), "0,0,0", 3) 
+            result += text.format('{}-{}-edge'.format(*names), getattr(l, 'capacity', ""))
        
         # Draw circles
         complete = set()
@@ -293,7 +309,7 @@ class Graph(object):
         <g class='rules {}' id='rule-{}-{}' x='1' y='1' transform='matrix(1 0 0 1 {} {})' opacity='0.6'>
           <use href='#clipping'/>
           <rect width='73' height='34' style='stroke-width:1;stroke:rgb(0,0,0);fill:rgb(238, 232, 213)' rx='4' ry='4'/>
-          <text font-size='5' fill='rgb(88,110,117)' y='4'>{}</text>
+          <text style='font-size: 5px' fill='rgb(88,110,117)' y='4'>{}</text>
         </g>'''
         
         masks = ""

@@ -5,6 +5,7 @@ import time
 from unis.rest import UnisProxy
 from unis.utils import async
 
+from collections import defaultdict
 from lace.logging import trace
 from threading import Timer
 from urllib.parse import urlparse
@@ -130,7 +131,7 @@ class DataCollection(object):
         self._source = md.getSource()
         self._unis = UnisProxy("data/{}".format(md.id))
         self._mid = md.id
-        self._len, self._fn, self._rt = 0, [], rt
+        self._len, self._fns, self._rt = 0, {}, rt
         self._at = 0 if rt.settings["measurements"]["read_history"] else int(time.time() * 1000000)
         self._pending = []
         self._batch = int(rt.settings["measurements"].get("batch_size", 0))
@@ -142,6 +143,12 @@ class DataCollection(object):
             self._subscribe = lambda: False
         list(map(lambda f: self.attachFunction(f[0], f[1]), (fns or {}).items()))
 
+    def __getattr__(self, n):
+        if n in self._fns.keys():
+            self.load()
+            return self._fns[n].postprocess(self._fns[n].prior)
+        return super().__getattr__(n)
+        
     @trace.info("DataCollection")
     def append(self, val, ts=0):
         """
@@ -178,11 +185,8 @@ class DataCollection(object):
         
         Attach a function to the data stream.
         """
-        def _get(self):
-            self.load()
-            return fn.postprocess(fn.prior)
-        self._fn.append(fn if isinstance(fn, Function) else Function(fn=fn, name=name))
-        setattr(type(self), fn.name, property(_get, doc=doc))
+        fn = fn if isinstance(fn, Function) else Function(fn=fn, name=name)
+        self._fns[fn.name] = fn
     
     @trace.debug("DataCollection")
     def __len__(self):
@@ -190,7 +194,8 @@ class DataCollection(object):
     @trace.debug("DataCollection")
     def _process(self, record):
         self._len += 1
-        for f in self._fn:
+        self._at = max(self._at, int(record['ts']))
+        for f in self._fns.values():
             f.prior = f.apply(float(record['value']), record['ts'])
     @trace.debug("DataCollection")
     def _subscribe(self):
@@ -208,5 +213,4 @@ class DataCollection(object):
             kwargs = { "sort": "ts:1", "ts": "gt={}".format(self._at) }
             data = async.make_async(self._unis.get, [self._source], **kwargs)
             list(map(self._process, data))
-            self._at = int(time.time() * 1000000)
 
