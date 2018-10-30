@@ -7,3 +7,4 @@ class Events(Enum):
     commit = 4
     preflush = 5
     postflush = 6
+    data = 7

@@ -115,8 +115,8 @@ class Graph(object):
         :param dst: Vertex on the egress side of the edge.
         :param bool directed: Only detect directed edges with the given src and dst
         :type src: :class:`Node <unis.models.models.UnisObject>`
-        :type src: :class:`Node <unis.models.models.UnisObject>`
-        :rtype: :class:`Node <unis.models.models.UnisObject>` or NoneType
+        :type dst: :class:`Node <unis.models.models.UnisObject>`
+        :rtype: :class:`Link <unis.models.models.UnisObject>` or NoneType
 
         Find the edge between two vertices, if any.
         """

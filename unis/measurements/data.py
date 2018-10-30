@@ -3,7 +3,7 @@ import math
 import time
 
 from unis.rest import UnisProxy
-from unis.utils import async
+from unis.utils import Events, async
 
 from collections import defaultdict
 from lace.logging import trace
@@ -69,7 +69,7 @@ class Function(object):
         allows for this type of stream postprocessing.
         """
         return x
-
+    
 class Last(Function):
     """
     Return the last measurement as is, discard previous measurement when
@@ -130,7 +130,7 @@ class DataCollection(object):
     def __init__(self, md, rt, fns=None):
         self._source = md.getSource()
         self._unis = UnisProxy("data/{}".format(md.id))
-        self._mid = md.id
+        self._md = md
         self._len, self._fns, self._rt = 0, {}, rt
         self._at = 0 if rt.settings["measurements"]["read_history"] else int(time.time() * 1000000)
         self._pending = []
@@ -172,7 +172,7 @@ class DataCollection(object):
 
     @trace.info("DataCollection")
     def _push(self):
-        data = {'mid': self._mid, 'data': self._pending}
+        data = {'mid': self._md.id, 'data': self._pending}
         self._unis.post({(self._source, self._unis._name): [data]})
         self._pending = []
         
@@ -197,6 +197,7 @@ class DataCollection(object):
         self._at = max(self._at, int(record['ts']))
         for f in self._fns.values():
             f.prior = f.apply(float(record['value']), record['ts'])
+        self._md._collection._serve(Event.data, self._md)
     @trace.debug("DataCollection")
     def _subscribe(self):
         def cb(v, action):

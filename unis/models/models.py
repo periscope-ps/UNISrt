@@ -42,7 +42,8 @@ class Context(object):
     """
     
     def __init__(self, obj, runtime):
-        self._obj, self._rt = obj, runtime
+        self.setObject(obj)
+        self.setRuntime(runtime)
     def __getattribute__(self, n):
         if n not in ['_obj', '_rt'] and not hasattr(type(self), n):
             v = self._obj._getattribute(n, self._rt)
@@ -115,7 +116,7 @@ class Context(object):
     
         set the resource associated with the :class:`Context <unis.models.models.Context>`.
         """
-        self._obj = res
+        self._obj = res.getObject() if isinstance(res, Context) else res
 
 class _nodefault(object): pass
 class _unistype(object):
@@ -388,6 +389,18 @@ class Local(_unistype):
     def _get_reference(self, n):
         return self._rt_reference
     @trace.info("Local")
+    def items(self, ctx=None):
+        """
+        :returns: key,value tuple
+        
+        Returns a key,value pair for each property stored in the resource.
+        """
+        for k,v in self.__dict__.items():
+            if isinstance(v, (list, dict)):
+                yield (k, self._lift(v, self._get_reference(k), ctx, False))
+            else:
+                yield (k, v)
+    @trace.info("Local")
     def to_JSON(self, ctx, top):
         """
         :param ctx: Context of the current operation.
@@ -424,7 +437,12 @@ class Local(_unistype):
 
 class _metacontextcheck(type):
     def __instancecheck__(self, other):
-        other = other.getObject() if hasattr(other, 'getObject') else other
+        if not hasattr(other, '_getattribute'):
+            if hasattr(other, 'getObject'):
+                other = other.getObject()
+            else:
+                return False
+        other = other if hasattr(other, '_getattribute') else other.getObject()
         return super(_metacontextcheck, self).__instancecheck__(other)
 class UnisObject(_unistype, metaclass=_metacontextcheck):
     """
@@ -455,7 +473,7 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
         super(UnisObject, self)._setattr(n, v, ctx)
     @trace.debug("UnisObject")
     def _update(self, ref, ctx):
-        if ref in self._rt_remote and ctx and self._rt_live:
+        if ref in self._rt_remote and self._rt_collection and ctx and self._rt_live:
             self._rt_collection.update(self)
             ctx._update(Context(self, ctx))
     @trace.debug("UnisObject")
@@ -575,6 +593,19 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
         to construct its type.
         """
         jsonschema.validate(self.to_JSON(ctx), self._rt_schema, resolver=self._rt_resolver)
+
+    @trace.info("UnisObject")
+    def items(self, ctx=None):
+        """
+        :returns: key,value tuple
+        
+        Returns a key,value pair for each property stored in the resource.
+        """
+        for k,v in self.__dict__.items():
+            if isinstance(v, (list, dict)):
+                yield (k, self._lift(v, self._get_reference(k), ctx, False))
+            else:
+                yield (k, v)
     @trace.info("UnisObject")
     def to_JSON(self, ctx=None, top=True):
         """
@@ -645,7 +676,7 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
         d = self.to_JSON(ctx)
         d.update(**{'selfRef': '', 'id': ''})
         model = type(self)
-        return Context(model(d), ctx)
+        return Context(model(d), None)
     
     @trace.none
     def __repr__(self):
@@ -671,7 +702,7 @@ def _schemaFactory(schema, n, tys, raw=False):
                 tys = {'null': None, 'string': "", 'boolean': False, 'number': 0, 'integer': 0, 'object': {}, 'array': []}
                 return v.get('default', tys[v.get('type', 'null')])
             _props = lambda s: {k:_value(v) for k,v in s.get('properties', {}).items()}
-            cls.names, cls._rt_defaults = set(), {}
+            cls.names, cls._rt_defaults, cls.ts = set(), {}, 0
             super(_jsonMeta, cls).__init__(name, bases, attrs)
             cls.names.add(n)
             cls._rt_defaults.update({k:v for k,v in _props(schema).items()})

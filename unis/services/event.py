@@ -9,6 +9,20 @@ def _reg(events):
     return _wrapper
 
 
+def data_event():
+    """
+    Decorator that associates a :class:`RuntimeService <unis.services.abstract.RuntimeService>` function with data
+    modifications.  The decorated function will be registered as a callback with the collection.
+    
+    Decorated function invoked on when measurements change.
+    
+        **Parameters:**
+        
+        * **resource:** :class:`UnisObject <unis.models.models.UnisObject>` invoking the event.
+    
+    """
+    return _reg([Event("metadata", "data")])
+
 def postflush_event(cols):
     """
     :param cols: Name of the :class:`UnisCollection <unis.models.lists.UnisCollection>` associated with the event.
