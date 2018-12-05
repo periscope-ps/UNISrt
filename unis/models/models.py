@@ -130,7 +130,8 @@ class _unistype(object):
     def __getattribute__(self, n):
         if not hasattr(type(self), n):
             if n in self._rt_restricted:
-                return self._getattribute(n, None)
+                v = self._getattribute(n, None)
+                return v._rt_raw if isinstance(v, _unistype) else v
             raise NotImplementedError # This is for debugging purposes, this line should never be reached
         return super(_unistype, self).__getattribute__(n)
     @trace.debug("unistype")
@@ -304,8 +305,8 @@ class List(_unistype):
         where ``f`` holds True.  This function takes the same style predicate as
         :meth:`UnisCollection.where <unis.models.lists.UnisCollection.where>`.
         """
-        if isinstance(pred, types.FunctionType):
-            return (v for v in filter(pred, self._rt_ls))
+        if isinstance(f, types.FunctionType):
+            return (v for v in filter(f, self._rt_ls))
         else:
             ops = {
                 "gt": lambda b: lambda a: type(a) is type(b) and a > b,
