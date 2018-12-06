@@ -131,7 +131,7 @@ class _unistype(object):
         if not hasattr(type(self), n):
             raise NotImplementedError # This is for debugging purposes, this line should never be reached
         v = super(_unistype, self).__getattribute__(n)
-        return v._rt_raw if isinstance(v, _unistype) else v
+        return v._rt_raw if isinstance(v, Primitive) else v
     @trace.debug("unistype")
     def _getattribute(self, n, ctx, default=_nodefault()):
         try:
