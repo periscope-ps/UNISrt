@@ -128,7 +128,7 @@ class _unistype(object):
         self._rt_reference, self._rt_raw, = ref, self
     
     def __getattribute__(self, n):
-        if not hasattr(type(self), n):
+        if not hasattr(type(self), n) and n not in self._rt_restricted:
             raise NotImplementedError # This is for debugging purposes, this line should never be reached
         v = super(_unistype, self).__getattribute__(n)
         return v._rt_raw if isinstance(v, Primitive) else v
