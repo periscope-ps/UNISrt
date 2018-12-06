@@ -12,6 +12,9 @@ class UnisReferenceError(UnisError):
     def __init__(self, msg, hrefs):
         super(UnisReferenceError, self).__init__(msg)
         self.hrefs = hrefs
+    def __str__(self):
+        return super().__str__() + ": " + str(self.hrefs)
+    
 class ConnectionError(UnisError):
     """
     Exception thrown when the runtime fails to connect to
