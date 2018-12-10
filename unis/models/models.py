@@ -5,7 +5,7 @@ import jsonschema
 import os
 import re
 import requests
-import time
+import time, types
 
 from lace.logging import trace
 from urllib.parse import urlparse
