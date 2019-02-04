@@ -351,8 +351,7 @@ class List(_unistype):
         Merges two :class:`Lists <unis.models.models.List>`, the passed in instance overwrites
         the calling instance where conflicts occur.
         """
-        for v in other._rt_ls:
-            self._rt_ls.append(v)
+        self._rt_ls = other._rt_ls
     
     @trace.debug("List")
     def _iter(self, ctx):
@@ -363,10 +362,8 @@ class List(_unistype):
         return len(self._rt_ls)
     @trace.debug("List")
     def __contains__(self, v, ctx):
-        v = v.to_JSON(ctx, False) if isinstance(v, _unistype) else v
-        def t(x):
-            return v==x.to_JSON(ctx, False) if isinstance(x, _unistype) else v==x
-        return any([t(x) for x in self._rt_ls])
+        if isinstance(v, Context): v = v.getObject()
+        return v in [self._lift(x, self._rt_reference, ctx) for x in self._rt_ls]
     @trace.none
     def __repr__(self):
         return "<unis.List {}>".format(self._rt_ls.__repr__())
