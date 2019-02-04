@@ -299,7 +299,7 @@ class UnisClient(metaclass=_SingletonOnUID):
         self._virtual = kwargs.get('virtual', False)
         asyncio.get_event_loop().run_in_executor(None, self.loop.run_forever)
         self._url, self._verify, self._ssl = url, kwargs.get("verify", False), kwargs.get("ssl")
-        self._channels = defaultdict(list)
+        self._channels, self._lock = defaultdict(list), True
         
     @property
     def virtual(self):
@@ -340,8 +340,10 @@ class UnisClient(metaclass=_SingletonOnUID):
                 try:
                     fut = ws.connect(ref, loop=loop, ssl=self._ssl)
                     self._socket = await asyncio.wait_for(fut, timeout=1, loop=loop)
+                    self._lock = True
                     for col in self._channels.keys():
                         await self._socket.send(json.dumps({'query':{}, 'resourceType': col}))
+                    self._lock = False
                 except OSError:
                     import time
                     msg = "[{}]No websocket connection, retrying...".format(urlparse(self._url).netloc)
@@ -481,8 +483,11 @@ class UnisClient(metaclass=_SingletonOnUID):
         """
         async def _add_channel():
             await self._socket.send(json.dumps({'query':{}, 'resourceType': col}))
+
+        while self._lock: await asyncio.sleep(0)
+        if col not in self._channels:
+            asyncio.run_coroutine_threadsafe(_add_channel(), self.loop)
         self._channels[col].append(cb)
-        asyncio.run_coroutine_threadsafe(_add_channel(), self.loop)
         return []
     
     @trace.debug("UnisClient")

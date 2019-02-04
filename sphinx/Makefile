@@ -3,9 +3,9 @@
 
 # You can set these variables from the command line.
 SPHINXOPTS    =
-SPHINXBUILD   = python /usr/bin/sphinx-build
+SPHINXBUILD   = sphinx-build
 PAPER         =
-BUILDDIR      = _build
+BUILDDIR      = _build/$(RT_VERSION)
 
 # Internal variables.
 PAPEROPT_a4     = -D latex_paper_size=a4

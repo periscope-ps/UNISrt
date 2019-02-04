@@ -82,7 +82,7 @@ class ObjectLayer(object):
             new_sources = [{'url': r, 'default': False, 'enabled': True} for r in e.hrefs]
             self.addSources(new_sources)
             return self._cache(col).get([href])
-                
+    
     
     @trace.info("OAL")
     def flush(self):
