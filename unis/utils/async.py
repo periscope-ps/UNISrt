@@ -19,7 +19,8 @@ def make_async(coro, *args, **kwargs):
         fut = asyncio.run_coroutine_threadsafe(_mock(), new_loop)
         fut.add_done_callback(_complete)
         result = fut.result()
-        new_loop.close()
+        if not new_loop.is_running():
+            new_loop.close()
         return result
     else:
         return loop.run_until_complete(coro(*args, **kwargs))
