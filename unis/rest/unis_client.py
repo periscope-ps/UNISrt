@@ -272,7 +272,7 @@ class _SingletonOnUID(type):
         try:
             uuid = cls.fqdns[url.netloc]
         except UnisReferenceError:
-            uuid = cls.get_uuid(authority)
+            cls.fqdns[url.netloc] = uuid = cls.get_uuid(authority)
             if uuid not in cls.instances:
                 raise
         return CID(uuid)
