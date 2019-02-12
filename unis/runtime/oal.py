@@ -128,7 +128,10 @@ class ObjectLayer(object):
                 self._cache(col).post_flush(items)
                 for r in items:
                     r = r if isinstance(r, Context) else Context(r, self)
-                    resp = next(o for o in response if o['id'] == r.id)
+                    try:
+                        resp = next(o for o in response if o['id'] == r.id)
+                    except StopIteration:
+                        continue
                     r.__dict__["selfRef"] = resp["selfRef"]
                     self._cache(col).updateIndex(r)
                     self._pending.remove(r)

@@ -2,6 +2,7 @@ import asyncio, requests, socket, websockets as ws
 import copy, itertools, json
 
 from aiohttp import ClientSession, ClientResponse
+from aiohttp.client_exceptions import ClientConnectionError
 from collections import defaultdict
 from lace.logging import trace
 from lace.logging import getLogger
@@ -379,9 +380,13 @@ class UnisClient(metaclass=_SingletonOnUID):
         :type **kwargs: Any
         :rtype: List[Dict[str, Any]]
         """
-        async with fn(*args, verify_ssl=self._verify, ssl_context=self._ssl,
-                      timeout=10, **kwargs) as resp:
-            return await self._check_response(resp)
+        try:
+            async with fn(*args, verify_ssl=self._verify, ssl_context=self._ssl,
+                          timeout=10, **kwargs) as resp:
+                return await self._check_response(resp)
+        except (asyncio.TimeoutError, ClientConnectionError):
+            getLogger("unisrt").warn("[{}] No connection to instance, deferring {}".format(args[0], fn.__name__.upper()))
+            return []
     
     @trace.info("UnisClient")
     def connect(self):
