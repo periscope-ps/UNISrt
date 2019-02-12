@@ -10,7 +10,7 @@ import time, types
 from lace.logging import trace
 from urllib.parse import urlparse
 
-from unis.exceptions import UnisReferenceError
+from unis.exceptions import UnisReferenceError, UnisAttributeError
 from unis.rest import UnisClient
 from unis.settings import SCHEMA_CACHE_DIR
 from unis.utils import async, Events
@@ -136,10 +136,10 @@ class _unistype(object):
     def _getattribute(self, n, ctx, default=_nodefault()):
         try:
             v = super(_unistype, self).__getattribute__(n)
-        except AttributeError:
+        except AttributeError as e:
             v = default
             if isinstance(default, _nodefault):
-                raise
+                raise UnisAttributeError(e)
         if n != '__dict__' and n in self.__dict__:
             self.__dict__[n] = self._lift(v, self._get_reference(n), ctx)
             return self.__dict__[n]._rt_raw
@@ -304,7 +304,11 @@ class List(_unistype):
         :meth:`UnisCollection.where <unis.models.lists.UnisCollection.where>`.
         """
         if isinstance(f, types.FunctionType):
-            return (v for v in filter(f, self._rt_ls))
+            for v in self._rt_ls:
+                try:
+                    if f(Context(v, ctx)): yield Context(v, ctx)
+                except UnisAttributeError:
+                    pass
         else:
             ops = {
                 "gt": lambda b: lambda a: type(a) is type(b) and a > b,
@@ -316,7 +320,7 @@ class List(_unistype):
             f = [(k,ops[k](v)) for k,v in f.items()]
             def _check(x, k, op):
                 return isinstance(x, _unistype) and hasattr(x, k) and op(getattr(x, k))
-            return (self._lift(x, self._rt_reference, ctx) for x in self if all([_check(x,*v) for v in f]))
+            return (Context(self._lift(x, self._rt_reference, ctx), ctx) for x in self if all([_check(x,*v) for v in f]))
     
     @trace.debug("List")
     def _get_reference(self, n):

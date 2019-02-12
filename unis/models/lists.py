@@ -7,7 +7,7 @@ from collections import defaultdict, namedtuple
 from lace.logging import trace
 from urllib.parse import urlparse
 
-from unis.exceptions import UnisReferenceError, CollectionIndexError
+from unis.exceptions import UnisReferenceError, CollectionIndexError, UnisAttributeError
 from unis.models import schemaLoader
 from unis.models.models import Context as oContext
 from unis.rest import UnisProxy, UnisClient
@@ -288,8 +288,11 @@ class UnisCollection(object):
         }
         self._complete_cache()
         if isinstance(pred, types.FunctionType):
-            for v in filter(lambda x: pred(oContext(x, ctx)), self._cache):
-                yield v
+            for v in self._cache:
+                try:
+                    if pred(oContext(v, ctx)): yield v
+                except UnisAttributeError:
+                    pass
         else:
             non_index = {}
             subset = set(range(self._cache.full_length()))

@@ -3,6 +3,12 @@ class UnisError(Exception):
     Base class for all Runtime exceptions.
     """
     pass
+class UnisAttributeError(AttributeError, UnisError):
+    """
+    Exception thrown when querying an attribute that does not
+    exist in a resource.
+    """
+    pass
 class UnisReferenceError(UnisError):
     """
     Exception thrown when the runtime attempts to resolve an
