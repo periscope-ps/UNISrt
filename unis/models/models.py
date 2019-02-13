@@ -531,7 +531,28 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
         :param str publish_to: Data store in which to insert the resource.
         :param ctx: Context of the current operation.
         
+        .. deprecated:: 1.1
+          Use :meth:`track` instead.
+        
         ``commit`` stages the object to be inserted into a remote data store.
+        If the object is already a member of an instance, this function does
+        nothing.  Like any modification to the remote data stores, this function's
+        behavior is dependent of the state of the :class:`Runtime's <unis.runtime.runtime.Runtime>`
+        ``defer_update`` setting.
+        
+        If the calling :class:`Runtime <unis.runtime.runtime.Runtime>` is in ``deferred_mode``, the
+        :class:`UnisObject <unis.models.models.UnisObject>` will only be staged and sent to the remote
+        instance only after a call the :meth:`ObjectLayer.flush <unis.runtime.oal.ObjectLayer>`.  In
+        ``immediate_mode`` the resource will be dispatched immediately.
+        """
+        return track(publish_to, ctx)
+    @trace.info("UnisObject")
+    def track(self, publish_to=None, ctx=None):
+        """
+        :param str publish_to: Data store in which to insert the resource.
+        :param ctx: Context of the current operation.
+        
+        ``track`` stages the object to be inserted into a remote data store.
         If the object is already a member of an instance, this function does
         nothing.  Like any modification to the remote data stores, this function's
         behavior is dependent of the state of the :class:`Runtime's <unis.runtime.runtime.Runtime>`

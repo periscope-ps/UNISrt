@@ -1,0 +1,9 @@
+{% extends "!layout.html" %}
+{% block document %}
+<p> Unis Runtime » <select onchange="location = this.value">
+    <option value="../1.0/index.html">1.2</option>
+    <option value="../2.0/index.html">2.0</option>
+  </select>
+</p>
+{{ super() }}
+{% endblock %}

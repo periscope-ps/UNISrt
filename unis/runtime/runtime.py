@@ -155,10 +155,11 @@ class Runtime(object):
         return [x.name for x in self._oal._cache.values()]
         
     @trace.info("Runtime")
-    def insert(self, resource, commit=False, publish_to=None):
+    def insert(self, resource, commit=False, publish_to=None, track=False):
         """
         :param resource: Resource to be added to the runtime for tracking.
-        :param bool commit: (optional) Indicates whether the resource should be marked for insertion into a remote data store. Default ``False``.
+        :param bool commit: (optional) Indicates whether the resource should be marked for insertion into a remote data store. Default ``False``. **Depreciated in version 1.1**
+        :param bool track: (optional) Indicates whether the resource should be marked for insertion into a remote data store. Default ``False``. Alias for commit.
         :param bool publish_to: (optional) If commit is ``True``, this indicates which remote data store to commit to.  If not provided, 
         :type resource: :class:`UnisObject <unis.models.models.UnisObject>`
         :return: :class:`UnisObject <unis.models.models.UnisObject>` the default store from the :class:`Runtime <unis.runtime.runtime.Runtime>` settings.
@@ -171,7 +172,7 @@ class Runtime(object):
         to a remote data store.  In ``immediate_mode``, the resource will be sent to the data store at this point.  In ``deferred_mode`` this will not take
         place until :meth:`flush <unis.runtime.oal.OAL.flush>` is called.
         """
-        if commit:
+        if commit or track:
             self._oal._insert(resource).commit(publish_to=publish_to)
             return resource
         return self._oal._insert(resource)

@@ -1,8 +1,13 @@
 {% extends "!layout.html" %}
 {% block document %}
 <p> Unis Runtime » <select onchange="location.href = this.value">
-    <option value="/1.0/index.html">1.2</option>
-    <option value="/2.0/index.html">2.0</option>
+    {%- for version in VERSIONS %}
+    {%- if VERSION == version -%}
+    <option value="/doc/unisrt/{{ version }}/index.html" selected>{{ version }}</option>
+    {%- else -%}
+    <option value="/doc/unisrt/{{ version }}/index.html">{{ version }}</option>
+    {% endif %}
+    {%- endfor %}
   </select>
 </p>
 {{ super() }}
