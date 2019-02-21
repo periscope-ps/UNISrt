@@ -173,7 +173,7 @@ class ObjectLayer(object):
         except KeyError:
             raise ValueError("No schema in dict, cannot continue")
             
-        res.id = res.id or str(uuid.uuid4())
+        res.getObject().__dict__['id'] = res.id or str(uuid.uuid4())
         res.setRuntime(self)
         res.setObject(self._cache(self.getModel(res.names)).append(res.getObject()))
         return res

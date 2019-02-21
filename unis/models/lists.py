@@ -41,6 +41,8 @@ class UnisCollection(object):
             return self._obj.__getattribute__(n)
         def __getitem__(self, i):
             return oContext(self._obj.__getitem__(i), self._rt)
+        def __setitem__(self, i, v):
+            return self._obj.__setitem__(i, v)
         def where(self, pred):
             for v in self._obj.where(pred, self._rt):
                 yield oContext(v, self._rt)

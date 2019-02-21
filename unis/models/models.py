@@ -137,9 +137,9 @@ class _unistype(object):
         try:
             v = super(_unistype, self).__getattribute__(n)
         except AttributeError as e:
-            v = default
             if isinstance(default, _nodefault):
                 raise UnisAttributeError(e)
+            v = default
         if n != '__dict__' and n in self.__dict__:
             self.__dict__[n] = self._lift(v, self._get_reference(n), ctx)
             return self.__dict__[n]._rt_raw
@@ -169,6 +169,10 @@ class _unistype(object):
     
     @trace.debug("unistype")
     def _lift(self, v, ref, ctx, remote=True):
+        class _localdict(dict):
+            @property
+            def _rt_raw(self): return self
+            
         v = v.getObject() if isinstance(v, Context) else v
         if isinstance(v, _unistype):
             return v
@@ -177,7 +181,7 @@ class _unistype(object):
                 if remote and ctx:
                     return ctx.insert(v) if "$schema" in v else ctx.find(v['href'])[0]
                 else:
-                    return v
+                    return _localdict(v)
             else:
                 v =  Local(v, ref)
         elif isinstance(v, list):
@@ -437,13 +441,10 @@ class Local(_unistype):
 
 class _metacontextcheck(type):
     def __instancecheck__(self, other):
-        if not hasattr(other, '_getattribute'):
-            if hasattr(other, 'getObject'):
-                other = other.getObject()
-            else:
-                return False
-        other = other if hasattr(other, '_getattribute') else other.getObject()
-        return super(_metacontextcheck, self).__instancecheck__(other)
+        try:
+            return super(_metacontextcheck, self).__instancecheck__(other.getObject())
+        except AttributeError:
+            return super(_metacontextcheck, self).__instancecheck__(other)
 class UnisObject(_unistype, metaclass=_metacontextcheck):
     """
     :param dict v: (optional) A ``dict`` containing all attribute names and values in the resource.
@@ -457,7 +458,7 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
     the data store on update.
     """
     _rt_remote, _rt_collection = _attr(), _attr()
-    _rt_restricted, _rt_live = ["ts", "selfRef"], False
+    _rt_restricted, _rt_live = ["id", "ts", "selfRef"], False
     _rt_callback = lambda s,x,e: x
     @trace.info("UnisObject")
     def __init__(self, v=None, ref=None):
@@ -545,7 +546,7 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
         instance only after a call the :meth:`ObjectLayer.flush <unis.runtime.oal.ObjectLayer>`.  In
         ``immediate_mode`` the resource will be dispatched immediately.
         """
-        return track(publish_to, ctx)
+        return self.track(publish_to, ctx)
     @trace.info("UnisObject")
     def track(self, publish_to=None, ctx=None):
         """
@@ -667,22 +668,23 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
         Merges two :class:`UnisObject <unis.models.models.UnisObject>`, the instance with the highest
         timestamp takes priority.
         """
-        a, b = (self, other) if self.ts < other.ts else (other, self)
-        for k,v in b.__dict__.items():
-            if k in a.__dict__:
+        if self.ts > other.ts: return
+        other = other._obj if isinstance(other, Context) else other
+        for k,v in other.__dict__.items():
+            if k in self.__dict__:
                 if isinstance(v, (list, dict)):
-                    v = a._lift(v, a._get_reference(k), ctx, False)
-                if isinstance(a.__dict__[k], _unistype):
+                    v = self._lift(v, self._get_reference(k), ctx, False)
+                if isinstance(self.__dict__[k], _unistype):
                     if isinstance(v, dict):
-                        a.__dict__[k] = v if v.get('selfRef', '') != a.selfRef else a.__dict__[k]
+                        self.__dict__[k] = v if v.get('selfRef', '') != self.selfRef else self.__dict__[k]
                     else:
-                        a.__dict__[k].merge(v, ctx)
+                        self.__dict__[k].merge(v, ctx)
                 else:
-                    a.__dict__[k] = v
+                    self.__dict__[k] = v
             else:
-                a.__dict__[k] = v
-        for n in b._rt_remote:
-            a._rt_remote.add(n)
+                self.__dict__[k] = v
+        for n in other._rt_remote:
+            self._rt_remote.add(n)
     
     @trace.info("UnisObject")
     def clone(self, ctx):
@@ -727,6 +729,7 @@ def _schemaFactory(schema, n, tys, raw=False):
             super(_jsonMeta, cls).__init__(name, bases, attrs)
             cls.names.add(n)
             cls._rt_defaults.update({k:v for k,v in _props(schema).items()})
+            if "$schema" in cls._rt_defaults: del cls._rt_defaults['$schema']
             setattr(cls, '$schema', schema['id'])
             cls._rt_schema, cls._rt_resolver = schema, jsonschema.RefResolver(schema['id'], schema, _CACHE)
             cls.__doc__ = schema.get('description', None)

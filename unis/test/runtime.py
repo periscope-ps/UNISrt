@@ -29,40 +29,26 @@ import unis.runtime.oal
 from unis.models import Node
 from unis.settings import SCHEMAS
 from unis.services import RuntimeService
+from unis.services.event import new_event
 from unis.runtime.oal import ObjectLayer
 from unis.runtime import Runtime
-
-class _RuntimeSettings(object):
-    def __init__(self):
-        self.settings = { "inline": False, "defer_update": False, "auto_sync": True, "subscribe": False, "unis": [ { "url": "http://localhost:8888", "ssl": False, "verify": None } ] }
-
-rts = _RuntimeSettings()
 
 class _TestService(RuntimeService):
     targets = [ Node ]
 
+    @new_event(["nodes", "links"])
+    def foo(self, v):
+        pass
+
+@patch("unis.runtime.oal")
 class UnisServiceTest(unittest.TestCase):
-    @patch.object(unis.runtime.oal.UnisProxy, 'getResources', return_value = [{ "href": "#/nodes", "targetschema": { "items": { "href": SCHEMAS["Node"] } } },
-                                                                               { "href": "#/links", "targetschema": { "items": { "href": SCHEMAS["Link"] } } }])
-    @patch.object(unis.runtime.oal.UnisProxy, 'post', return_value = {"selfRef": "http://localhost:8888/nodes/test", "id": "1", "v": 1})
-    @patch.object(unis.runtime.oal.UnisCollection, 'updateIndex')
-    def test_attach_service(self, ui_mock, p_mock, gr_mock):
-        rt = Runtime()
-        service = _TestService([Node])
-        rt.addService(service)
-        
-        self.assertTrue(service in rt.nodes._services)
-        self.assertFalse(service in rt.links._services)
-        
-    @patch.object(unis.runtime.oal.UnisProxy, 'getResources', return_value = [{ "href": "#/nodes", "targetschema": { "items": { "href": SCHEMAS["Node"] } } }])
-    @patch.object(unis.runtime.oal.UnisProxy, 'post', return_value = {"selfRef": "http://localhost:8888/nodes/test", "id": "1", "v": 1})
-    @patch.object(unis.runtime.oal.UnisCollection, 'updateIndex')    
-    def test_new_service_call(self, ui_mock, p_mock, gr_mock):
-        rt = Runtime(defer_update=True)
-        service = _TestService()
-        rt.addService(service)
-        n = Node({"selfRef": "http://localhost:8888/nodes/test", "id": "1", "v": 1})
-        n.setCollection("nodes")
+    def test_add_service_by_name(self, oal):
+        rt = Runtime("test")
+        rt.addService("unis.services.graph.UnisGrapher")
+                
+    def test_add_service_by_class(self, ui_mock, p_mock, gr_mock):
+        rt = Runtime("test")
+        rt.addService(_TestService)
         
 class RuntimeTest(unittest.TestCase):
     @patch.object(unis.runtime.oal.UnisProxy, 'getResources', return_value = [{ "href": "#/nodes", "targetschema": { "items": { "href": SCHEMAS["Node"] } } }])

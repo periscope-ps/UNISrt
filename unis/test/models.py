@@ -23,31 +23,34 @@ import unittest
 import unittest.mock as mock
 from unittest.mock import MagicMock, Mock
 
-from unis.settings import SCHEMAS
-from unis.models import Node, Exnode, Extent
-from unis.models.models import _CACHE, UnisObject, UnisList, schemaLoader, LocalObject
+from unis.settings import SCHEMAS, DEFAULT_CONFIG
+from unis.models import Node, Exnode, Extent, schemaLoader
+from unis.models.models import _CACHE, UnisObject, List, Local, _schemaFactory, Context
 from unis.models.lists import UnisCollection
+
+_emptyschema = { 'name': 'blank', 'id': 'blank_schema' }
+EmptyObject = _schemaFactory(_emptyschema, 'EmptyObject', [type(UnisObject)])('EmptyObject', tuple([UnisObject]), {})
 
 class UnisObjectTest(unittest.TestCase):
     def test_init(self):
         # Arrange
         test_data = {"key1": "value1", "key2": "value2", "$key3": "value3"}
         # Act
-        obj1 = UnisObject()
-        obj2 = UnisObject(src=test_data)
+        obj1 = EmptyObject()
+        obj2 = EmptyObject(test_data)
+        schema = {'$schema': 'blank_schema'}
         # Assert
         self.assertIsInstance(obj1, UnisObject)
         self.assertIsInstance(obj2, UnisObject)
-        self.assertEqual(obj1.to_JSON(), {})
-        self.assertEqual(obj2.to_JSON(), test_data)
-        self.assertEqual(obj2.to_JSON(include_virtuals=True), test_data)
+        self.assertEqual(obj1.to_JSON(), schema)
+        self.assertEqual(obj2.to_JSON(), {**test_data, **schema})
         for key, value in test_data.items():
             self.assertTrue(hasattr(obj2, key))
             self.assertEqual(getattr(obj2, key), value)
     
     def test_virtual(self):
         # Arrange
-        obj1 = UnisObject()
+        obj1 = EmptyObject()
         
         # Act
         obj1.v = 10
@@ -59,7 +62,7 @@ class UnisObjectTest(unittest.TestCase):
         
     def test_extendSchema(self):
         # Arrange
-        obj1 = UnisObject()
+        obj1 = EmptyObject()
         obj1.v = 10
         
         # Act
@@ -68,11 +71,11 @@ class UnisObjectTest(unittest.TestCase):
         # Assert
         self.assertTrue(hasattr(obj1, "v"))
         self.assertEqual(getattr(obj1, "v"), 10)
-        self.assertEqual(obj1.to_JSON(), {"v": 10})
+        self.assertTrue("v" in obj1.to_JSON())
         
     def test_extendSchema_value(self):
         # Arrange
-        obj1 = UnisObject()
+        obj1 = EmptyObject()
         
         # Act
         obj1.extendSchema("v", 10)
@@ -80,38 +83,31 @@ class UnisObjectTest(unittest.TestCase):
         # Assert
         self.assertTrue(hasattr(obj1, "v"))
         self.assertEqual(getattr(obj1, "v"), 10)
-        self.assertEqual(obj1.to_JSON(), {"v": 10})
-        
-    def test_remote(self):
-        # Arrange
-        obj1 = UnisObject()
-        obj2 = UnisObject(runtime=MagicMock(), local_only=False)
-        
-        # Assert
-        self.assertFalse(obj1.remoteObject())
-        self.assertTrue(obj2.remoteObject())
+        self.assertTrue("v" in obj1.to_JSON())
+        self.assertEqual(obj1.to_JSON()['v'], 10)
         
     def test_inner_list(self):
         # Arrange
-        obj1 = UnisObject({"v": ["1", "2", "3"]})
+        obj1 = EmptyObject({"v": ["1", "2", "3"]})
         
         # Act
         vs = obj1.v
-        
+
         # Assert
-        self.assertIsInstance(vs, UnisList)
-        self.assertEqual(vs.to_JSON(include_virtuals=True), ["1", "2", "3"])
-        self.assertEqual(vs._parent, obj1)
+        self.assertIsInstance(vs, Context)
+        self.assertIsInstance(vs.getObject(), List)
+        self.assertEqual(vs.to_JSON(top=False), ["1", "2", "3"])
     
     def test_inner_dict(self):
         # Arrange
-        obj1 = UnisObject({"v": { "a": "1" } })
+        obj1 = EmptyObject({"v": { "a": "1" } })
         
         # Act
         v = obj1.v
         
         # Assert
-        self.assertIsInstance(v, LocalObject)
+        self.assertIsInstance(v, Context)
+        self.assertIsInstance(v.getObject(), Local)
         self.assertTrue(hasattr(v, "a"))
         self.assertEqual(v.a, "1")
         
@@ -134,21 +130,20 @@ class NetworkResourceTest(unittest.TestCase):
     
     def test_init(self):
         node1 = Node()
-        node2 = Node(src=NetworkResourceTest.VALID_NODE)
+        node2 = Node(NetworkResourceTest.VALID_NODE)
         self.assertIsInstance(node1, Node)
         self.assertIsInstance(node2, Node)
         self.assertEqual(getattr(node1, '$schema'), SCHEMAS['Node'])
         self.assertEqual(getattr(node2, '$schema'), SCHEMAS['Node'])
-        self.assertEqual(node1._schema, _CACHE[SCHEMAS['Node']])
         
     def test_validate(self):
         from jsonschema.exceptions import ValidationError
         
-        good = Node(src=NetworkResourceTest.VALID_NODE)
-        bad  = Node(src=NetworkResourceTest.INVALID_NODE)
+        good = Node(NetworkResourceTest.VALID_NODE)
+        bad  = Node(NetworkResourceTest.INVALID_NODE)
         
-        self.assertEquals(good.validate(validate_id=True), None)
-        self.assertRaises(ValidationError, bad.validate, validate_id=True)
+        self.assertEquals(good.validate(), None)
+        self.assertRaises(ValidationError, bad.validate)
 
     def test_validate_on_change(self):
         from jsonschema.exceptions import ValidationError
@@ -166,47 +161,18 @@ class NetworkResourceTest(unittest.TestCase):
         self.assertEqual(good.name, "modified")
         self.assertRaises(ValidationError, f(bad))
         
-    def test_modify_runtime(self):
-        # Arrange
-        runtime = MagicMock()
-        good = Node({"id": "1", "ts": 1, "v": {} }, runtime=runtime, local_only=False)
-        inner = Node(runtime=runtime, local_only=False)
-        
-        # Act
-        good.v = inner
-        
-        # Assert
-        runtime.insert.assert_called_once_with(inner)
-        runtime.update.assert_called_once_with(good)
-            
-    def test_dict_resolve_insert_runtime(self):
-        # Arrange
-        runtime = MagicMock()
-        inner = { "$schema": "test", "val": 5, "id": "2" }
-        good = Node({"id": "1", "v": inner}, runtime=runtime, local_only=False)
-        
-        # Act
-        v = good.v
-        
-        # Assert
-        runtime.insert.assert_called_once_with(inner)
-        
-    def test_dict_resolve_find_runtime(self):
-        # Arrange
-        runtime = MagicMock()
-        inner = { "href": "test" }
-        good = Node({"id": "1", "v": inner}, runtime=runtime, local_only=False)
-        
-        # Act
-        v = good.v
-        
-        # Assert
-        runtime.find.assert_called_once_with("test")
-        
 class CollectionTest(unittest.TestCase):
+    def setUp(self):
+        UnisCollection.collections = {}
+        
+    def runtime(self):
+        rt = MagicMock()
+        rt.settings = { "namespace": "ut", **DEFAULT_CONFIG }
+        return rt
+    
     def test_init(self):
         # Act
-        col = UnisCollection("", "", Node, MagicMock())
+        col = UnisCollection.get_collection("", Node, self.runtime())
         
         # Assert
         self.assertEqual(len(col), 0)
@@ -215,106 +181,83 @@ class CollectionTest(unittest.TestCase):
 
     def test_append(self):
         # Arrange
-        rt = MagicMock()
-        col = UnisCollection("", "", Node, rt)
+        rt = self.runtime()
+        col = UnisCollection.get_collection("", Node, rt)
         n1 = Node({"id": "1"})
         n2 = Node({"id": "2"})
         
         # Act
-        col.append(n1)
-        col.append(n2)
+        col.append(n1.getObject())
+        col.append(n2.getObject())
         
         # Assert
         self.assertEqual(len(col), 2)
-        self.assertEqual(n1._runtime, rt)
-        self.assertEqual(n2._runtime, rt)
         self.assertIn("id", col._indices)
-        self.assertEqual(col._indices["id"], [("1", 0), ("2", 1)])
-        self.assertEqual(col._rangeset, set([0, 1]))
+        self.assertEqual(col._indices['id'].index('1'), 0)
+        self.assertEqual(col._indices['id'].index('2'), 1)
         
     def test_append_duplicate(self):
         # Arrange
-        rt = MagicMock()
-        col = UnisCollection("", "", Node, rt, auto_sync=False)
+        rt = self.runtime()
+        col = UnisCollection.get_collection("", Node, rt)
         n1 = Node({"id": "1", "v": 1})
         n2 = Node({"id": "1", "v": 2})
         
         # Act
-        col.append(n1)
-        col.append(n2)
+        col.append(n1.getObject())
+        col.append(n2.getObject())
         
         # Assert
         self.assertEqual(len(col), 1)
-        self.assertEqual(col._indices["id"], [("1", 0)])
-        self.assertEqual(col._rangeset, set([0]))
+        self.assertEqual(col._indices['id'].index('1'), 0)
         self.assertEqual(col[0].v, 2)
-        self.assertEqual(n1._runtime, rt)
         
     def test_append_bad(self):
         # Arrange
-        rt = MagicMock()
-        col = UnisCollection("", "", Node, rt)
+        rt = self.runtime()
+        col = UnisCollection.get_collection("", Node, rt)
         e1 = Exnode()
         
         # Assert
-        self.assertRaises(TypeError, col.append, e1)
+        self.assertRaises(TypeError, col.append, e1.getObject())
         
     def test_setitem(self):
         # Arrange
-        rt = MagicMock()
-        col = UnisCollection("", "", Node, rt, auto_sync=False)
+        rt = self.runtime()
+        col = UnisCollection.get_collection("", Node, rt)
+        col.createIndex("v")
         n1 = Node({"id": "1", "v": 1})
         n2 = Node({"id": "1", "v": 2})
         
         # Act
-        col.append(n1)
+        col.append(n1.getObject())
         col[0] = n2
         
         # Assert
         self.assertEqual(len(col), 1)
-        self.assertEqual(col._indices["id"], [("1", 0)])
-        self.assertEqual(col._rangeset, set([0]))
+        self.assertEqual(col._indices['id'].index('1'), 0)
+        self.assertEqual(col._indices['v'].index(2), {0})
         self.assertEqual(col[0].v, 2)
-        
-    def test_setitem_bad_index(self):
-        def set_col():
-            col[0] = n2
-        
-        # Arrange
-        rt = MagicMock()
-        col = UnisCollection("", "", Node, rt, auto_sync=False)
-        n1 = Node({"id": "1", "v": 1})
-        n2 = Node({"id": "2", "v": 2})
-        
-        # Act
-        col.append(n1)
-        
-        # Assert
-        self.assertRaises(AttributeError, set_col)
-        self.assertEqual(col._indices["id"], [("1", 0)])
-        self.assertEqual(col._rangeset, set([0]))
-        self.assertEqual(col[0].v, 1)
         
     def test_iter(self):
         # Arrange
-        rt = MagicMock()
+        rt = self.runtime()
         rt._unis.get.return_value = []
-        col = UnisCollection("", "", Node, rt)
+        col = UnisCollection.get_collection("", Node, rt)
         
         # Act
         for i in range(100):
-            col.append(Node({"id": str(i)}))
+            col.append(Node({"id": str(i)}).getObject())
         
         # Assert
         for i, n in enumerate(col):
             self.assertEqual(int(n.id), i)
-        
-        self.assertEqual(rt._unis.subscribe.call_count, 1)
-        self.assertTrue(col._full)
+
+        self.assertEqual(len(col), 100)
     
     def tes_iter_remote(self):
         # Arrange
-        rt = MagicMock()
+        rt = self.runtime()
         rt._unis.get.return_value = [{"id": str(i)} for i in range(100)]
         col = UnisCollection("ref", "nodes", Node, rt)
         
@@ -330,47 +273,48 @@ class CollectionTest(unittest.TestCase):
     
     def test_create_index_before_insert(self):
         # Arrange
-        rt = MagicMock()
-        col = UnisCollection("", "", Node, rt)
+        rt = self.runtime()
+        col = UnisCollection.get_collection("", Node, rt)
+        v = [1, 5, 2]
         
         # Arrange
         col.createIndex("v")
-        col.append(Node({"id": "1", "v": 1}))
-        col.append(Node({"id": "2", "v": 5}))
-        col.append(Node({"id": "3", "v": 2}))
+        for i in range(len(v)):
+            col.append(Node({'id': str(i), 'v': v[i]}).getObject())
         
         # Assert
         self.assertIn("id", col._indices)
         self.assertIn("v", col._indices)
-        self.assertEqual(col._indices["id"], [("1", 0), ("2", 1), ("3", 2)])
-        self.assertEqual(col._indices["v"], [(1, 0), (2, 2), (5, 1)])
-        
+        for i in range(3):
+            self.assertEqual(col._indices['id'].index(str(i)), i)
+            self.assertEqual(col._indices['v'].index(v[i]), {i})
     
     def test_create_index_after_insert(self):
         # Arrange
-        rt = MagicMock()
-        col = UnisCollection("", "", Node, rt)
+        rt = self.runtime()
+        col = UnisCollection.get_collection("", Node, rt)
+        v = [1, 5, 2]
         
         # Arrange
-        col.append(Node({"id": "1", "v": 1}))
-        col.append(Node({"id": "2", "v": 5}))
-        col.append(Node({"id": "3", "v": 2}))
+        for i in range(len(v)):
+            col.append(Node({'id': str(i), 'v': v[i]}).getObject())
         col.createIndex("v")
         
         # Assert
         self.assertIn("id", col._indices)
         self.assertIn("v", col._indices)
-        self.assertEqual(col._indices["id"], [("1", 0), ("2", 1), ("3", 2)])
-        self.assertEqual(col._indices["v"], [(1, 0), (2, 2), (5, 1)])
+        for i in range(3):
+            self.assertEqual(col._indices['id'].index(str(i)), i)
+            self.assertEqual(col._indices['v'].index(v[i]), {i})
         
     def test_update_index(self):
         # Arrange
-        rt = MagicMock()
-        col = UnisCollection("", "", Node, rt, auto_sync=False)
+        rt = self.runtime()
+        col = UnisCollection.get_collection("", Node, rt)
         col.createIndex("v")
-        col.append(Node({"id": "1", "v": 1}))
-        col.append(Node({"id": "2", "v": 5}))
-        col.append(Node({"id": "3", "v": 2}))
+        col.append(Node({"id": "1", "v": 1}).getObject())
+        col.append(Node({"id": "2", "v": 5}).getObject())
+        col.append(Node({"id": "3", "v": 2}).getObject())
         
         # Act
         n = col[0]
@@ -380,20 +324,25 @@ class CollectionTest(unittest.TestCase):
         # Assert
         self.assertIn("id", col._indices)
         self.assertIn("v", col._indices)
-        self.assertEqual(col._indices["id"], [("1", 0), ("2", 1), ("3", 2)])
-        self.assertEqual(col._indices["v"], [(2, 2), (5, 1), (10, 0)])
+        self.assertEqual(col._indices['id'].index('1'), 0)
+        self.assertEqual(col._indices['id'].index('2'), 1)
+        self.assertEqual(col._indices['id'].index('3'), 2)
+        self.assertEqual(col._indices['v'].index(2), {2})
+        self.assertEqual(col._indices['v'].index(5), {1})
+        self.assertEqual(col._indices['v'].index(10), {0})
 
     def test_where_single_pre_init(self):
         # Arrange
-        rt = Mock()
+        rt = self.runtime()
         rt._unis.get.return_value = None
-        col = UnisCollection("", "", Node, rt)
-        col.append(Node({"id": "1", "v": 1}))
-        col.append(Node({"id": "2", "v": 2}))
-        col.append(Node({"id": "3", "v": 3}))
+        col = UnisCollection.get_collection("", Node, rt)
+        col.createIndex("v")
+        col.append(Node({"id": "1", "v": 1}).getObject())
+        col.append(Node({"id": "2", "v": 2}).getObject())
+        col.append(Node({"id": "3", "v": 3}).getObject())
         
         # Act
-        n = col.where({"id": "3"})
+        n = col.where({"v": 3})
         n = list(n)
         
         # Assert
@@ -403,15 +352,16 @@ class CollectionTest(unittest.TestCase):
         
     def test_where_lt_pre_init(self):
         # Arrange
-        rt = MagicMock()
+        rt = self.runtime()
         rt._unis.get.return_value = None
-        col = UnisCollection("", "", Node, rt)
+        col = UnisCollection.get_collection("", Node, rt)
+        col.createIndex("v")
         nodes = [Node({"id": "1", "v": 1}), Node({"id": "2", "v": 2}), Node({"id": "3", "v": 3})]
         for node in nodes:
-            col.append(node)
+            col.append(node.getObject())
         
         # Act
-        n = col.where({"id": { "lt": "3" }})
+        n = col.where({"v": { "lt": 3 }})
         n = [v for v in n]
         
         # Assert
@@ -422,15 +372,16 @@ class CollectionTest(unittest.TestCase):
         
     def test_where_le_pre_init(self):
         # Arrange
-        rt = MagicMock()
+        rt = self.runtime()
         rt._unis.get.return_value = None
-        col = UnisCollection("", "", Node, rt)
+        col = UnisCollection.get_collection("", Node, rt)
+        col.createIndex("v")
         nodes = [Node({"id": "1", "v": 1}), Node({"id": "2", "v": 2}), Node({"id": "3", "v": 3})]
         for node in nodes:
-            col.append(node)
+            col.append(node.getObject())
             
         # Act
-        n = col.where({"id": { "le": "3" }})
+        n = col.where({"v": { "le": 3 }})
         n = [v for v in n]
         
         # Assert
@@ -442,15 +393,16 @@ class CollectionTest(unittest.TestCase):
 
     def test_where_gt_pre_init(self):
         # Arrange
-        rt = MagicMock()
+        rt = self.runtime()
         rt._unis.get.return_value = None
-        col = UnisCollection("", "", Node, rt)
+        col = UnisCollection.get_collection("", Node, rt) 
+        col.createIndex("v")
         nodes = [Node({"id": "1", "v": 1}), Node({"id": "2", "v": 2}), Node({"id": "3", "v": 3})]
         for node in nodes:
-            col.append(node)
+            col.append(node.getObject())
         
         # Act
-        n = col.where({"id": { "gt": "1" }})
+        n = col.where({"v": { "gt": 1 }})
         n = [v for v in n]
         
         # Assert
@@ -461,16 +413,16 @@ class CollectionTest(unittest.TestCase):
         
     def test_where_ge_pre_init(self):
         # Arrange
-        rt = MagicMock()
+        rt = self.runtime()
         rt._unis.get.return_value = None
-        col = UnisCollection("", "", Node, rt)
+        col = UnisCollection.get_collection("", Node, rt)
+        col.createIndex("v")
         nodes = [Node({"id": "1", "v": 1}), Node({"id": "2", "v": 2}), Node({"id": "3", "v": 3})]
         for node in nodes:
-            col.append(node)
+            col.append(node.getObject())
         
         # Act
-        n = col.where({"id": { "ge": "1" }})
-        n = [v for v in n]
+        n = list(col.where({"v": {"ge": 1 } }))
         
         # Assert
         self.assertIsInstance(n, collections.Iterable)
@@ -481,176 +433,28 @@ class CollectionTest(unittest.TestCase):
 
     def test_where_multi_pre_init(self):
         # Arrange
-        rt = MagicMock()
-        rt._unis.get.return_value = None
-        col = UnisCollection("", "", Node, rt)
+        rt = self.runtime()
+        col = UnisCollection.get_collection("", Node, rt)
         nodes = [Node({"id": "1", "v": 1}), Node({"id": "2", "v": 2}), Node({"id": "3", "v": 3})]
         for node in nodes:
-            col.append(node)
+            col.append(node.getObject())
         
         # Act
-        n = col.where({"id": { "gt": "1" }, "v": { "lt": 3 }})
-        n = [v for v in n]
+        n = list(col.where({"id": "2", "v": { "lt": 3 }}))
         
         # Assert
         self.assertIsInstance(n, collections.Iterable)
         self.assertEqual(len(n), 1)
         self.assertIn(nodes[1], n)
         
-    def test_where_eq_index_post_init(self):
-        rt = MagicMock()
-        rt._unis.get.return_value = [{"$schema": SCHEMAS["Node"], "id": "1", "v": 1}, 
-                                     {"$schema": SCHEMAS["Node"], "id": "2", "v": 2}, 
-                                     {"$schema": SCHEMAS["Node"], "id": "3", "v": 3}]
-        col = UnisCollection("", "", Node, rt)
-        [n for n in col]
-        
-        # Act
-        n = col.where({"id": "1"})
-        n = [v for v in n]
-        
-        # Assert
-        self.assertIsInstance(n, collections.Iterable)
-        self.assertEqual(len(n), 1)
-        self.assertEqual(n[0].v, 1)
-        
-    def test_where_eq_no_index_post_init(self):
-        rt = MagicMock()
-        rt._unis.get.return_value = [{"$schema": SCHEMAS["Node"], "id": "1", "v": 1}, 
-                                     {"$schema": SCHEMAS["Node"], "id": "2", "v": 2}, 
-                                     {"$schema": SCHEMAS["Node"], "id": "3", "v": 3}]
-        col = UnisCollection("", "", Node, rt)
-        [n for n in col]
-        
-        # Act
-        n = col.where({"v": 1})
-        n = [v for v in n]
-        
-        # Assert
-        self.assertIsInstance(n, collections.Iterable)
-        self.assertEqual(len(n), 1)
-        self.assertEqual(n[0].v, 1)
-        
-    def test_where_lt_index_post_init(self):
-        rt = MagicMock()
-        rt._unis.get.return_value = [{"$schema": SCHEMAS["Node"], "id": "1", "v": 1}, 
-                                     {"$schema": SCHEMAS["Node"], "id": "2", "v": 2}, 
-                                     {"$schema": SCHEMAS["Node"], "id": "3", "v": 3}]
-        col = UnisCollection("", "", Node, rt)
-        [n for n in col]
-        
-        # Act
-        n = col.where({"id": {"lt": "3"}})
-        n = [v for v in n]
-        
-        # Assert
-        self.assertIsInstance(n, collections.Iterable)
-        self.assertEqual(len(n), 2)
-        self.assertIn(n[0].v, [1, 2])
-        self.assertIn(n[1].v, [1, 2])
-        self.assertFalse(n[1].v == n[0].v)
-
-    def test_where_le_index_post_init(self):
-        rt = MagicMock()
-        rt._unis.get.return_value = [{"$schema": SCHEMAS["Node"], "id": "1", "v": 1}, 
-                                     {"$schema": SCHEMAS["Node"], "id": "2", "v": 2}, 
-                                     {"$schema": SCHEMAS["Node"], "id": "3", "v": 3}]
-        col = UnisCollection("", "", Node, rt)
-        [n for n in col]
-        
-        # Act
-        n = col.where({"id": {"le": "3"}})
-        n = [v for v in n]
-        
-        # Assert
-        self.assertIsInstance(n, collections.Iterable)
-        self.assertEqual(len(n), 3)
-        self.assertIn(n[0].v, [1, 2, 3])
-        self.assertIn(n[1].v, [1, 2, 3])
-        self.assertIn(n[2].v, [1, 2, 3])
-        self.assertTrue(n[1] != n[0] and n[1] != n[2] and n[0] != n[2])
-
-    def test_where_gt_index_post_init(self):
-        rt = MagicMock()
-        rt._unis.get.return_value = [{"$schema": SCHEMAS["Node"], "id": "1", "v": 1}, 
-                                     {"$schema": SCHEMAS["Node"], "id": "2", "v": 2}, 
-                                     {"$schema": SCHEMAS["Node"], "id": "3", "v": 3}]
-        col = UnisCollection("", "", Node, rt)
-        [n for n in col]
-        
-        # Act
-        n = col.where({"id": {"gt": "1"}})
-        n = [v for v in n]
-        
-        # Assert
-        self.assertIsInstance(n, collections.Iterable)
-        self.assertEqual(len(n), 2)
-        self.assertIn(n[0].v, [1, 2, 3])
-        self.assertIn(n[1].v, [1, 2, 3])
-        self.assertTrue(n[1] != n[0])
-        
-    def test_where_ge_index_post_init(self):
-        rt = MagicMock()
-        rt._unis.get.return_value = [{"$schema": SCHEMAS["Node"], "id": "1", "v": 1}, 
-                                     {"$schema": SCHEMAS["Node"], "id": "2", "v": 2}, 
-                                     {"$schema": SCHEMAS["Node"], "id": "3", "v": 3}]
-        col = UnisCollection("", "", Node, rt)
-        [n for n in col]
-        
-        # Act
-        n = col.where({"id": {"ge": "2"}})
-        n = [v for v in n]
-        
-        # Assert
-        self.assertIsInstance(n, collections.Iterable)
-        self.assertEqual(len(n), 2)
-        self.assertIn(n[0].v, [1, 2, 3])
-        self.assertIn(n[1].v, [1, 2, 3])
-        self.assertTrue(n[1] != n[0])
-
-    def test_where_multi_index_post_init(self):
-        rt = MagicMock()
-        rt._unis.get.return_value = [{"$schema": SCHEMAS["Node"], "id": "1", "v": 1}, 
-                                     {"$schema": SCHEMAS["Node"], "id": "2", "v": 2}, 
-                                     {"$schema": SCHEMAS["Node"], "id": "3", "v": 3}]
-        col = UnisCollection("", "", Node, rt)
-        col.createIndex("v")
-        [n for n in col]
-        
-        # Act
-        n = col.where({"id": {"lt": "3"}, "v": {"gt": 1}})
-        n = [v for v in n]
-        
-        # Assert
-        self.assertIsInstance(n, collections.Iterable)
-        self.assertEqual(len(n), 1)
-        self.assertEqual(n[0].v, 2)
-        
-    def test_where_mixed_multi_index_post_init(self):
-        rt = MagicMock()
-        rt._unis.get.return_value = [{"$schema": SCHEMAS["Node"], "id": "1", "v": 1}, 
-                                     {"$schema": SCHEMAS["Node"], "id": "2", "v": 2}, 
-                                     {"$schema": SCHEMAS["Node"], "id": "3", "v": 3}]
-        col = UnisCollection("", "", Node, rt)
-        [n for n in col]
-        
-        # Act
-        n = col.where({"id": {"lt": "3"}, "v": {"gt": 1}})
-        n = [v for v in n]
-        
-        # Assert
-        self.assertIsInstance(n, collections.Iterable)
-        self.assertEqual(len(n), 1)
-        self.assertEqual(n[0].v, 2)
-    
     def test_where_func_pre_init(self):
         # Arrange
-        rt = MagicMock()
+        rt = self.runtime()
         rt._unis.get.return_value = None
-        col = UnisCollection("", "", Node, rt)
+        col = UnisCollection.get_collection("", Node, rt)
         nodes = [Node({"id": "1", "v": 1}), Node({"id": "2", "v": 2}), Node({"id": "3", "v": 3})]
         for node in nodes:
-            col.append(node)
+            col.append(node.getObject())
         
         # Act
         n = col.where(lambda x: x.v == 2)
@@ -661,21 +465,3 @@ class CollectionTest(unittest.TestCase):
         self.assertEqual(len(n), 1)
         self.assertIn(n[0], nodes)
         self.assertEqual(n[0].v, 2)
-        
-    def tests_where_func_post_init(self):
-        rt = MagicMock()
-        rt._unis.get.return_value = [{"$schema": SCHEMAS["Node"], "id": "1", "v": 1}, 
-                                     {"$schema": SCHEMAS["Node"], "id": "2", "v": 2}, 
-                                     {"$schema": SCHEMAS["Node"], "id": "3", "v": 3}]
-        col = UnisCollection("", "", Node, rt)
-        [n for n in col]
-        
-        # Act
-        n = col.where(lambda x: x.v == 2)
-        n = [v for v in n]
-        
-        # Assert
-        self.assertIsInstance(n, collections.Iterable)
-        self.assertEqual(len(n), 1)
-        self.assertEqual(n[0].v, 2)
-        

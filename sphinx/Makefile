@@ -2,10 +2,11 @@
 #
 
 # You can set these variables from the command line.
+RT_VERSION    = 1.0
 SPHINXOPTS    =
 SPHINXBUILD   = sphinx-build
 PAPER         =
-BUILDDIR      = _build/${RT_VERSION:-1.0}
+BUILDDIR      = _build/${RT_VERSION}
 
 # Internal variables.
 PAPEROPT_a4     = -D latex_paper_size=a4
