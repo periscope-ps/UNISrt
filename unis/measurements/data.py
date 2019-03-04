@@ -151,7 +151,7 @@ class DataCollection(object):
         if n in self._fns.keys():
             self.load()
             return self._fns[n].postprocess(self._fns[n].prior)
-        return super().__getattr__(n)
+        return super().__getattribute__(n)
         
     def append(self, val, ts=0):
         """
@@ -196,7 +196,7 @@ class DataCollection(object):
         self._at = max(self._at, int(record['ts']))
         for f in self._fns.values():
             f.prior = f.apply(float(record['value']), record['ts'])
-        self._md._collection._serve(Event.data, self._md)
+        self._md.getCollection()._serve(Events.data, self._md)
     def _subscribe(self):
         def cb(v, action):
             sets = list(v.values())

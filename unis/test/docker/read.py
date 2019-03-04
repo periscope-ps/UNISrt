@@ -1,7 +1,8 @@
 from unis import Runtime
 from unis.services.graph import UnisGrapher
+from unis.services.data import DataService
 
-rt = Runtime('http://db2:8888', runtime={'services': [UnisGrapher()]})
+rt = Runtime('http://db2:8888', runtime={'services': [UnisGrapher(), DataService()]})
 rt.nodes.load()
 rt.ports.load()
 
@@ -30,4 +31,19 @@ print(".")
 n = rt.nodes.first_where({'name': 'node_0'})
 
 assert n.ports[0] in n.ports[0].link.endpoints
+print(".")
+
+# Create metadata
+
+from unis.models import Metadata
+from unis.measurements import Last
+
+data = rt.insert(Metadata({'subject': n}), commit=True).data
+
+rt.flush()
+
+data.append(5)
+data.attachFunction(Last())
+
+assert data.last == 5
 print(".")

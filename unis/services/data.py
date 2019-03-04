@@ -1,5 +1,7 @@
 import json, requests
 
+from lace.logging import trace
+
 from unis.measurements import DataCollection
 from unis.models import Metadata, Data, Node
 from unis.rest import UnisClient
