@@ -1,0 +1,22 @@
+version: '3'
+services:
+  db1:
+    image: miosiris/unis
+  db2:
+    image: miosiris/unis
+  client:
+    build:
+      context: .
+      dockerfile: .ClientDockerfile
+    depends_on:
+      - db1
+      - db2
+    command: /wait-for-it.sh http://db1:8888 -- bash /wait-for-it.sh http://db2:8888 -- python client.py
+  test:
+    build:
+      context: .
+      dockerfile: .Dockerfile
+    depends_on:
+      - db1
+      - db2
+      - client

@@ -6,6 +6,7 @@ from lace.logging import trace
 from unis.utils.pubsub import Events
 from unis.exceptions import CollectionIndexError
 
+@trace("unis.utils")
 class _keyblock(object):
     def __init__(self):
         self._ls, self._next, self._prev = [], [], []
@@ -31,6 +32,7 @@ class _keyblock(object):
                 for v in reversed(self._prev):
                     yield v
 
+@trace("unis.utils")
 class Index(object):
     """
     :param str key: Key name for the index.
@@ -40,7 +42,6 @@ class Index(object):
     This index assists the :class:`UnisCollection <unis.models.lists.UnisCollection>` on
     resource lookup in sub-linear time.
     """
-    @trace.debug("Index")
     def __init__(self, key):
         self.key = key
         self._head = _keyblock()
@@ -50,7 +51,6 @@ class Index(object):
         self._blocks = {}
         self._reverse = {}
 
-    @trace.info("Index")
     def index(self, v):
         """
         :param any v: Value to lookup in the index.
@@ -60,7 +60,6 @@ class Index(object):
         a value `v` in the field associated with the :class:`Index <unis.utils.Index>`.
         """
         return self.subset("eq", v)
-    @trace.info("Index")
     def subset(self, comp, v):
         """
         :param str comp: Comparitor to use over the :class:`Index <unis.utils.Index>`.
@@ -86,7 +85,6 @@ class Index(object):
         }
         return slices[comp]()
     
-    @trace.info("Index")
     def update(self, index, value):
         """
         :param int index: Position of the resource in the collection.
@@ -102,7 +100,6 @@ class Index(object):
         block = self._get_block(value)
         block.append(index)
         self._reverse[index] = value
-    @trace.info("Index")
     def remove(self, index):
         """
         :param int index: Position of the resource in the collection.
@@ -123,7 +120,6 @@ class Index(object):
             self._block_keys.remove(block_name)
             del self._blocks[block_name]
             del block
-    @trace.debug("Index")
     def _get_block(self, k):
         if k in self._blocks:
             return self._blocks[k]
@@ -140,7 +136,8 @@ class Index(object):
     def __repr__(self):
         pairs = ", ".join(["{}={}".format(k, ",".join(map(str, self._blocks[k]._ls))) for k in self._block_keys])
         return "<Index [{}]>".format(pairs)
-        
+
+@trace("unis.utils")
 class UniqueIndex(object):
     """
     :param str key: Key name for the index.
@@ -152,12 +149,10 @@ class UniqueIndex(object):
     :class:`UniqueIndex <unis.utils.UniqueIndex>` entries *must* be unique.  In exchange,
     lookup is faster.
     """
-    @trace.debug("UniqueIndex")
     def __init__(self, key):
         self.key = key
         self._index = {}
         self._reverse = {}
-    @trace.info("UniqueIndex")
     def index(self, v):
         """
         :param any v: Value to lookup in the index.
@@ -170,7 +165,6 @@ class UniqueIndex(object):
         if v not in self._index:
             raise CollectionIndexError("Value not in index_{} - {}".format(self.key, v))
         return self._index[v]
-    @trace.info("UniqueIndex")
     def subset(self, comp, v):
         """
         :param str comp: Comparitor to use over the :class:`Index <unis.utils.Index>`.
@@ -185,7 +179,6 @@ class UniqueIndex(object):
         if comp != "eq":
             raise CollectionIndexError("Unique indices can only be queried over equivalence")
         return set([self.index(v)])
-    @trace.info("UniqueIndex")
     def update(self, index, value):
         """
         :param int index: Position of the resource in the collection.
@@ -201,7 +194,6 @@ class UniqueIndex(object):
             raise CollectionIndexError("index_{} conflict - {}".format(self.key, value))
         self._reverse[index] = value
         self._index[value] = index
-    @trace.info("UniqueIndex")
     def remove(self, index):
         """
         :param int index: Position of the resource in the collection.

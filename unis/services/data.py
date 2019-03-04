@@ -1,5 +1,4 @@
-import json
-import requests
+import json, requests
 
 from unis.measurements import DataCollection
 from unis.models import Metadata, Data, Node
@@ -7,6 +6,7 @@ from unis.rest import UnisClient
 from unis.services.abstract import RuntimeService
 from unis.services.event import new_event, commit_event, postflush_event
 
+@trace("unis.services")
 class DataService(RuntimeService):
     """
     Automatically creates :class:`DataCollections <unis.measurements.data.DataCollection>`

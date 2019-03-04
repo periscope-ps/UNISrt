@@ -22,6 +22,7 @@ class _sparselist(list):
         return super(_sparselist, self).__len__()
     
 _rkey = namedtuple('ResourceKey', ['uid', 'cid'])
+@trace("unis.models")
 class UnisCollection(object):
     """
     :param str name: The name of the collection.
@@ -61,7 +62,6 @@ class UnisCollection(object):
     collections = {}
     
     @classmethod
-    @trace.debug("UnisCollection")
     def get_collection(cls, name, model, runtime):
         """
         :param str name: The name of the collection.
@@ -109,13 +109,11 @@ class UnisCollection(object):
         self._loop = asyncio.get_event_loop()
         self._callbacks = []
         
-    @trace.debug("UnisCollection")
     def __getitem__(self, i):
         if i >= self._cache.full_length():
             self._complete_cache()
         return self._cache[i]
     
-    @trace.debug("UnisCollection")
     def __setitem__(self, i, item):
         self._check_record(item)
         self._cache[i].merge(item, None)
@@ -123,7 +121,6 @@ class UnisCollection(object):
             if self._cache[i]._getattribute(k, None, None) is not None:
                 index.update(i, self._cache[i]._getattribute(k, None))
 
-    @trace.info("UnisCollection")
     def pre_flush(self, items):
         """
         :param items: List of items to notify
@@ -134,7 +131,6 @@ class UnisCollection(object):
         flushed.
         """
         [self._serve(Events.preflush, item.getObject()) for item in items]
-    @trace.info("UnisCollection")
     def post_flush(self, items):
         """
         :param items: List of items to notify
@@ -145,7 +141,6 @@ class UnisCollection(object):
         flushed.
         """
         [self._serve(Events.postflush, item.getObject()) for item in items]
-    @trace.info("UnisCollection")
     def update(self, item):
         """
         :param item: Resource to update.
@@ -157,7 +152,6 @@ class UnisCollection(object):
         occur.
         """
         self._serve(Events.update, item)
-    @trace.info("UnisCollection")
     def load(self):
         """
         :return: List of :class:`UnisObjects <unis.models.models.UnisObject>`.
@@ -167,7 +161,6 @@ class UnisCollection(object):
         self._complete_cache()
         return self._cache.valid_list()
     
-    @trace.info("UnisCollection")
     def get(self, hrefs):
         """
         :param list[str] hrefs: List of urls to resources to query.
@@ -179,13 +172,12 @@ class UnisCollection(object):
         ids = [urlparse(r).path.split('/')[-1] for r in hrefs]
         try:
             to_get = [_rkey(uid, self._stubs[uid]) for uid in ids if isinstance(self._stubs[uid], str)]
-        except KeyError:
-            raise UnisReferenceError("Requested object in unregistered instance", hrefs)
+        except KeyError as e:
+            raise UnisReferenceError("Requested object in unregistered instance", hrefs) from e
         if to_get:
             self._get_next(to_get)
         return [self._stubs[uid] for uid in ids]
     
-    @trace.info("UnisCollection")
     def append(self, item):
         """
         :param item: Resource to be added to the collection
@@ -218,7 +210,6 @@ class UnisCollection(object):
             self._stubs[uid] = self._cache[i]
         return self._cache[i]
         
-    @trace.info("UnisCollection")
     def remove(self, item):
         """
         :param item: Resource to be removed from the collection
@@ -235,7 +226,6 @@ class UnisCollection(object):
         except UnisReferenceError:
             return
     
-    @trace.info("UnisCollection")
     def index(self, item):
         """
         :param item: Resource to be removed from the collection
@@ -247,7 +237,6 @@ class UnisCollection(object):
         item = item if isinstance(item, oContext) else oContext(item, None)
         return self._indices['id'].index(item.id)
 
-    @trace.info("UnisCollection")
     def first_where(self, pred, ctx=None):
         """
         :param pred: Predicate used to filter resources.
@@ -263,7 +252,6 @@ class UnisCollection(object):
         except StopIteration:
             return None
     
-    @trace.info("UnisCollection")
     def where(self, pred, ctx=None):
         """
         :param pred: Predicate used to filter resources.
@@ -315,7 +303,6 @@ class UnisCollection(object):
                 except TypeError:
                     pass
     
-    @trace.info("UnisCollection")
     def createIndex(self, k, unique=False):
         """
         :param str k: Key for the new index
@@ -328,7 +315,6 @@ class UnisCollection(object):
                 if v._getattribute(k, None, None) is not None:
                     self._indices[k].update(i, v._getattribute(k, None))
                     
-    @trace.info("UnisCollection")
     def updateIndex(self, res):
         """
         :param res: Resource to update index values.
@@ -343,7 +329,6 @@ class UnisCollection(object):
                 index.remove(i)
             index.update(i, v)
             
-    @trace.info("UnisCollection")
     async def addSources(self, cids):
         """
         :param list[str] cids: List of :class:`CIDs <unis.rest.unis_client.CID>` to add
@@ -359,7 +344,6 @@ class UnisCollection(object):
             self._stubs[uid] = UnisClient.resolve(v['selfRef'])
         await self._add_subscription(cids)
     
-    @trace.info("UnisCollection")
     def addService(self, service):
         """
         :param service: Service to include in the collection.
@@ -371,7 +355,6 @@ class UnisCollection(object):
         .. warning:: This function is for internal use only.
         """
         self._services.append(service)
-    @trace.info("UnisCollection")
     def addCallback(self, cb):
         """
         :param callable cb: Function to attach to the collection.
@@ -387,12 +370,10 @@ class UnisCollection(object):
         * **type:** event type in ["new", "update", "delete"]
         """
         self._callbacks.append(cb)
-    @trace.debug("UnisCollection")
     def _check_record(self, v):
         if self.model._rt_schema["name"] not in v.names:
             raise TypeError("Resource not of correct type: got {}, expected {}".format(self.model, type(v)))
-        
-    @trace.debug("UnisCollection")
+
     def _serve(self, ty, v):
         ctx = oContext(v, None)
         v._callback(ty.name)
@@ -401,12 +382,10 @@ class UnisCollection(object):
             f = getattr(service, ty.name)
             f(ctx)
     
-    @trace.debug("UnisCollection")
     def _proto_complete_cache(self):
         self._block_size = max(self._block_size, len(self._stubs) - len(self._cache))
         self._get_next()
     
-    @trace.debug("UnisCollection")
     def _proto_get_next(self, ids=None):
         ids = ids or []
         todo = (_rkey(k,v) for k,v in self._stubs.items() if isinstance(v, str))
@@ -427,7 +406,6 @@ class UnisCollection(object):
             model = schemaLoader.get_class(result["$schema"], raw=True)
             self.append(model(result))
     
-    @trace.debug("UnisCollection")
     async def _get_block(self, source, ids, blocksize):
         if len(ids) > blocksize:
             requests = [ids[i:i + blocksize] for i in range(0, len(ids), blocksize)]
@@ -437,15 +415,14 @@ class UnisCollection(object):
         else:
             return await self._from_unis(source, kwargs={"id": ids})
     
-    @trace.debug("UnisCollection")
     async def _add_subscription(self, sources):
-        @trace.debug("UnisCollection._add_subscription")
+        @trace.tlong("unis.models.UnisCollection._add_subscription")
         def cb(v, action):
             if action in ['POST', 'PUT']:
                 try:
                     schema = v.get("\\$schema", None) or v['$schema']
-                except KeyError:
-                    raise ValueError("No schema in message from UNIS - {}".format(v))
+                except KeyError as e:
+                    raise ValueError("No schema in message from UNIS - {}".format(v)) from e
                 model = schemaLoader.get_class(schema, raw=True)
                 if action == 'POST':
                     resource = model(v)
@@ -472,12 +449,11 @@ class UnisCollection(object):
                     del self._stubs[res._getattribute('id', None)]
                     self._serve(Events.delete, res)
                     
-                except IndexError:
-                    raise ValueError("No such element in UNIS to delete")
+                except IndexError as e:
+                    raise ValueError("No such element in UNIS to delete") from e
         if self._subscribe:
             await self._unis.subscribe(sources, cb)
     
-    @trace.debug("UnisCollection")
     async def _from_unis(self, source, start=0, size=None, kwargs={}):
         kwargs.update({"skip": start, "limit": size})
         result = await self._unis.get([source], **kwargs)
@@ -487,15 +463,12 @@ class UnisCollection(object):
         rep = ".{} {}".format(self.name, self._cache.__repr__() if self._cache and len(self._cache) < 4 else "[...]")
         return "<UnisList{}>".format(rep if hasattr(self, "name") else "")
     
-    @trace.debug("UnisCollection")
     def __len__(self):
-        return len(self._cache) + len([x for x,v in self._stubs.items() if not v])
+        return len(self._cache) + len([x for x,v in self._stubs.items() if isinstance(v, str)])
     
-    @trace.debug("UnisCollection")
     def __contains__(self, item):
         return item in self._cache
     
-    @trace.debug("UnisCollection")
     def __iter__(self):
         self._complete_cache()
         return iter(self._cache.valid_list())

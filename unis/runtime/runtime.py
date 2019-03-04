@@ -1,22 +1,15 @@
-import asyncio
-import atexit
-import configparser
-import copy
-import signal
-import sys
+import asyncio, atexit, signal, sys, copy, configparser
 
 from functools import reduce
 from lace.logging import trace
 from lace import logging
-
-# Turn off lace
-#trace.remove()
 
 from unis import settings
 from unis.services import RuntimeService
 from unis.runtime.oal import ObjectLayer
 from unis.exceptions import ConnectionError
 
+@trace("unis")
 class Runtime(object):
     """
     :param unis: data store(s) to maintain.
@@ -79,7 +72,6 @@ class Runtime(object):
                         self.settings[section] = {}
                     self.settings[section].update({k:tys.get(v, _ls(v.split(','))) for k,v in tmpConfig.items(section)})
     
-    @trace.debug("Runtime")
     def __init__(self, unis=None, name="default", **kwargs):
         def _unis_config(unis):
             if not isinstance(unis, dict):
@@ -154,7 +146,6 @@ class Runtime(object):
         """
         return [x.name for x in self._oal._cache.values()]
         
-    @trace.info("Runtime")
     def insert(self, resource, commit=False, publish_to=None, track=False):
         """
         :param resource: Resource to be added to the runtime for tracking.
@@ -177,7 +168,6 @@ class Runtime(object):
             return resource
         return self._oal._insert(resource)
     
-    @trace.info("Runtime")
     def addService(self, service):
         """
         :param service: Serivce to be added to the runtime.
@@ -212,7 +202,6 @@ class Runtime(object):
     def _exit_close(self):
         self.shutdown()
         
-    @trace.info("Runtime")
     def shutdown(self, sig=None, frame=None):
         """
         :param sig: (optional) This param is required for internal use and should not be used.

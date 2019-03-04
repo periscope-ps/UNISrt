@@ -2,6 +2,9 @@ from unis.services.abstract import RuntimeService
 from unis.services.event import new_update_event
 from unis.services.graphbuilder import Graph
 
+from lace.logging import trace
+
+@trace("unis.services")
 class UnisGrapher(RuntimeService):
     """
     Automatically generates a :class:`Graph <unis.services.graphbuilder.Graph>`

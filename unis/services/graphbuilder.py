@@ -1,16 +1,15 @@
-import itertools
-import math
-import random
-import re
+import itertools, math, random, re
 
 from collections import defaultdict
 from string import ascii_uppercase
 from copy import copy
+from lace.logging import trace
 
 from unis.models import Node, Port, Link
 
 from pprint import pprint
 
+@trace("unis.services")
 class Graph(object):
     """
     :param vertices: A list of :class:`Nodes <unis.models.models.UnisObject>` to add to the graph.

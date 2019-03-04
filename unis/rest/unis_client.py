@@ -30,9 +30,10 @@ class ReferenceDict(dict):
     def __getitem__(self, n):
         try:
             return super(ReferenceDict, self).__getitem__(n)
-        except (KeyError, IndexError):
-            raise UnisReferenceError("No unis instance at location - {}".format(n), [n])
+        except (KeyError, IndexError) as e:
+            raise UnisReferenceError("No unis instance at location - {}".format(n), [n]) from e
 
+@trace("unis.rest")
 class UnisProxy(object):
     """
     :param str col: Name of the collection owning this proxy
@@ -41,11 +42,9 @@ class UnisProxy(object):
     stores all relating to a provided collection **col** of resources.  This object
     maintains collection level metadata for threads and connection pooling.
     """
-    @trace.debug("UnisProxy")
     def __init__(self, col=None):
         self._name = col
     
-    @trace.info("UnisProxy")
     def addSources(self, sources, ns):
         """
         :param list[dict] sources: List of remote endpoints to connect to
@@ -71,7 +70,6 @@ class UnisProxy(object):
             client.namespaces.add(ns)
         return new
     
-    @trace.info("UnisProxy")
     async def getResources(self, src=None):
         """
         :param src: List of client identifiers to query.
@@ -85,7 +83,6 @@ class UnisProxy(object):
         async with ClientSession() as sess:
             return await self._gather(self._collect_fn(src, "getResources"), sess=sess)
     
-    @trace.info("UnisProxy")
     async def getStubs(self, src):
         """
         :param src: List of client identifiers to query.
@@ -99,7 +96,6 @@ class UnisProxy(object):
         async with ClientSession() as sess:
             return await self._gather(self._collect_fn(src, "getStubs"), self._name, sess=sess)
     
-    @trace.info("UnisProxy")
     async def get(self, src=None, **kwargs): 
         """
         :param src: List of client identifiers to request.
@@ -134,7 +130,6 @@ class UnisProxy(object):
             return list(itertools.chain(*results))
         return async.make_async(_f)
     
-    @trace.info("UnisProxy")
     async def put(self, src, rid, data):
         """ 
         :param src: Client identifier for target data store.
@@ -152,7 +147,6 @@ class UnisProxy(object):
         async with ClientSession() as sess:
             return await UnisClient.instances[src].put("/".join([self._name, rid]), data, sess)
     
-    @trace.info("UnisProxy")
     def delete(self, src, rid):
         """
         :param src: Client identifier for target data store.
@@ -168,7 +162,6 @@ class UnisProxy(object):
                 return await UnisClient.instances[src].delete("/".join([self._name, rid]), sess)
         return async.make_async(awrap)
 
-    @trace.info("UnisProxy")
     async def subscribe(self, src, cb):
         """ 
         :param src: List of client identifiers for target data stores
@@ -189,7 +182,6 @@ class UnisProxy(object):
         """
         return await self._gather(self._collect_fn(src, "subscribe"), self._name, cb)
     
-    @trace.debug("UnisProxy")
     def _collect_fn(self, src, fn):
         """
         :param src: List of client identifiers for target data stores
@@ -203,7 +195,6 @@ class UnisProxy(object):
             return [getattr(UnisClient.instances[s], fn) for s in src]
         return [getattr(c, fn) for c in UnisClient.instances.values()]
     
-    @trace.debug("UnisProxy")
     async def _gather(self, fn, *args, **kwargs):
         """
         :param fn: List of functions to call
@@ -243,6 +234,7 @@ class _SingletonOnUID(type):
         return cls.instances[uuid]
     
     @classmethod
+    @trace.tshort("unis.rest.UnisClient")
     def get_uuid(cls, url):
         """ Query a backend uuid for a client from a endpoint url
         :param url: Endpoint url for the client
@@ -259,6 +251,7 @@ class _SingletonOnUID(type):
         return config['uid']
     
     @classmethod
+    @trace.tshort("unis.rest.UnisClient")
     def resolve(cls, url):
         """ Attempts to find a uuid for a url string, if the url string corosponds to an
         unregistered instance, it will throw a UnisReferenceError.
@@ -272,7 +265,7 @@ class _SingletonOnUID(type):
         authority = "{}://{}".format(url.scheme, url.netloc)
         try:
             uuid = cls.fqdns[url.netloc]
-        except UnisReferenceError:
+        except UnisReferenceError as e:
             cls.fqdns[url.netloc] = uuid = cls.get_uuid(authority)
             if uuid not in cls.instances:
                 raise
@@ -281,6 +274,7 @@ class _SingletonOnUID(type):
 
 class VirtualClient(metaclass=_SingletonOnUID):
     pass
+@trace("unis.rest")
 class UnisClient(metaclass=_SingletonOnUID):
     """
     :param str url: Endpoint url for the client
@@ -292,7 +286,6 @@ class UnisClient(metaclass=_SingletonOnUID):
     This includes keeping a websocket and associated threads alive for subscription events
     and poviding restful functions for individual requests to the associated data store.
     """
-    @trace.debug("UnisClient")
     def __init__(self, url, **kwargs):
         self.namespaces = set()
         self.loop = asyncio.new_event_loop()
@@ -367,7 +360,6 @@ class UnisClient(metaclass=_SingletonOnUID):
                     raise
         
 
-    @trace.debug("UnisClient")
     async def _do(self, fn, *args, **kwargs):
         """ Execute a remote call
         
@@ -388,14 +380,12 @@ class UnisClient(metaclass=_SingletonOnUID):
             getLogger("unisrt").warn("[{}] No connection to instance, deferring {}".format(args[0], fn.__name__.upper()))
             return []
     
-    @trace.info("UnisClient")
     def connect(self):
         if not self._virtual and not self._socket:
             f = asyncio.run_coroutine_threadsafe(self._listen(self.loop), self.loop)
             f.add_done_callback(self._handle_exception)
 
     
-    @trace.info("UnisClient")
     async def getResources(self, sess):
         """
         :param sess: Session object for request
@@ -406,7 +396,6 @@ class UnisClient(metaclass=_SingletonOnUID):
         url, hdr = self._get_conn_args("")
         return await self._do(sess.get, self._url, headers=hdr)
     
-    @trace.info("UnisClient")
     async def getStubs(self, col, sess):
         """
         :param str col: Name of the collection to retrieve stubs from
@@ -418,7 +407,6 @@ class UnisClient(metaclass=_SingletonOnUID):
         url, hdr = self._get_conn_args(col, fields="selfRef")
         return await self._do(sess.get, url, headers=hdr)
 
-    @trace.info("UnisClient")
     async def get(self, col, sess, **kwargs):
         """
         :param str col: Name of the collection to get data from
@@ -431,7 +419,6 @@ class UnisClient(metaclass=_SingletonOnUID):
         url, hdr = self._get_conn_args(col, **kwargs)
         return await self._do(sess.get, url, headers=hdr)
 
-    @trace.info("UnisClient")
     async def post(self, col, data, sess):
         """
         :param str col: Name of the collection to post data
@@ -444,7 +431,6 @@ class UnisClient(metaclass=_SingletonOnUID):
         url, hdr = self._get_conn_args(col)
         return await self._do(sess.post, url, data=json.dumps(data), headers=hdr)
 
-    @trace.info("UnisClient")
     def synchronous_post(self, col, data):
         """
         :param str col: Name of the collection to post data
@@ -454,7 +440,6 @@ class UnisClient(metaclass=_SingletonOnUID):
         url, hdr = self._get_conn_args(col)
         return requests.post(url, data=json.dumps(data), headers=hdr)
     
-    @trace.info("UnisClient")
     async def put(self, col, data, sess):
         """
         :param str col: Name of the collection to put data into
@@ -467,7 +452,6 @@ class UnisClient(metaclass=_SingletonOnUID):
         url, hdr = self._get_conn_args(col)
         return await self._do(sess.put, url, data=json.dumps(data), headers=hdr)
 
-    @trace.info("UnisClient")
     async def delete(self, col, sess):
         """
         :param str col: Name of the collection to delete resource from
@@ -479,7 +463,6 @@ class UnisClient(metaclass=_SingletonOnUID):
         url, hdr = self._get_conn_args(col)
         return await self._do(sess.delete, url, headers=hdr)
     
-    @trace.info("UnisClient")
     async def subscribe(self, col, cb):
         """
         :param str col: Name of the collection to subscribe to
@@ -495,7 +478,6 @@ class UnisClient(metaclass=_SingletonOnUID):
         self._channels[col].append(cb)
         return []
     
-    @trace.debug("UnisClient")
     def _get_conn_args(self, ref, **kwargs):
         """
         :param ref: Reference string pointing to the request endpoint
@@ -512,7 +494,6 @@ class UnisClient(metaclass=_SingletonOnUID):
         path = "{}{}".format(urlparse(ref).path, params if params[1:] else "")
         return urljoin(self._url, path), hdr
 
-    @trace.debug("UnisClient")
     async def _check_response(self, r):
         """
         :param r: Resonse object from the data store
@@ -542,7 +523,6 @@ class UnisClient(metaclass=_SingletonOnUID):
         _SingletonOnUID.instances = {}
         _SingletonOnUID.virtuals = {}
     
-    @trace.debug("UnisClient")
     def _shutdown(self):
         async def close(loop):
             [t.cancel() for t in asyncio.Task.all_tasks(loop) if t != asyncio.Task.current_task(loop)]

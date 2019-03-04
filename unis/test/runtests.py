@@ -17,6 +17,9 @@ import argparse
 import os
 import sys
 import unittest
+import logging
+
+from lace.logging import trace
 
 UNIT_TEST_MODULES = [
     #'unis.test.rest.ProxyTest',
@@ -32,6 +35,18 @@ UNIT_TEST_MODULES = [
 ]
 
 INTEGRATION_TEST_MODULES = []
+TRACELOG = "test_trace.log"
+try: os.remove(TRACELOG)
+except: pass
+
+trace.enabled(True)
+trace.showReturn(True)
+trace.showCallDepth(True)
+logger = logging.getLogger("unis")
+logger.setLevel(5)
+hdl = logging.FileHandler(TRACELOG)
+hdl.setFormatter(logging.Formatter("[{levelname:.2}] {message} > {name}", style="{"))
+logger.addHandler(hdl)
 
 def main(integration=False, unit=False):
     #Setting up path names
@@ -47,6 +62,7 @@ def main(integration=False, unit=False):
     tsuite = unittest.defaultTestLoader.loadTestsFromNames(test_modules)
     runner = unittest.TextTestRunner()
     ret = not runner.run(tsuite).wasSuccessful()
+    
     sys.exit(ret)
     
 if __name__ == '__main__':

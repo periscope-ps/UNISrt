@@ -45,7 +45,7 @@ class UnisServiceTest(unittest.TestCase):
     def test_add_service_by_name(self, oal):
         rt = Runtime("test")
         rt.addService("unis.services.graph.UnisGrapher")
-                
+    
     def test_add_service_by_class(self, ui_mock, p_mock, gr_mock):
         rt = Runtime("test")
         rt.addService(_TestService)

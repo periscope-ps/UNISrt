@@ -1,5 +1,4 @@
-import asyncio
-import uuid
+import asyncio, uuid
 
 from collections import defaultdict
 from lace.logging import trace
@@ -13,6 +12,7 @@ from unis.utils import async
 
 from urllib.parse import urlparse
 
+@trace("unis.runtime")
 class ObjectLayer(object):
     """
     The :class:`ObjectLayer <unis.runtime.oal.ObjectLayer>` contains the collections of 
@@ -49,7 +49,6 @@ class ObjectLayer(object):
         
         .. note:: This is an example of many possible automatically generated properties.
     """
-    @trace.debug("OAL")
     def __init__(self, settings):
         self.settings, self._pending, self._services = settings, set(), []
     
@@ -59,13 +58,12 @@ class ObjectLayer(object):
         except AttributeError:
             try:
                 return self._cache(n)
-            except KeyError:
-                raise AttributeError("{n} not found in ObjectLayer".format(n = n))
+            except KeyError as e:
+                raise AttributeError("{n} not found in ObjectLayer".format(n = n)) from e
 
     def _cache(self, n=None):
         return UnisCollection.from_name(n, self)
     
-    @trace.debug("OAL")
     def find(self, href):
         """
         :param str href: link to the reference to locate.
@@ -84,7 +82,6 @@ class ObjectLayer(object):
             return self._cache(col).get([href])
     
     
-    @trace.info("OAL")
     def flush(self):
         """
         When the containing runtime is set to ``deferred_mode``, flush forces all locally staged
@@ -97,7 +94,6 @@ class ObjectLayer(object):
             [cols[r.getSource(), r.getCollection().name].append(r) for r in self._pending]
             self._do_update(cols)
     
-    @trace.info("OAL")
     def _update(self, res):
         if res.selfRef:
             if res not in self._pending:
@@ -105,7 +101,6 @@ class ObjectLayer(object):
                 if not self.settings['proxy']['defer_update']:
                     self._do_update({(res.getSource(), res.getCollection().name): [res]})
     
-    @trace.debug("OAL")
     def _do_update(self, pending):
         request = {}
         for (cid, collection), reslist in pending.items():
@@ -137,7 +132,6 @@ class ObjectLayer(object):
                     self._pending.remove(r)
                 self._cache(col).locked = False
     
-    @trace.info("OAL")
     def addSources(self, hrefs):
         """
         :param list[str] hrefs: list of remote data store urls
@@ -161,12 +155,10 @@ class ObjectLayer(object):
                     
         async.make_async(asyncio.gather, *[c.addSources(clients) for c in self._cache()])
     
-    @trace.info("OAL")
     def _preload(self):
         _p = lambda c: c.name in self.settings['cache']['preload'] or self.settings['cache']['mode'] == 'greedy'
         values = [c.load() for c in self._cache() if _p(c)]
         
-    @trace.info("OAL")
     def _insert(self, res):
         try:
             res = schemaLoader.get_class(res["$schema"]) if isinstance(res, dict) else res
@@ -178,7 +170,6 @@ class ObjectLayer(object):
         res.setObject(self._cache(self.getModel(res.names)).append(res.getObject()))
         return res
         
-    @trace.info("OAL")
     def getModel(self, names):
         """
         :param list[str] names: list of potential names for a model.
@@ -193,7 +184,6 @@ class ObjectLayer(object):
         except StopIteration:
             raise ValueError("Resource type {n} not found in ObjectLayer".format(n=names))
     
-    @trace.info("OAL")
     def about(self):
         """
         :return: list of collection names
@@ -202,11 +192,9 @@ class ObjectLayer(object):
         """
         return [c.name for c in self._cache()]
     
-    @trace.info("OAL")
     def shutdown(self):
         self.flush()
         UnisClient.shutdown()
-    @trace.debug("OAL")
     def __contains__(self, resource):
         try:
             col = next(c for c in self._cache() if c.model._rt_schema["name"] in resource.names)

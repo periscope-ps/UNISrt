@@ -1,5 +1,8 @@
 import asyncio
 
+from lace.logging import trace
+
+@trace("unis.utils")
 def make_async(coro, *args, **kwargs):
     async def _mock():
         return await coro(*args, **kwargs)

@@ -1,6 +1,4 @@
-import asyncio
-import math
-import time
+import asyncio, math, time
 
 from unis.rest import UnisProxy
 from unis.utils import Events, async
@@ -10,6 +8,7 @@ from lace.logging import trace
 from threading import Timer
 from urllib.parse import urlparse
 
+@trace("unis.data")
 class Function(object):
     """
     :param callable fn: (optional) callback to use in place of apply.
@@ -70,6 +69,7 @@ class Function(object):
         """
         return x
     
+@trace("unis.data")
 class Last(Function):
     """
     Return the last measurement as is, discard previous measurement when
@@ -77,6 +77,7 @@ class Last(Function):
     """
     def apply(self, x, ts):
         return x
+@trace("unis.data")
 class Min(Function):
     """
     Return the minimum value seen so far from the stream.
@@ -85,12 +86,14 @@ class Min(Function):
         super(Min, self).__init__(None, math.inf)
     def apply(self, x, ts):
         return min(self.prior, x)
+@trace("unis.data")
 class Max(Function):
     """
     Return the maximum value seen so far from the stream.
     """
     def apply(self, x, ts):
         return max(self.prior, x)
+@trace("unis.data")
 class Mean(Function):
     """
     Return the streaming mean value of the data.
@@ -101,6 +104,7 @@ class Mean(Function):
     def apply(self, x, ts):
         self.count, self.total = self.count+1, self.total+1
         return self.total / self.count
+@trace("unis.data")
 class Jitter(Function):
     """
     Returns the jitter of the stream.
@@ -116,6 +120,7 @@ class Jitter(Function):
     def postprocess(self, x):
         return x / max(self.count - 1, 1)
 
+@trace("unis.data")
 class DataCollection(object):
     """ 
     :param str source: href pointing to the data source to analyze.
@@ -126,7 +131,6 @@ class DataCollection(object):
     
     Collection of measurement values from a specific remote data source.
     """
-    @trace.debug("DataCollection")
     def __init__(self, md, rt, fns=None):
         self._source = md.getSource()
         self._unis = UnisProxy("data/{}".format(md.id))
@@ -149,7 +153,6 @@ class DataCollection(object):
             return self._fns[n].postprocess(self._fns[n].prior)
         return super().__getattr__(n)
         
-    @trace.info("DataCollection")
     def append(self, val, ts=0):
         """
         :param Any val: The value to append to the measurement
@@ -170,13 +173,11 @@ class DataCollection(object):
         elif self._batch_delay and not self._timer:
             self._timer = Timer(self._batch_delay / 1000.0, cb)
 
-    @trace.info("DataCollection")
     def _push(self):
         data = {'mid': self._md.id, 'data': self._pending}
         self._unis.post({(self._source, self._unis._name): [data]})
         self._pending = []
         
-    @trace.info("DataCollection")
     def attachFunction(self, fn, name="", doc=""):
         """
         :param fn: Function to attach to the data stream.
@@ -188,17 +189,14 @@ class DataCollection(object):
         fn = fn if isinstance(fn, Function) else Function(fn=fn, name=name)
         self._fns[fn.name] = fn
     
-    @trace.debug("DataCollection")
     def __len__(self):
         return self._len
-    @trace.debug("DataCollection")
     def _process(self, record):
         self._len += 1
         self._at = max(self._at, int(record['ts']))
         for f in self._fns.values():
             f.prior = f.apply(float(record['value']), record['ts'])
         self._md._collection._serve(Event.data, self._md)
-    @trace.debug("DataCollection")
     def _subscribe(self):
         def cb(v, action):
             sets = list(v.values())
@@ -208,7 +206,6 @@ class DataCollection(object):
         self._subscribe = lambda: True
         return False
     
-    @trace.info("DataCollection")
     def load(self):
         if not self._subscribe():
             kwargs = { "sort": "ts:1", "ts": "gt={}".format(self._at) }

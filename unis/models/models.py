@@ -1,11 +1,6 @@
-import asyncio
-import itertools
-import json
+import asyncio, itertools, os, re, time, types
+import json, jsonschema, requests
 import jsonschema
-import os
-import re
-import requests
-import time, types
 
 from lace.logging import trace
 from urllib.parse import urlparse
@@ -30,6 +25,7 @@ class _attr(object):
     def __set__(self, obj, v):
         self.__values__[obj] = v
     
+@trace("unis.models")
 class Context(object):
     """
     :param obj: :class:`UnisObject <unis.models.models.UnisObject>` referenced by the context.
@@ -119,11 +115,11 @@ class Context(object):
         self._obj = res.getObject() if isinstance(res, Context) else res
 
 class _nodefault(object): pass
+@trace("unis.models")
 class _unistype(object):
     _rt_parent = _attr()
     _rt_source, _rt_raw, _rt_reference = _attr(), _attr(), _attr()
     _rt_restricted = []
-    @trace.debug("unistype")
     def __init__(self, v, ref):
         self._rt_reference, self._rt_raw, = ref, self
     
@@ -132,25 +128,22 @@ class _unistype(object):
             raise NotImplementedError # This is for debugging purposes, this line should never be reached
         v = super(_unistype, self).__getattribute__(n)
         return v._rt_raw if isinstance(v, Primitive) else v
-    @trace.debug("unistype")
     def _getattribute(self, n, ctx, default=_nodefault()):
         try:
             v = super(_unistype, self).__getattribute__(n)
         except AttributeError as e:
             if isinstance(default, _nodefault):
-                raise UnisAttributeError(e)
+                raise UnisAttributeError(e) from e
             v = default
         if n != '__dict__' and n in self.__dict__:
             self.__dict__[n] = self._lift(v, self._get_reference(n), ctx)
             return self.__dict__[n]._rt_raw
         return v
     
-    @trace.debug("unistype")
     def __setattr__(self, n, v):
         if not hasattr(type(self), n):
             raise NotImplementedError # This is for debugging purposes, this line should never be reached
         return super(_unistype, self).__setattr__(n, v)
-    @trace.debug("unistype")
     def _setattr(self, n, v, ctx):
         def _eq(a, b):
             if isinstance(b, _unistype):
@@ -167,7 +160,6 @@ class _unistype(object):
                 super(_unistype, self).__setattr__(n, v)
                 self._update(self._get_reference(n), ctx)
     
-    @trace.debug("unistype")
     def _lift(self, v, ref, ctx, remote=True):
         class _localdict(dict):
             @property
@@ -191,23 +183,19 @@ class _unistype(object):
         v._rt_parent = self._rt_parent
         return v
     
-    @trace.debug("unistype")
     def _update(self, ref, ctx):
         if self._rt_parent:
             self._rt_parent._update(ref, ctx)
-    @trace.debug("unistype")
     def _get_reference(self, n):
         raise NotImplemented()
-    @trace.info("unistype")
     def to_JSON(self, ctx, top):
         raise NotImplemented()
-    @trace.info("unistype")
     def merge(self, other, ctx):
         raise NotImplemented()
-    @trace.none
     def __repr__(self):
         return super().__repr__()
     
+@trace("unis.models")
 class Primitive(_unistype):
     """
     :param list v: The value of the object.
@@ -216,14 +204,11 @@ class Primitive(_unistype):
     
     A runtime type representation of a python ``number``, ``string``, and ``boolean``.
     """
-    @trace.debug("Primitive")
     def __init__(self, v, ref):
         super(Primitive, self).__init__(v, ref)
         self._rt_raw = v
-    @trace.debug("Primitive")
     def _get_reference(self, n):
         return self._rt_reference
-    @trace.info("Primitive")
     def to_JSON(self, ctx, top):
         """
         :param ctx: Context of the current operation.
@@ -242,10 +227,10 @@ class Primitive(_unistype):
         the calling instance where conflicts occur.
         """
         self._rt_raw = other._rt_raw if isinstance(other, _unistype) else other
-    @trace.none
     def __repr__(self):
         return "<unis.Primitive>"#.format(self._rt_raw)
-    
+
+@trace("unis.models")
 class List(_unistype):
     """
     :param list v: The list of values in the object.
@@ -255,21 +240,17 @@ class List(_unistype):
     A runtime type representation of a python ``list``.
     """
     _rt_ls = _attr()
-    @trace.debug("List")
     def __init__(self, v, ref):
         super(List, self).__init__(v, ref)
         v = v if isinstance(v, list) else [v]
         self._rt_ls = [x.getObject() if isinstance(x, Context) else x for x in v]
-    @trace.debug("List")
     def _getitem(self, i, ctx):
         return self._lift(self._rt_ls[i], self._rt_reference, ctx)._rt_raw
-    @trace.debug("list")
     def _setitem(self, i, v, ctx):
         if isinstance(v, Context):
             v = v.getObject()
         self._rt_ls[i] = v
         self._update(self._rt_reference, ctx)
-    @trace.info("List")
     def append(self, v, ctx):
         """
         :param any v: Value to be appended to the :class:`List <unis.models.models.List>`.
@@ -281,7 +262,6 @@ class List(_unistype):
             v = v.getObject()
         self._rt_ls.append(v)
         self._update(self._rt_reference, ctx)
-    @trace.info("List")
     def remove(self, v, ctx):
         """
         :param any v: Value to be removed from the :class:`List <unis.models.models.List>`.
@@ -296,7 +276,6 @@ class List(_unistype):
         result = self._rt_ls.remove(v)
         self._update(self._rt_reference, ctx)
         return result
-    @trace.info("List")
     def where(self, f, ctx):
         """
         :param f: Predicate to filter the list.
@@ -321,15 +300,17 @@ class List(_unistype):
                 "le": lambda b: lambda a: type(a) is type(b) and a <= b,
                 "eq": lambda b: lambda a: type(a) is type(b) and a == b
             }
-            f = [(k,ops[k](v)) for k,v in f.items()]
+            f = {(k if k in ops.keys() else "eq"):(v if k in ops.keys() else {k:v}) for k,v in f.items()}
+            f = [(list(v.keys())[0],ops[k](list(v.values())[0])) for k,v in f.items()]
             def _check(x, k, op):
-                return isinstance(x, _unistype) and hasattr(x, k) and op(getattr(x, k))
-            return (Context(self._lift(x, self._rt_reference, ctx), ctx) for x in self if all([_check(x,*v) for v in f]))
+                return hasattr(x, k) and op(getattr(x, k))
+            for x in self._iter(ctx):
+                x = Context(self._lift(x, self._rt_reference, ctx), ctx)
+                if all([_check(x, *v) for v in f]):
+                    yield x
     
-    @trace.debug("List")
     def _get_reference(self, n):
         return self._rt_reference
-    @trace.info("List")
     def to_JSON(self, ctx, top):
         """
         :param ctx: Context of the current operation.
@@ -350,7 +331,6 @@ class List(_unistype):
             except SkipResource:
                 pass
         return res
-    @trace.info("List")
     def merge(self, other, ctx):
         """
         :param other: Instance to merge with the :class:`List <unis.models.models.List>`.
@@ -361,21 +341,18 @@ class List(_unistype):
         """
         self._rt_ls = other._rt_ls
     
-    @trace.debug("List")
     def _iter(self, ctx):
         self._rt_ls = [self._lift(x, self._rt_reference, ctx) for x in self._rt_ls]
         return iter([x._rt_raw for x in self._rt_ls])
-    @trace.debug("List")
     def __len__(self):
         return len(self._rt_ls)
-    @trace.debug("List")
     def __contains__(self, v, ctx):
         if isinstance(v, Context): v = v.getObject()
         return v in [self._lift(x, self._rt_reference, ctx) for x in self._rt_ls]
-    @trace.none
     def __repr__(self):
         return "<unis.List {}>".format(self._rt_ls.__repr__())
 
+@trace("unis.models")
 class Local(_unistype):
     """
     :param dict v: The attribute names and values to be included in the object.
@@ -384,15 +361,12 @@ class Local(_unistype):
     
     A runtime type representation of a python ``dict``.
     """
-    @trace.debug("Local")
     def __init__(self, v, ref):
         super(Local, self).__init__(v, ref)
         for k,v in v.items():
             self.__dict__[k] = v
-    @trace.debug("Local")
     def _get_reference(self, n):
         return self._rt_reference
-    @trace.info("Local")
     def items(self, ctx=None):
         """
         :returns: key,value tuple
@@ -404,7 +378,6 @@ class Local(_unistype):
                 yield (k, self._lift(v, self._get_reference(k), ctx, False))
             else:
                 yield (k, v)
-    @trace.info("Local")
     def to_JSON(self, ctx, top):
         """
         :param ctx: Context of the current operation.
@@ -424,7 +397,6 @@ class Local(_unistype):
             except SkipResource:
                 pass
         return res
-    @trace.info("Local")
     def merge(self, other, ctx):
         """
         :param other: Instance to merge with the :class:`Local <unis.models.models.Local>`.
@@ -435,7 +407,6 @@ class Local(_unistype):
         """
         for k,v in other.__dict__.items():
             self.__dict__[k] = v
-    @trace.none
     def __repr__(self):
         return "<unis.Local {}>".format(self.__dict__.__repr__())
 
@@ -445,6 +416,8 @@ class _metacontextcheck(type):
             return super(_metacontextcheck, self).__instancecheck__(other.getObject())
         except AttributeError:
             return super(_metacontextcheck, self).__instancecheck__(other)
+
+@trace("unis.models")
 class UnisObject(_unistype, metaclass=_metacontextcheck):
     """
     :param dict v: (optional) A ``dict`` containing all attribute names and values in the resource.
@@ -460,7 +433,6 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
     _rt_remote, _rt_collection = _attr(), _attr()
     _rt_restricted, _rt_live = ["id", "ts", "selfRef"], False
     _rt_callback = lambda s,x,e: x
-    @trace.info("UnisObject")
     def __init__(self, v=None, ref=None):
         v = {k: (v.getObject() if isinstance(v, Context) else v) for k,v in (v or {}).items()}
         super(UnisObject, self).__init__(v, ref)
@@ -469,23 +441,18 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
         if self.__dict__.get('selfRef'):
             self._rt_source = UnisClient.resolve(self._getattribute('selfRef', None))
     
-    @trace.debug("UnisObject")
     def _setattr(self, n, v, ctx):
         super(UnisObject, self)._setattr(n, v, ctx)
-    @trace.debug("UnisObject")
     def _update(self, ref, ctx):
         if ref in self._rt_remote and self._rt_collection and ctx and self._rt_live:
             self._rt_collection.update(self)
             ctx._update(Context(self, ctx))
-    @trace.debug("UnisObject")
     def _get_reference(self, n):
         return n
 
-    @trace.info("UnisObject")
     def _delete(self, ctx):
         self.__dict__['selfRef'] = ''
         self._rt_source = None
-    @trace.info("UnisObject")
     def touch(self, ctx):
         """
         :param ctx: Context of the current operation.
@@ -496,7 +463,6 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
         if self._getattribute('selfRef', ctx):
             cid, rid = self.getSource(), self._getattribute('id', ctx)
             async.make_async(self._rt_collection._unis.put, cid, rid, {'id': rid})
-    @trace.info("UnisObject")
     def getSource(self, ctx=None):
         """
         :param ctx: Context of the current operation.
@@ -507,7 +473,6 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
         if not self._rt_source:
             raise UnisReferenceError("Attempting to resolve unregistered resource.", [])
         return self._rt_source
-    @trace.info("UnisObject")
     def setCollection(self, v, ctx=None):
         """
         :param v: Collection to set.
@@ -517,7 +482,6 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
         belongs to.
         """
         self._rt_collection = v
-    @trace.info("UnisObject")
     def getCollection(self, ctx=None):
         """
         :param ctx: Context of the current operation.
@@ -526,7 +490,6 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
         Returns the collection that the object belongs to.
         """
         return self._rt_collection
-    @trace.info("UnisObject")
     def commit(self, publish_to=None, ctx=None):
         """
         :param str publish_to: Data store in which to insert the resource.
@@ -547,7 +510,6 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
         ``immediate_mode`` the resource will be dispatched immediately.
         """
         return self.track(publish_to, ctx)
-    @trace.info("UnisObject")
     def track(self, publish_to=None, ctx=None):
         """
         :param str publish_to: Data store in which to insert the resource.
@@ -576,7 +538,6 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
             self.__dict__['selfRef'] = "{}/{}/{}".format(url, self._rt_collection.name, self._getattribute('id', ctx))
             self._rt_collection._serve(Events.commit, self)
             self._update('id', ctx)
-    @trace.info("UnisObject")
     def extendSchema(self, n, v=None, ctx=None):
         """
         :param str n: Name of the attribute to add.
@@ -592,7 +553,6 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
         if n not in self._rt_remote:
             self._rt_remote.add(n)
             self._update(n, ctx)
-    @trace.info("UnisObject")
     def addCallback(self, fn, ctx=None):
         """
         :param callable fn: Callback function to attach to the :class:`UnisObject <unis.models.models.UnisObject>`.
@@ -602,10 +562,8 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
         functions as described in :meth:`UnisCollection.addCallback <unis.models.lists.UnisCollection.addCallback>`.
         """
         self._rt_callback = lambda s,x,e: fn(Context(x, ctx), e)
-    @trace.debug("UnisObject")
     def _callback(self, event, ctx=None):
         self._rt_callback(self, event)
-    @trace.info("UnisObject")
     def validate(self, ctx):
         """
         :param ctx: Context of the current operation.
@@ -616,7 +574,6 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
         """
         jsonschema.validate(self.to_JSON(ctx), self._rt_schema, resolver=self._rt_resolver)
 
-    @trace.info("UnisObject")
     def items(self, ctx=None):
         """
         :returns: key,value tuple
@@ -628,7 +585,6 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
                 yield (k, self._lift(v, self._get_reference(k), ctx, False))
             else:
                 yield (k, v)
-    @trace.info("UnisObject")
     def to_JSON(self, ctx=None, top=True):
         """
         :param ctx: Context of the current operation.
@@ -659,7 +615,6 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
                 raise SkipResource()
         return result
 
-    @trace.info("UnisObject")
     def merge(self, other, ctx):
         """
         :param other: Instance to merge with the :class:`UnisObject <unis.models.models.UnisObject>`.
@@ -686,7 +641,6 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
         for n in other._rt_remote:
             self._rt_remote.add(n)
     
-    @trace.info("UnisObject")
     def clone(self, ctx):
         """
         :param ctx: Context of the current operation.
@@ -701,7 +655,6 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
         model = type(self)
         return Context(model(d), None)
     
-    @trace.none
     def __repr__(self):
         return "<{}.{} {}>".format(self.__class__.__module__, self.__class__.__name__, self.__dict__.keys())
 
@@ -712,12 +665,13 @@ if SCHEMA_CACHE_DIR:
     except FileExistsError:
         pass
     except OSError as exp:
-        raise exp
+        raise
     for n in os.listdir(SCHEMA_CACHE_DIR):
         with open(SCHEMA_CACHE_DIR + "/" + n) as f:
             schema = json.load(f)
             _CACHE[schema['id']] = schema
 
+@trace.tlong("unis.models")
 def _schemaFactory(schema, n, tys, raw=False):
     class _jsonMeta(*tys):
         def __init__(cls, name, bases, attrs):
@@ -742,6 +696,7 @@ def _schemaFactory(schema, n, tys, raw=False):
             return hasattr(other, 'names') and not self.names - other.names
     return _jsonMeta
 
+@trace("unis.models")
 class _SchemaCache(object):
     _CLASSES = {}
     def get_class(self, schema_uri, class_name=None, raw=False):

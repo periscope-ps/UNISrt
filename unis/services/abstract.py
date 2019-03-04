@@ -1,6 +1,8 @@
 from collections import namedtuple, defaultdict
 from functools import wraps
+from lace.logging import trace
 
+@trace("unis.services")
 class ServiceMetaclass(type):
     """
     The :class:`ServiceMetaclass <unis.services.abstract.ServiceMetaclass>` handles registration of
@@ -29,6 +31,7 @@ class ServiceMetaclass(type):
                 for event in op.rt_events:
                     cls.rt_listeners[event.col][event.ty].append(op)
 
+@trace("unis.services")
 class RuntimeService(metaclass=ServiceMetaclass):
     @property
     def targets(self):
