@@ -38,12 +38,13 @@ class UnisObjectTest(unittest.TestCase):
         # Act
         obj1 = EmptyObject()
         obj2 = EmptyObject(test_data)
-        schema = {'$schema': 'blank_schema'}
+        expected_raw = {'$schema': 'blank_schema', 'selfRef': ''}
+        schema = {'$schema': 'blank_schema', 'selfRef': { 'type': 'string', 'default': ''}}
         # Assert
         self.assertIsInstance(obj1, UnisObject)
         self.assertIsInstance(obj2, UnisObject)
-        self.assertEqual(obj1.to_JSON(), schema)
-        self.assertEqual(obj2.to_JSON(), {**test_data, **schema})
+        self.assertEqual(obj1.to_JSON(), expected_raw)
+        self.assertEqual(obj2.to_JSON(), {**test_data, **expected_raw})
         for key, value in test_data.items():
             self.assertTrue(hasattr(obj2, key))
             self.assertEqual(getattr(obj2, key), value)

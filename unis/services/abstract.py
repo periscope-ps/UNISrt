@@ -75,4 +75,3 @@ class RuntimeService(metaclass=ServiceMetaclass):
         """
         if col.name in self.rt_listeners:
             col.addCallback(lambda res, ty: [op(self, res) for op in self.rt_listeners[col.name][ty]])
-    

@@ -1,9 +1,7 @@
-import asyncio, itertools, os, re, time, types
+import os, types
 import json, jsonschema, requests
-import jsonschema
 
 from lace.logging import trace
-from urllib.parse import urlparse
 
 from unis.exceptions import UnisReferenceError, UnisAttributeError
 from unis.rest import UnisClient
@@ -679,7 +677,7 @@ def _schemaFactory(schema, n, tys, raw=False):
                 tys = {'null': None, 'string': "", 'boolean': False, 'number': 0, 'integer': 0, 'object': {}, 'array': []}
                 return v.get('default', tys[v.get('type', 'null')])
             _props = lambda s: {k:_value(v) for k,v in s.get('properties', {}).items()}
-            cls.names, cls._rt_defaults, cls.ts = set(), {}, 0
+            cls.names, cls._rt_defaults, cls.ts = set(), {"selfRef": ""}, 0
             super(_jsonMeta, cls).__init__(name, bases, attrs)
             cls.names.add(n)
             cls._rt_defaults.update({k:v for k,v in _props(schema).items()})
