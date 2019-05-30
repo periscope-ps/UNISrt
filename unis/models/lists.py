@@ -1,7 +1,4 @@
-import asyncio
-import itertools
-import math
-import types
+import asyncio, logging, itertools, math, types
 
 from collections import defaultdict, namedtuple
 from lace.logging import trace
@@ -460,9 +457,8 @@ class UnisCollection(object):
                     i = self._indices['id'].index(v['id'])
                     res = self._cache[i]
                     self._remove_record(res)
-                    
-                except IndexError as e:
-                    raise ValueError("No such element in UNIS to delete") from e
+                except CollectionIndexError as e:
+                    logging.getLogger('unis.index').warn("No such element in UNIS to delete - {}".format(v['id']))
         if self._subscribe:
             await self._unis.subscribe(sources, cb)
     

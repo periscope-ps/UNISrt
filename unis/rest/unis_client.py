@@ -502,11 +502,8 @@ class UnisClient(metaclass=_SingletonOnUID):
         :rtype: List[Dict[str, Any]]
         """
         if 200 <= r.status <= 299:
-            try:
-                resp = json.loads(str(await r.read(), 'utf-8'))
-                return resp if isinstance(resp, list) else [resp]
-            except Exception as exp:
-                return [r.status]
+            resp = json.loads(str(await r.read(), 'utf-8'))
+            return resp if isinstance(resp, list) else [resp]
         else:
             raise ConnectionError("Error from unis - [{}] {}".format(r.status, await r.text()), r.status)
     
