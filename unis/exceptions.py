@@ -37,3 +37,9 @@ class CollectionIndexError(UnisError):
     not currently in the Index.
     """
     pass
+
+class LockedError(UnisError):
+    """
+    Exception thrown when attempting to modify a locked resource.
+    """
+    pass

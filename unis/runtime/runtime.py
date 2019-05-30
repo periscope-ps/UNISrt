@@ -167,6 +167,16 @@ class Runtime(object):
             self._oal._insert(resource).commit(publish_to=publish_to)
             return resource
         return self._oal._insert(resource)
+
+    def delete(self, resource):
+        """
+        :param resource: Resource to be removed from the runtime.
+
+        Removes a resource from runtime tracking and management.
+
+        note:: This operation will invalidate the object, preventing further modifications.
+        """
+        self._oal._remove(resource)
     
     def addService(self, service):
         """

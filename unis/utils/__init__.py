@@ -204,5 +204,7 @@ class UniqueIndex(object):
         if index not in self._reverse:
             raise CollectionIndexError("Cannot remove resource from index_{}".format(self.key))
         v = self._reverse[index]
-        del self._reverse[index]
-        del self._index[v]
+        try: del self._reverse[index]
+        except KeyError: pass
+        try: del self._index[v]
+        except KeyError: pass

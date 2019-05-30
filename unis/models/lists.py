@@ -7,9 +7,9 @@ from collections import defaultdict, namedtuple
 from lace.logging import trace
 from urllib.parse import urlparse
 
-from unis.exceptions import UnisReferenceError, CollectionIndexError, UnisAttributeError
+from unis.exceptions import UnisReferenceError, CollectionIndexError, UnisAttributeError, ConnectionError
 from unis.models import schemaLoader
-from unis.models.models import Context as oContext
+from unis.models.models import DeletedResource, Context as oContext
 from unis.rest import UnisProxy, UnisClient
 from unis.utils import Events, Index, UniqueIndex, async
 
@@ -223,8 +223,8 @@ class UnisCollection(object):
         self._check_record(item)
         try:
             self._unis.delete(item.getSource(), item.id)
-        except UnisReferenceError:
-            return
+        except (UnisReferenceError, ConnectionError):
+            self._remove_record(item)
     
     def index(self, item):
         """
@@ -370,6 +370,23 @@ class UnisCollection(object):
         * **type:** event type in ["new", "update", "delete"]
         """
         self._callbacks.append(cb)
+    def _remove_record(self, v):
+        v = v if isinstance(v, oContext) else oContext(v, None)
+        try:
+            i = self.index(v)
+            [index.remove(i) for index in self._indices.values()]
+            self._cache[i] = None
+        except CollectionIndexError:
+            pass
+        
+        try: del self._stubs[v._getattribute('id')]
+        except KeyError: pass
+        
+        v._delete()
+        self._serve(Events.delete, v)
+        v.setObject(DeletedResource())
+        v.setRuntime(None)
+
     def _check_record(self, v):
         if self.model._rt_schema["name"] not in v.names:
             raise TypeError("Resource not of correct type: got {}, expected {}".format(self.model, type(v)))
@@ -442,12 +459,7 @@ class UnisCollection(object):
                 try:
                     i = self._indices['id'].index(v['id'])
                     res = self._cache[i]
-                    res._delete(None)
-                    for index in self._indices.values():
-                        index.remove(i)
-                    self._cache[i] = None
-                    del self._stubs[res._getattribute('id', None)]
-                    self._serve(Events.delete, res)
+                    self._remove_record(res)
                     
                 except IndexError as e:
                     raise ValueError("No such element in UNIS to delete") from e

@@ -169,6 +169,9 @@ class ObjectLayer(object):
         res.setRuntime(self)
         res.setObject(self._cache(self.getModel(res.names)).append(res.getObject()))
         return res
+
+    def _remove(self, res):
+        self._cache(self.getModel(res.names)).remove(res)
         
     def getModel(self, names):
         """

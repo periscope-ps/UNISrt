@@ -3,7 +3,7 @@ import json, jsonschema, requests
 
 from lace.logging import trace
 
-from unis.exceptions import UnisReferenceError, UnisAttributeError
+from unis.exceptions import UnisReferenceError, UnisAttributeError, LockedError
 from unis.rest import UnisClient
 from unis.settings import SCHEMA_CACHE_DIR
 from unis.utils import async, Events
@@ -22,6 +22,11 @@ class _attr(object):
         return self.__values__.get(obj, self._default)
     def __set__(self, obj, v):
         self.__values__[obj] = v
+
+
+class DeletedResource(object):
+    def __getattr__(self, n):
+        raise LockedError("This object has been deleted and is locked")
     
 @trace("unis.models")
 class Context(object):
