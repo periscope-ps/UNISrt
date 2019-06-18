@@ -139,7 +139,10 @@ class _unistype(object):
                 raise UnisAttributeError(e) from e
             v = default
         if n != '__dict__' and n in self.__dict__:
-            self.__dict__[n] = self._lift(v, self._get_reference(n), ctx)
+            try: self.__dict__[n] = self._lift(v, self._get_reference(n), ctx)
+            except SkipResource:
+                if n in self._rt_defaults: self.__dict__[n] = self._rt_defaults[n]
+                else: del self.__dict__[n]
             return self.__dict__[n]._rt_raw
         return v
     
@@ -174,7 +177,10 @@ class _unistype(object):
         elif isinstance(v, dict):
             if '$schema' in v or 'href' in v:
                 if remote and ctx:
-                    return ctx.insert(v) if "$schema" in v else ctx.find(v['href'])[0]
+                    try:
+                        return ctx.insert(v) if "$schema" in v else ctx.find(v['href'])[0]
+                    except UnisReferenceError:
+                        raise SkipResource()
                 else:
                     return _localdict(v)
             else:
@@ -231,7 +237,7 @@ class Primitive(_unistype):
         """
         self._rt_raw = other._rt_raw if isinstance(other, _unistype) else other
     def __repr__(self):
-        return "<unis.Primitive>"#.format(self._rt_raw)
+        return "<unis.Primitive>"
 
 @trace("unis.models")
 class List(_unistype):
@@ -248,7 +254,10 @@ class List(_unistype):
         v = v if isinstance(v, list) else [v]
         self._rt_ls = [x.getObject() if isinstance(x, Context) else x for x in v]
     def _getitem(self, i, ctx):
-        return self._lift(self._rt_ls[i], self._rt_reference, ctx)._rt_raw
+        try: return self._lift(self._rt_ls[i], self._rt_reference, ctx)._rt_raw
+        except SkipResource:
+            self._rt_ls.pop(i)
+            return self._getitem(i, ctx)
     def _setitem(self, i, v, ctx):
         if isinstance(v, Context):
             v = v.getObject()
@@ -290,11 +299,8 @@ class List(_unistype):
         :meth:`UnisCollection.where <unis.models.lists.UnisCollection.where>`.
         """
         if isinstance(f, types.FunctionType):
-            for v in self._rt_ls:
-                try:
-                    if f(Context(v, ctx)): yield Context(v, ctx)
-                except UnisAttributeError:
-                    pass
+            for v in self._iter(ctx):
+                if f(Context(v, ctx)): yield Context(v, ctx)
         else:
             ops = {
                 "gt": lambda b: lambda a: type(a) is type(b) and a > b,
@@ -308,7 +314,10 @@ class List(_unistype):
             def _check(x, k, op):
                 return hasattr(x, k) and op(getattr(x, k))
             for x in self._iter(ctx):
-                x = Context(self._lift(x, self._rt_reference, ctx), ctx)
+                try:
+                    x = Context(self._lift(x, self._rt_reference, ctx), ctx)
+                except SkipResource:
+                    continue
                 if all([_check(x, *v) for v in f]):
                     yield x
     
@@ -327,7 +336,10 @@ class List(_unistype):
         res = []
         for i, item in enumerate(self._rt_ls):
             if isinstance(item, (list, dict)):
-                self._rt_ls[i] = self._lift(item, self._get_reference(i), ctx, False)
+                try:
+                    self._rt_ls[i] = self._lift(item, self._get_reference(i), ctx, False)
+                except SkipResource:
+                    continue
         for item in self._rt_ls:
             try:
                 res.append(item.to_JSON(ctx, top) if isinstance(item, _unistype) else item)
@@ -345,13 +357,16 @@ class List(_unistype):
         self._rt_ls = other._rt_ls
     
     def _iter(self, ctx):
-        self._rt_ls = [self._lift(x, self._rt_reference, ctx) for x in self._rt_ls]
-        return iter([x._rt_raw for x in self._rt_ls])
+        remove = []
+        for x in self._rt_ls:
+            try: yield self._lift(x, self._rt_reference, ctx)
+            except SkipResource: remove.append(x)
+        [self._rt_ls.remove(x) for x in remove]
     def __len__(self):
         return len(self._rt_ls)
     def __contains__(self, v, ctx):
         if isinstance(v, Context): v = v.getObject()
-        return v in [self._lift(x, self._rt_reference, ctx) for x in self._rt_ls]
+        return v in list(self._iter(ctx))
     def __repr__(self):
         return "<unis.List {}>".format(self._rt_ls.__repr__())
 
@@ -378,7 +393,8 @@ class Local(_unistype):
         """
         for k,v in self.__dict__.items():
             if isinstance(v, (list, dict)):
-                yield (k, self._lift(v, self._get_reference(k), ctx, False))
+                try: yield (k, self._lift(v, self._get_reference(k), ctx, False))
+                except SkipResource: continue
             else:
                 yield (k, v)
     def to_JSON(self, ctx, top):
@@ -392,10 +408,10 @@ class Local(_unistype):
         applicable.
         """
         res = {}
-        for k,v in self.__dict__.items():
-            if isinstance(v, (list, dict)):
-                self.__dict__[k] = v = self._lift(v, self._get_reference(k), ctx, False)
+        for k,v in self.__dict__.items(): 
             try:
+                if isinstance(v, (list, dict)):
+                    self.__dict__[k] = v = self._lift(v, self._get_reference(k), ctx, False)
                 res[k] = v.to_JSON(ctx, top) if isinstance(v, _unistype) else v
             except SkipResource:
                 pass
@@ -585,7 +601,8 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
         """
         for k,v in self.__dict__.items():
             if isinstance(v, (list, dict)):
-                yield (k, self._lift(v, self._get_reference(k), ctx, False))
+                try: yield (k, self._lift(v, self._get_reference(k), ctx, False))
+                except SkipResource: continue
             else:
                 yield (k, v)
     def to_JSON(self, ctx=None, top=True):
@@ -604,12 +621,12 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
         result = {}
         if top:
             for k,v in filter(lambda x: x[0] in self._rt_remote, self.__dict__.items()):
-                if isinstance(v, (list, dict)):
-                    self.__dict__[k] = v = self._lift(v, self._get_reference(k), ctx, False)
                 try:
+                    if isinstance(v, (list, dict)):
+                        self.__dict__[k] = v = self._lift(v, self._get_reference(k), ctx, False)
                     result[k] = v.to_JSON(ctx, False) if isinstance(v, _unistype) else v
                 except SkipResource:
-                    pass
+                    continue
             result['$schema'] = self._rt_schema['id']
         else:
             if self.selfRef:
@@ -631,7 +648,10 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
         for k,v in other.__dict__.items():
             if k in self.__dict__:
                 if isinstance(v, (list, dict)):
-                    v = self._lift(v, self._get_reference(k), ctx, False)
+                    try:
+                        v = self._lift(v, self._get_reference(k), ctx, False)
+                    except SkipResource:
+                        continue
                 if isinstance(self.__dict__[k], _unistype):
                     if isinstance(v, dict):
                         self.__dict__[k] = v if v.get('selfRef', '') != self.selfRef else self.__dict__[k]
