@@ -291,27 +291,27 @@ class UnisCollection(object):
                         if pred(oContext(v, ctx)): yield v
                     except UnisAttributeError:
                         pass
-            else:
-                non_index = {}
+        else:
+            non_index = {}
+            with self._lock:
+                subset = set(range(self._cache.full_length()))
+            for k,v in pred.items():
+                v = v if isinstance(v, dict) else { "eq": v }
                 with self._lock:
-                    subset = set(range(self._cache.full_length()))
-                for k,v in pred.items():
-                    v = v if isinstance(v, dict) else { "eq": v }
-                    with self._lock:
-                        if k in self._indices.keys():
-                            for f,v in v.items():
-                                subset &= self._indices[k].subset(f, v)
-                        else:
-                            for f,v in v.items():
-                                non_index[k] = op[f](v)
-                
-                for i in subset:
-                    record = self._cache[i]
-                    try:
-                        if all([f(record._getattribute(k, ctx, None)) for k,f in non_index.items()]):
-                            yield record
-                    except TypeError:
-                        pass
+                    if k in self._indices.keys():
+                        for f,v in v.items():
+                            subset &= self._indices[k].subset(f, v)
+                    else:
+                        for f,v in v.items():
+                            non_index[k] = op[f](v)
+                            
+            for i in subset:
+                record = self._cache[i]
+                try:
+                    if all([f(record._getattribute(k, ctx, None)) for k,f in non_index.items()]):
+                        yield record
+                except TypeError:
+                    pass
     
     def createIndex(self, k, unique=False):
         """
