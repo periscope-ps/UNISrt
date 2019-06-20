@@ -448,7 +448,8 @@ class UnisCollection(object):
                         uid = urlparse(v['selfRef']).path.split('/')[-1]
                         cid = UnisClient.resolve(v['selfRef'])
                         self._proto_get_next([_rkey(uid, cid)])
-                        resource = self.get([v['selfRef']])[0]
+                        try: resource = self.get([v['selfRef']])[0]
+                        except UnisReferenceError: return
                     for k,v in v.items():
                         resource.__dict__[k] = v
                 self.update(resource)
