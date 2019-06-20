@@ -96,6 +96,7 @@ class UnisCollection(object):
                     results.append(UnisCollection.Context(col, runtime))
             return results
     def __init__(self, name, model):
+        self._lock = RLock()
         self._complete_cache, self._get_next = self._proto_complete_cache, self._proto_get_next
         self.name, self.model = name, model
         self._indices, self._services, self._unis = {}, [], UnisProxy(name)
@@ -106,7 +107,6 @@ class UnisCollection(object):
         self.createIndex("selfRef", unique=True)
         self._loop = asyncio.get_event_loop()
         self._callbacks = []
-        self._lock = RLock()
         
     def __getitem__(self, i):
         with self._lock:
