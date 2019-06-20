@@ -220,7 +220,7 @@ class Runtime(object):
         Shutdown the runtime, removing connections from remote instances.
         """
         self.log.info("Tearing down connection to UNIS...")
-        signal.signal(signal.SIGTERM, signal.SIG_DFL)
+        if threading.current_thread() is threading.main_thread(): signal.signal(signal.SIGTERM, signal.SIG_DFL)
         if self.__dict__.get('_oal'):
             self._oal.shutdown()
         self.log.info("Teardown complete.")
