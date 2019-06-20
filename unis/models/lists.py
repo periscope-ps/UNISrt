@@ -2,6 +2,7 @@ import asyncio, logging, itertools, math, types
 
 from collections import defaultdict, namedtuple
 from lace.logging import trace
+from threading import RLock
 from urllib.parse import urlparse
 
 from unis.exceptions import UnisReferenceError, CollectionIndexError, UnisAttributeError, ConnectionError
@@ -105,18 +106,21 @@ class UnisCollection(object):
         self.createIndex("selfRef", unique=True)
         self._loop = asyncio.get_event_loop()
         self._callbacks = []
+        self._lock = RLock()
         
     def __getitem__(self, i):
-        if i >= self._cache.full_length():
-            self._complete_cache()
-        return self._cache[i]
+        with self._lock:
+            if i >= self._cache.full_length():
+                self._complete_cache()
+            return self._cache[i]
     
     def __setitem__(self, i, item):
-        self._check_record(item)
-        self._cache[i].merge(item, None)
-        for k, index in self._indices.items():
-            if self._cache[i]._getattribute(k, None, None) is not None:
-                index.update(i, self._cache[i]._getattribute(k, None))
+        with self._lock:
+            self._check_record(item)
+            self._cache[i].merge(item, None)
+            for k, index in self._indices.items():
+                if self._cache[i]._getattribute(k, None, None) is not None:
+                    index.update(i, self._cache[i]._getattribute(k, None))
 
     def pre_flush(self, items):
         """
@@ -155,8 +159,9 @@ class UnisCollection(object):
         
         Force the collection to pull and cache all remote resources matching the collection.
         """
-        self._complete_cache()
-        return self._cache.valid_list()
+        with self._lock:
+            self._complete_cache()
+            return self._cache.valid_list()
     
     def get(self, hrefs):
         """
@@ -166,14 +171,15 @@ class UnisCollection(object):
         Search for one or more resources and include them in the collection.  If the resources
         are local, they are immediately returned.
         """
-        ids = [urlparse(r).path.split('/')[-1] for r in hrefs]
-        try:
-            to_get = [_rkey(uid, self._stubs[uid]) for uid in ids if isinstance(self._stubs[uid], str)]
-        except KeyError as e:
-            raise UnisReferenceError("Requested object in unregistered instance", hrefs) from e
-        if to_get:
-            self._get_next(to_get)
-        return [self._stubs[uid] for uid in ids]
+        with self._lock:
+            ids = [urlparse(r).path.split('/')[-1] for r in hrefs]
+            try:
+                to_get = [_rkey(uid, self._stubs[uid]) for uid in ids if isinstance(self._stubs[uid], str)]
+            except KeyError as e:
+                raise UnisReferenceError("Requested object in unregistered instance", hrefs) from e
+            if to_get:
+                self._get_next(to_get)
+            return [self._stubs[uid] for uid in ids]
     
     def append(self, item):
         """
@@ -187,25 +193,26 @@ class UnisCollection(object):
         
         .. note:: This function is called automatically by :meth:`ObjectLayer.insert <unis.runtime.oal.ObjectLayer.insert>`
         """
-        self._check_record(item)
-        try:
-            i = self.index(item)
-        except CollectionIndexError:
-            item.setCollection(self)
-            self._stubs[item._getattribute('id', None)] = item
-            i = self._cache.full_length()
-            self._cache.append(item)
-            for k, index in self._indices.items():
-                if item._getattribute(k, None, None) is not None:
-                    index.update(i, item._getattribute(k, None))
-            self._serve(Events.new, item)
-            return item
+        with self._lock:
+            self._check_record(item)
+            try:
+                i = self.index(item)
+            except CollectionIndexError:
+                item.setCollection(self)
+                self._stubs[item._getattribute('id', None)] = item
+                i = self._cache.full_length()
+                self._cache.append(item)
+                for k, index in self._indices.items():
+                    if item._getattribute(k, None, None) is not None:
+                        index.update(i, item._getattribute(k, None))
+                self._serve(Events.new, item)
+                return item
             
-        uid = item._getattribute('id', None)
-        self.__setitem__(i, item)
-        if uid not in self._stubs or isinstance(self._stubs[uid], str):
-            self._stubs[uid] = self._cache[i]
-        return self._cache[i]
+            uid = item._getattribute('id', None)
+            self.__setitem__(i, item)
+            if uid not in self._stubs or isinstance(self._stubs[uid], str):
+                self._stubs[uid] = self._cache[i]
+            return self._cache[i]
         
     def remove(self, item):
         """
@@ -217,11 +224,12 @@ class UnisCollection(object):
 
         .. note:: In the case of resources in back end data stores, this operation will delete the back end resource as well.
         """
-        self._check_record(item)
-        try:
-            self._unis.delete(item.getSource(), item.id)
-        except (UnisReferenceError, ConnectionError):
-            self._remove_record(item)
+        with self._lock:
+            self._check_record(item)
+            try:
+                self._unis.delete(item.getSource(), item.id)
+            except (UnisReferenceError, ConnectionError):
+                self._remove_record(item)
     
     def index(self, item):
         """
@@ -231,8 +239,9 @@ class UnisCollection(object):
         
         Gets the index of the object within the collection.
         """
-        item = item if isinstance(item, oContext) else oContext(item, None)
-        return self._indices['id'].index(item.id)
+        with self._lock:
+            item = item if isinstance(item, oContext) else oContext(item, None)
+            return self._indices['id'].index(item.id)
 
     def first_where(self, pred, ctx=None):
         """
@@ -244,10 +253,11 @@ class UnisCollection(object):
         As :func:`UnisCollection.where <unis.models.list.UnisCollection.where>` but returns
         only the first resource matching the request.
         """
-        try:
-            return next(self.where(pred, ctx))
-        except StopIteration:
-            return None
+        with self._lock:
+            try:
+                return next(self.where(pred, ctx))
+            except StopIteration:
+                return None
     
     def where(self, pred, ctx=None):
         """
@@ -273,32 +283,33 @@ class UnisCollection(object):
             "le": lambda b: lambda a: a <= b,
             "eq": lambda b: lambda a: a == b
         }
-        self._complete_cache()
-        if isinstance(pred, types.FunctionType):
-            for v in self._cache:
-                try:
-                    if pred(oContext(v, ctx)): yield v
-                except UnisAttributeError:
-                    pass
-        else:
-            non_index = {}
-            subset = set(range(self._cache.full_length()))
-            for k,v in pred.items():
-                v = v if isinstance(v, dict) else { "eq": v }
-                if k in self._indices.keys():
-                    for f,v in v.items():
-                        subset &= self._indices[k].subset(f, v)
-                else:
-                    for f,v in v.items():
-                        non_index[k] = op[f](v)
+        with self._lock:
+            self._complete_cache()
+            if isinstance(pred, types.FunctionType):
+                for v in self._cache:
+                    try:
+                        if pred(oContext(v, ctx)): yield v
+                    except UnisAttributeError:
+                        pass
+            else:
+                non_index = {}
+                subset = set(range(self._cache.full_length()))
+                for k,v in pred.items():
+                    v = v if isinstance(v, dict) else { "eq": v }
+                    if k in self._indices.keys():
+                        for f,v in v.items():
+                            subset &= self._indices[k].subset(f, v)
+                    else:
+                        for f,v in v.items():
+                            non_index[k] = op[f](v)
             
-            for i in subset:
-                record = self._cache[i]
-                try:
-                    if all([f(record._getattribute(k, ctx, None)) for k,f in non_index.items()]):
-                        yield record
-                except TypeError:
-                    pass
+                for i in subset:
+                    record = self._cache[i]
+                    try:
+                        if all([f(record._getattribute(k, ctx, None)) for k,f in non_index.items()]):
+                            yield record
+                    except TypeError:
+                        pass
     
     def createIndex(self, k, unique=False):
         """
@@ -306,11 +317,12 @@ class UnisCollection(object):
         
         Generate an index for faster querying over a specified field.
         """
-        if k not in self._indices:
-            self._indices[k] = UniqueIndex(k) if unique else Index(k)
-            for i, v in enumerate(self._cache):
-                if v._getattribute(k, None, None) is not None:
-                    self._indices[k].update(i, v._getattribute(k, None))
+        with self._lock:
+            if k not in self._indices:
+                self._indices[k] = UniqueIndex(k) if unique else Index(k)
+                for i, v in enumerate(self._cache):
+                    if v._getattribute(k, None, None) is not None:
+                        self._indices[k].update(i, v._getattribute(k, None))
                     
     def updateIndex(self, res):
         """
@@ -319,12 +331,13 @@ class UnisCollection(object):
         
         Update the index values for a modified or new resource.
         """
-        i = self.index(res)
-        for k, index in self._indices.items():
-            v = getattr(res, k, None)
-            if v is None:
-                index.remove(i)
-            index.update(i, v)
+        with self._lock:
+            i = self.index(res)
+            for k, index in self._indices.items():
+                v = getattr(res, k, None)
+                if v is None:
+                    index.remove(i)
+                index.update(i, v)
             
     async def addSources(self, cids):
         """
@@ -335,11 +348,12 @@ class UnisCollection(object):
         
         .. warning:: This function is for internal use only.
         """
-        self._complete_cache, self._get_next = self._proto_complete_cache, self._proto_get_next
-        for v in filter(lambda x: 'selfRef' in x, await self._unis.getStubs(cids)):
-            uid = urlparse(v['selfRef']).path.split('/')[-1]
-            self._stubs[uid] = UnisClient.resolve(v['selfRef'])
-        await self._add_subscription(cids)
+        with self._lock:
+            self._complete_cache, self._get_next = self._proto_complete_cache, self._proto_get_next
+            for v in filter(lambda x: 'selfRef' in x, await self._unis.getStubs(cids)):
+                uid = urlparse(v['selfRef']).path.split('/')[-1]
+                self._stubs[uid] = UnisClient.resolve(v['selfRef'])
+            await self._add_subscription(cids)
     
     def addService(self, service):
         """
@@ -351,7 +365,8 @@ class UnisCollection(object):
         
         .. warning:: This function is for internal use only.
         """
-        self._services.append(service)
+        with self._lock:
+            self._services.append(service)
     def addCallback(self, cb):
         """
         :param callable cb: Function to attach to the collection.
@@ -366,118 +381,130 @@ class UnisCollection(object):
         * **resource:** resource to inspect
         * **type:** event type in ["new", "update", "delete"]
         """
-        self._callbacks.append(cb)
+        with self._lock:
+            self._callbacks.append(cb)
     def _remove_record(self, v):
-        v = v if isinstance(v, oContext) else oContext(v, None)
-        try:
-            i = self.index(v)
-            [index.remove(i) for index in self._indices.values()]
-            self._cache[i] = None
-        except CollectionIndexError:
-            pass
+        with self._lock:
+            v = v if isinstance(v, oContext) else oContext(v, None)
+            try:
+                i = self.index(v)
+                [index.remove(i) for index in self._indices.values()]
+                self._cache[i] = None
+            except CollectionIndexError:
+                pass
         
-        try: del self._stubs[v._getattribute('id')]
-        except KeyError: pass
+            try: del self._stubs[v._getattribute('id')]
+            except KeyError: pass
         
-        v._delete()
-        self._serve(Events.delete, v)
-        v.setObject(DeletedResource())
-        v.setRuntime(None)
+            v._delete()
+            self._serve(Events.delete, v)
+            v.setObject(DeletedResource())
+            v.setRuntime(None)
 
     def _check_record(self, v):
         if self.model._rt_schema["name"] not in v.names:
             raise TypeError("Resource not of correct type: got {}, expected {}".format(self.model, type(v)))
 
     def _serve(self, ty, v):
-        ctx = oContext(v, None)
-        v._callback(ty.name)
-        [cb(ctx, ty.name) for cb in self._callbacks]
-        for service in self._services:
-            f = getattr(service, ty.name)
-            f(ctx)
+        with self._lock:
+            ctx = oContext(v, None)
+            v._callback(ty.name)
+            [cb(ctx, ty.name) for cb in self._callbacks]
+            for service in self._services:
+                f = getattr(service, ty.name)
+                f(ctx)
     
     def _proto_complete_cache(self):
-        self._block_size = max(self._block_size, len(self._stubs) - len(self._cache))
-        self._get_next()
+        with self._lock:
+            self._block_size = max(self._block_size, len(self._stubs) - len(self._cache))
+            self._get_next()
     
     def _proto_get_next(self, ids=None):
-        ids = ids or []
-        todo = (_rkey(k,v) for k,v in self._stubs.items() if isinstance(v, str))
-        while len(ids) < self._block_size:
-            try:
-                ids.append(next(todo))
-            except StopIteration:
-                self._complete_cache = lambda: None
-                self._get_next = lambda x: None
-                break
-        requests = defaultdict(list)
-        for v in ids:
-            requests[v.cid].append(v.uid)
-        futs = [self._get_block(k,v,self._block_size) for k,v in requests.items()]
-        results = async.make_async(asyncio.gather, *futs)
-        self._block_size *= self._growth
-        for result in itertools.chain(*results):
-            model = schemaLoader.get_class(result["$schema"], raw=True)
-            self.append(model(result))
+        with self._lock:
+            ids = ids or []
+            todo = (_rkey(k,v) for k,v in self._stubs.items() if isinstance(v, str))
+            while len(ids) < self._block_size:
+                try:
+                    ids.append(next(todo))
+                except StopIteration:
+                    self._complete_cache = lambda: None
+                    self._get_next = lambda x: None
+                    break
+            requests = defaultdict(list)
+            for v in ids:
+                requests[v.cid].append(v.uid)
+            futs = [self._get_block(k,v,self._block_size) for k,v in requests.items()]
+            results = async.make_async(asyncio.gather, *futs)
+            self._block_size *= self._growth
+            for result in itertools.chain(*results):
+                model = schemaLoader.get_class(result["$schema"], raw=True)
+                self.append(model(result))
     
     async def _get_block(self, source, ids, blocksize):
-        if len(ids) > blocksize:
-            requests = [ids[i:i + blocksize] for i in range(0, len(ids), blocksize)]
-            futures = [self._get_block(source, req, blocksize) for req in requests]
-            results = await asyncio.gather(*futures)
-            return list(itertools.chain(*results))
-        else:
-            return await self._from_unis(source, kwargs={"id": ids})
+        with self._lock:
+            if len(ids) > blocksize:
+                requests = [ids[i:i + blocksize] for i in range(0, len(ids), blocksize)]
+                futures = [self._get_block(source, req, blocksize) for req in requests]
+                results = await asyncio.gather(*futures)
+                return list(itertools.chain(*results))
+            else:
+                return await self._from_unis(source, kwargs={"id": ids})
     
     async def _add_subscription(self, sources):
         @trace.tlong("unis.models.UnisCollection._add_subscription")
         def cb(v, action):
-            if action in ['POST', 'PUT']:
-                try:
-                    schema = v.get("\\$schema", None) or v['$schema']
-                except KeyError as e:
-                    raise ValueError("No schema in message from UNIS - {}".format(v)) from e
-                model = schemaLoader.get_class(schema, raw=True)
-                if action == 'POST':
-                    resource = model(v)
-                    resource = self.append(resource)
-                else:
+            with self._lock:
+                if action in ['POST', 'PUT']:
                     try:
-                        resource = self.get([v['selfRef']])[0]
-                    except UnisReferenceError:
-                        uid = urlparse(v['selfRef']).path.split('/')[-1]
-                        cid = UnisClient.resolve(v['selfRef'])
-                        self._proto_get_next([_rkey(uid, cid)])
-                        try: resource = self.get([v['selfRef']])[0]
-                        except UnisReferenceError: return
-                    for k,v in v.items():
-                        resource.__dict__[k] = v
-                self.update(resource)
-            elif action == 'DELETE':
-                try:
-                    i = self._indices['id'].index(v['id'])
-                    res = self._cache[i]
-                    self._remove_record(res)
-                except CollectionIndexError as e:
-                    logging.getLogger('unis.index').warn("No such element in UNIS to delete - {}".format(v['id']))
-        if self._subscribe:
-            await self._unis.subscribe(sources, cb)
+                        schema = v.get("\\$schema", None) or v['$schema']
+                    except KeyError as e:
+                        raise ValueError("No schema in message from UNIS - {}".format(v)) from e
+                    model = schemaLoader.get_class(schema, raw=True)
+                    if action == 'POST':
+                        resource = model(v)
+                        resource = self.append(resource)
+                    else:
+                        try:
+                            resource = self.get([v['selfRef']])[0]
+                        except UnisReferenceError:
+                            uid = urlparse(v['selfRef']).path.split('/')[-1]
+                            cid = UnisClient.resolve(v['selfRef'])
+                            self._proto_get_next([_rkey(uid, cid)])
+                            try: resource = self.get([v['selfRef']])[0]
+                            except UnisReferenceError: return
+                        for k,v in v.items():
+                            resource.__dict__[k] = v
+                    self.update(resource)
+                elif action == 'DELETE':
+                    try:
+                        i = self._indices['id'].index(v['id'])
+                        res = self._cache[i]
+                        self._remove_record(res)
+                    except CollectionIndexError as e:
+                        logging.getLogger('unis.index').warn("No such element in UNIS to delete - {}".format(v['id']))
+                if self._subscribe:
+                    await self._unis.subscribe(sources, cb)
     
     async def _from_unis(self, source, start=0, size=None, kwargs={}):
-        kwargs.update({"skip": start, "limit": size})
-        result = await self._unis.get([source], **kwargs)
-        return result if isinstance(result, list) else [result]
+        with self._lock:
+            kwargs.update({"skip": start, "limit": size})
+            result = await self._unis.get([source], **kwargs)
+            return result if isinstance(result, list) else [result]
     
     def __repr__(self):
-        rep = ".{} {}".format(self.name, self._cache.__repr__() if self._cache and len(self._cache) < 4 else "[...]")
-        return "<UnisList{}>".format(rep if hasattr(self, "name") else "")
+        with self._lock:
+            rep = ".{} {}".format(self.name, self._cache.__repr__() if self._cache and len(self._cache) < 4 else "[...]")
+            return "<UnisList{}>".format(rep if hasattr(self, "name") else "")
     
     def __len__(self):
-        return len(self._cache) + len([x for x,v in self._stubs.items() if isinstance(v, str)])
+        with self._lock:
+            return len(self._cache) + len([x for x,v in self._stubs.items() if isinstance(v, str)])
     
     def __contains__(self, item):
-        return item in self._cache
+        with self._lock:
+            return item in self._cache
     
     def __iter__(self):
-        self._complete_cache()
-        return iter(self._cache.valid_list())
+        with self._lock:
+            self._complete_cache()
+            return iter(self._cache.valid_list())
