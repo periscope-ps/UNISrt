@@ -486,6 +486,7 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
         """
         :param ctx: Context of the current operation.
         :returns: :class:`CID <unis.rest.unis_client.CID>` for this object.
+        :raises UnisReferenceError: Raised when instance has not been registered to a source.
         
         Returns the ID of the data store in which the resource is stored.
         """

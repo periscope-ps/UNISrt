@@ -1,4 +1,4 @@
-import asyncio, atexit, signal, sys, copy, configparser
+import asyncio, atexit, signal, sys, copy, configparser, threading
 
 from functools import reduce
 from lace.logging import trace
@@ -116,10 +116,9 @@ class Runtime(object):
         try:
             self._oal.addSources(self.settings['unis'])
         
-            try:
-                signal.signal(signal.SIGINT, self._sig_close)
-            except:
-                pass
+            if threading.current_thread() is threading.main_thread():
+                try: signal.signal(signal.SIGINT, self._sig_close)
+                except: pass
             atexit.register(self._exit_close)
 
             [self.addService(s) for s in self.settings['runtime']['services']]
