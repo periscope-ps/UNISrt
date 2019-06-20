@@ -482,8 +482,9 @@ class UnisCollection(object):
                         self._remove_record(res)
                     except CollectionIndexError as e:
                         logging.getLogger('unis.index').warn("No such element in UNIS to delete - {}".format(v['id']))
-                if self._subscribe:
-                    await self._unis.subscribe(sources, cb)
+        with self._lock:
+            if self._subscribe:
+                await self._unis.subscribe(sources, cb)
     
     async def _from_unis(self, source, start=0, size=None, kwargs={}):
         with self._lock:
