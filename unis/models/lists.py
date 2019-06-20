@@ -226,10 +226,10 @@ class UnisCollection(object):
         """
         with self._lock:
             self._check_record(item)
-            try:
-                self._unis.delete(item.getSource(), item.id)
-            except (UnisReferenceError, ConnectionError):
-                self._remove_record(item)
+        try:
+            self._unis.delete(item.getSource(), item.id)
+        except (UnisReferenceError, ConnectionError):
+            self._remove_record(item)
     
     def index(self, item):
         """
@@ -434,7 +434,8 @@ class UnisCollection(object):
             for v in ids:
                 requests[v.cid].append(v.uid)
             futs = [self._get_block(k,v,self._block_size) for k,v in requests.items()]
-            results = async.make_async(asyncio.gather, *futs)
+        results = async.make_async(asyncio.gather, *futs)
+        with self._lock:
             self._block_size *= self._growth
             for result in itertools.chain(*results):
                 model = schemaLoader.get_class(result["$schema"], raw=True)
