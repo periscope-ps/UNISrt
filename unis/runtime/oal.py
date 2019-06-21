@@ -129,7 +129,8 @@ class ObjectLayer(object):
                         continue
                     r.__dict__["selfRef"] = resp["selfRef"]
                     self._cache(col).updateIndex(r)
-                    self._pending.remove(r)
+                    try: self._pending.remove(r)
+                    except KeyError: continue
                 self._cache(col).locked = False
     
     def addSources(self, hrefs):
