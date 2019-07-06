@@ -141,7 +141,7 @@ class _unistype(object):
         if n != '__dict__' and n in self.__dict__:
             try: self.__dict__[n] = self._lift(v, self._get_reference(n), ctx)
             except SkipResource:
-                raise AttributeError("'{}' object has no attribute {} or attribute is invalid".format(self.__class__.__name__, n))
+                raise UnisAttributeError("'{}' object has no attribute {} or attribute is invalid".format(self.__class__.__name__, n))
             return self.__dict__[n]._rt_raw
         return v
     
