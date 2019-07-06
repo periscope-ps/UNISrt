@@ -291,7 +291,11 @@ class UnisClient(metaclass=_SingletonOnUID):
         self.loop = asyncio.new_event_loop()
         self._open, self._socket = True, None
         self._virtual = kwargs.get('virtual', False)
-        asyncio.get_event_loop().run_in_executor(None, self.loop.run_forever)
+        try: asyncio.get_event_loop().run_in_executor(None, self.loop.run_forever)
+        except RuntimeError:
+            asyncio.set_event_loop(asyncio.new_event_loop())
+            asyncio.get_event_loop().run_in_executor(None, self.loop.run_forever)
+
         self._url, self._verify, self._ssl = url, kwargs.get("verify", False), kwargs.get("ssl")
         self._channels, self._lock = defaultdict(list), True
         

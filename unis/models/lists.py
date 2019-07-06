@@ -207,13 +207,13 @@ class UnisCollection(object):
                         index.update(i, item._getattribute(k, None))
             self._serve(Events.new, item)
             return item
-            
-            uid = item._getattribute('id', None)
-            self.__setitem__(i, item)
-            with self._lock:
-                if uid not in self._stubs or isinstance(self._stubs[uid], str):
-                    self._stubs[uid] = self._cache[i]
-                return self._cache[i]
+        
+        uid = item._getattribute('id', None)
+        self.__setitem__(i, item)
+        with self._lock:
+            if uid not in self._stubs or isinstance(self._stubs[uid], str):
+                self._stubs[uid] = self._cache[i]
+            return self._cache[i]
         
     def remove(self, item):
         """
@@ -354,7 +354,8 @@ class UnisCollection(object):
             self._complete_cache, self._get_next = self._proto_complete_cache, self._proto_get_next
             for v in filter(lambda x: 'selfRef' in x, await self._unis.getStubs(cids)):
                 uid = urlparse(v['selfRef']).path.split('/')[-1]
-                self._stubs[uid] = UnisClient.resolve(v['selfRef'])
+                if uid not in self._stubs:
+                    self._stubs[uid] = UnisClient.resolve(v['selfRef'])
         await self._add_subscription(cids)
     
     def addService(self, service):

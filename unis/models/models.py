@@ -569,7 +569,7 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
         new attribute in the remote data store.
         """
         if v:
-            self.__dict__[n] = v
+            self.__dict__[n] = v.getObject() if isinstance(v, Context) else v
         if n not in self._rt_remote:
             self._rt_remote.add(n)
             self._update(n, ctx)
