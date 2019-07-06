@@ -141,8 +141,7 @@ class _unistype(object):
         if n != '__dict__' and n in self.__dict__:
             try: self.__dict__[n] = self._lift(v, self._get_reference(n), ctx)
             except SkipResource:
-                if n in self._rt_defaults: self.__dict__[n] = self._rt_defaults[n]
-                else: del self.__dict__[n]
+                raise AttributeError("'{}' object has no attribute {} or attribute is invalid".format(self.__class__.__name__, n))
             return self.__dict__[n]._rt_raw
         return v
     
@@ -256,8 +255,7 @@ class List(_unistype):
     def _getitem(self, i, ctx):
         try: return self._lift(self._rt_ls[i], self._rt_reference, ctx)._rt_raw
         except SkipResource:
-            self._rt_ls.pop(i)
-            return self._getitem(i, ctx)
+            return self._getitem(i+1, ctx)
     def _setitem(self, i, v, ctx):
         if isinstance(v, Context):
             v = v.getObject()
@@ -357,11 +355,9 @@ class List(_unistype):
         self._rt_ls = other._rt_ls
     
     def _iter(self, ctx):
-        remove = []
         for x in self._rt_ls:
             try: yield self._lift(x, self._rt_reference, ctx)
-            except SkipResource: remove.append(x)
-        [self._rt_ls.remove(x) for x in remove]
+            except SkipResource: pass
     def __len__(self):
         return len(self._rt_ls)
     def __contains__(self, v, ctx):
