@@ -310,7 +310,7 @@ class UnisCollection(object):
                 try:
                     if all([f(record._getattribute(k, ctx, None)) for k,f in non_index.items()]):
                         yield record
-                except TypeError,UnisAttributeError:
+                except (TypeError,UnisAttributeError):
                     pass
     
     def createIndex(self, k, unique=False):
