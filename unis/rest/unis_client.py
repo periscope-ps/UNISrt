@@ -1,5 +1,5 @@
 import asyncio, requests, socket, websockets as ws
-import copy, itertools, json
+import copy, itertools, json, ssl
 
 from aiohttp import ClientSession, ClientResponse
 from aiohttp.client_exceptions import ClientConnectionError
@@ -218,7 +218,7 @@ class _SingletonOnUID(type):
         if not ref.netloc:
             raise ValueError("invalid url - {}".format(url))
         try:
-            uuid = cls.fqdns[ref.netloc] = CID(cls.fqdns.get(ref.netloc) or cls.get_uuid(authority))
+            uuid = cls.fqdns[ref.netloc] = CID(cls.fqdns.get(ref.netloc) or cls.get_uuid(authority, **kwargs))
         except RequestsConnectionError:
             kwargs['virtual'] = True
             kwargs['url'] = authority
@@ -235,15 +235,19 @@ class _SingletonOnUID(type):
     
     @classmethod
     @trace.tshort("unis.rest.UnisClient")
-    def get_uuid(cls, url):
+    def get_uuid(cls, url, **kwargs):
         """ Query a backend uuid for a client from a endpoint url
         :param url: Endpoint url for the client
         
         :type url: str
         :rtype: str
         """
+        if not getattr(cls, "cert", None):
+            cls.cert = kwargs.get("ssl", None)
+        if not getattr(cls, "verify", None):
+            cls.verify = kwargs.get("verify", False)
         headers = { 'Content-Type': 'application/perfsonar+json', 'Accept': MIME['PSJSON'] }
-        resp = requests.get(urljoin(url, "about"), headers=headers)
+        resp = requests.get(urljoin(url, "about"), cert=(cls.cert), verify=cls.verify, headers=headers)
         if 200 <= resp.status_code <= 299:
             config = resp.json()
         else:
@@ -298,6 +302,10 @@ class UnisClient(metaclass=_SingletonOnUID):
 
         self._url, self._verify, self._ssl = url, kwargs.get("verify", False), kwargs.get("ssl")
         self._channels, self._lock = defaultdict(list), True
+        self._sslcontext=None
+        if self._ssl:
+            self._sslcontext = ssl.create_default_context(purpose=ssl.Purpose.CLIENT_AUTH)
+            self._sslcontext.load_cert_chain(self._ssl)
         
     @property
     def virtual(self):
@@ -336,7 +344,7 @@ class UnisClient(metaclass=_SingletonOnUID):
         while True:
             while not self._socket:
                 try:
-                    fut = ws.connect(ref, loop=loop, ssl=self._ssl)
+                    fut = ws.connect(ref, loop=loop, ssl=self._sslcontext)
                     self._socket = await asyncio.wait_for(fut, timeout=1, loop=loop)
                     self._lock = True
                     for col in self._channels.keys():
@@ -377,8 +385,7 @@ class UnisClient(metaclass=_SingletonOnUID):
         :rtype: List[Dict[str, Any]]
         """
         try:
-            async with fn(*args, verify_ssl=self._verify, ssl_context=self._ssl,
-                          timeout=10, **kwargs) as resp:
+            async with fn(*args, ssl_context=self._sslcontext, timeout=10, **kwargs) as resp:
                 return await self._check_response(resp)
         except (asyncio.TimeoutError, ClientConnectionError):
             getLogger("unisrt").warn("[{}] No connection to instance, deferring {}".format(args[0], fn.__name__.upper()))
