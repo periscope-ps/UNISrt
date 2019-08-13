@@ -247,7 +247,10 @@ class _SingletonOnUID(type):
         if not getattr(cls, "verify", None):
             cls.verify = kwargs.get("verify", False)
         headers = { 'Content-Type': 'application/perfsonar+json', 'Accept': MIME['PSJSON'] }
-        resp = requests.get(urljoin(url, "about"), cert=(cls.cert), verify=cls.verify, headers=headers)
+        try:
+            resp = requests.get(urljoin(url, "about"), cert=(cls.cert), verify=cls.verify, headers=headers)
+        except RequestsConnectionError as e:
+            raise UnisReferenceError("Cannot connect to remote /about", url) from e
         if 200 <= resp.status_code <= 299:
             config = resp.json()
         else:

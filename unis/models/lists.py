@@ -355,7 +355,10 @@ class UnisCollection(object):
             for v in filter(lambda x: 'selfRef' in x, await self._unis.getStubs(cids)):
                 uid = urlparse(v['selfRef']).path.split('/')[-1]
                 if uid not in self._stubs:
-                    self._stubs[uid] = UnisClient.resolve(v['selfRef'])
+                    try: self._stubs[uid] = UnisClient.resolve(v['selfRef'])
+                    except UnisReferenceError:
+                        if uid in self._stubs:
+                            del self._stubs[uid]
         await self._add_subscription(cids)
     
     def addService(self, service):
