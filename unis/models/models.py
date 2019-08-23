@@ -6,7 +6,7 @@ from lace.logging import trace
 from unis.exceptions import UnisReferenceError, UnisAttributeError, LockedError
 from unis.rest import UnisClient
 from unis.settings import SCHEMA_CACHE_DIR
-from unis.utils import async, Events
+from unis.utils import asynchronous, Events
 
 class SkipResource(Exception):
     """
@@ -477,7 +477,7 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
         """
         if self._getattribute('selfRef', ctx):
             cid, rid = self.getSource(), self._getattribute('id', ctx)
-            async.make_async(self._rt_collection._unis.put, cid, rid, {'id': rid})
+            asynchronous.make_async(self._rt_collection._unis.put, cid, rid, {'id': rid})
     def getSource(self, ctx=None):
         """
         :param ctx: Context of the current operation.

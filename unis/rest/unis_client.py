@@ -12,7 +12,7 @@ from websockets.exceptions import ConnectionClosed
 
 from unis.settings import MIME
 from unis.exceptions import ConnectionError, UnisReferenceError
-from unis.utils import async
+from unis.utils import asynchronous
 
 class CID(str):
     """
@@ -128,7 +128,7 @@ class UnisProxy(object):
                 futs = [UnisClient.instances[i].post(n,v,sess) for (i,n),v in cols.items()]
                 results = await asyncio.gather(*futs)
             return list(itertools.chain(*results))
-        return async.make_async(_f)
+        return asynchronous.make_async(_f)
     
     async def put(self, src, rid, data):
         """ 
@@ -160,7 +160,7 @@ class UnisProxy(object):
         async def awrap():
             async with ClientSession() as sess:
                 return await UnisClient.instances[src].delete("/".join([self._name, rid]), sess)
-        return async.make_async(awrap)
+        return asynchronous.make_async(awrap)
 
     async def subscribe(self, src, cb):
         """ 

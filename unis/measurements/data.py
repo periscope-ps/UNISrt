@@ -1,7 +1,7 @@
 import asyncio, math, time
 
 from unis.rest import UnisProxy
-from unis.utils import Events, async
+from unis.utils import Events, asynchronous
 
 from collections import defaultdict
 from lace.logging import trace
@@ -202,13 +202,13 @@ class DataCollection(object):
             sets = list(v.values())
             for s in sets:
                 list(map(self._process, s))
-        async.make_async(self._unis.subscribe, [self._source], cb)
+        asynchronous.make_async(self._unis.subscribe, [self._source], cb)
         self._subscribe = lambda: True
         return False
     
     def load(self):
         if not self._subscribe():
             kwargs = { "sort": "ts:1", "ts": "gt={}".format(self._at) }
-            data = async.make_async(self._unis.get, [self._source], **kwargs)
+            data = asynchronous.make_async(self._unis.get, [self._source], **kwargs)
             list(map(self._process, data))
 

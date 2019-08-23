@@ -9,7 +9,7 @@ from unis.exceptions import UnisReferenceError, CollectionIndexError, UnisAttrib
 from unis.models import schemaLoader
 from unis.models.models import DeletedResource, Context as oContext
 from unis.rest import UnisProxy, UnisClient
-from unis.utils import Events, Index, UniqueIndex, async
+from unis.utils import Events, Index, UniqueIndex, asynchronous
 
 class _sparselist(list):
     def __len__(self):
@@ -443,7 +443,7 @@ class UnisCollection(object):
             requests[v.cid].append(v.uid)
 
         futs = [self._get_block(k,v,self._block_size) for k,v in requests.items()]
-        results = async.make_async(asyncio.gather, *futs)
+        results = asynchronous.make_async(asyncio.gather, *futs)
 
         self._block_size *= self._growth
         for result in itertools.chain(*results):

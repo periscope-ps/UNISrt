@@ -8,7 +8,7 @@ from unis.models.lists import UnisCollection
 from unis.models.models import Context
 from unis.rest import UnisProxy, UnisClient
 from unis.exceptions import UnisReferenceError
-from unis.utils import async
+from unis.utils import asynchronous
 
 from urllib.parse import urlparse
 
@@ -146,7 +146,7 @@ class ObjectLayer(object):
         clients = proxy.addSources(hrefs, self.settings['namespace'])
         if not clients:
             return
-        for r in async.make_async(proxy.getResources, clients):
+        for r in asynchronous.make_async(proxy.getResources, clients):
             ref = (urlparse(r['href']).path.split('/')[1], r['targetschema']['items']['href'])
             if ref[0] not in ['events', 'data']:
                 model = schemaLoader.get_class(ref[1], raw=True)
@@ -154,7 +154,7 @@ class ObjectLayer(object):
                 for service in self._services:
                     service.attach(col)
                     
-        async.make_async(asyncio.gather, *[c.addSources(clients) for c in self._cache()])
+        asynchronous.make_async(asyncio.gather, *[c.addSources(clients) for c in self._cache()])
     
     def _preload(self):
         _p = lambda c: c.name in self.settings['cache']['preload'] or self.settings['cache']['mode'] == 'greedy'
