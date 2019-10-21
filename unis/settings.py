@@ -19,6 +19,8 @@ PERISCOPE_ROOT = os.path.expandvars("$PERISCOPE_ROOT")
 if PERISCOPE_ROOT == "$PERISCOPE_ROOT":
     PERISCOPE_ROOT = os.path.expanduser("~/.periscope")
 
+DEFAULT_ROOT = "http://unis.open.sice.indiana.edu:8888"
+    
 SCHEMA_CACHE_DIR = os.path.join(PERISCOPE_ROOT, ".rtcache")
 SCHEMA_HOST        = 'unis.crest.iu.edu'
 
