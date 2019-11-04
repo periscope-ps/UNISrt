@@ -388,7 +388,7 @@ class UnisClient(metaclass=_SingletonOnUID):
         :rtype: List[Dict[str, Any]]
         """
         try:
-            async with fn(*args, ssl_context=self._sslcontext, timeout=10, **kwargs) as resp:
+            async with fn(*args, ssl=self._sslcontext, timeout=10, **kwargs) as resp:
                 return await self._check_response(resp)
         except (asyncio.TimeoutError, ClientConnectionError):
             getLogger("unisrt").warn("[{}] No connection to instance, deferring {}".format(args[0], fn.__name__.upper()))

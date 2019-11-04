@@ -56,7 +56,7 @@ setup(
     ],
     install_requires=[
         "validictory>=validictory-0.8.1",
-        "aiohttp",
+        "aiohttp==4.0.0a0",
         "requests",
         "jsonschema",
         #"bson",
