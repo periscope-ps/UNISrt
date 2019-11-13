@@ -1,9 +1,12 @@
+import logging
+
 from unis.services.abstract import RuntimeService
 from unis.services.event import new_update_event
 from unis.services.graphbuilder import Graph
 
 from lace.logging import trace
 
+log = logging.getLogger("unis.graph")
 @trace("unis.services")
 class UnisGrapher(RuntimeService):
     """
@@ -48,7 +51,11 @@ class UnisGrapher(RuntimeService):
         and - if a full edge is available - adds an edge to the graph.
         """
         ends = link.endpoints
-        a,b = (ends.source, ends.sink) if link.directed else (ends[0], ends[1])
+        try:
+            a,b = (ends.source, ends.sink) if link.directed else (ends[0], ends[1])
+        except (IndexError, NameError):
+            log.warn("Bad port reference in - {}".format(link.selfRef))
+            return
         a.link = b.link = link
 
         if self._try_add_edge(a):
