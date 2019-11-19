@@ -464,7 +464,9 @@ class UnisCollection(object):
         def cb(v, action):
             if action in ['POST', 'PUT']:
                 try:
-                    schema = v.get("\\$schema", None) or v['$schema']
+                    schema = v['$schema'] = v.get('\\$schema', None) or v['$schema']
+                    try: del v['\\$schema']
+                    except KeyError: pass
                 except KeyError as e:
                     raise ValueError("No schema in message from UNIS - {}".format(v)) from e
                 model = schemaLoader.get_class(schema, raw=True)

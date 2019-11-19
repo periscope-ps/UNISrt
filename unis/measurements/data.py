@@ -102,7 +102,7 @@ class Mean(Function):
         super(Mean, self).__init__()
         self.count, self.total = 0, 0
     def apply(self, x, ts):
-        self.count, self.total = self.count+1, self.total+1
+        self.count, self.total = self.count+1, self.total+x
         return self.total / self.count
 @trace("unis.data")
 class Jitter(Function):

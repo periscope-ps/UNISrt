@@ -196,6 +196,8 @@ class _unistype(object):
             self._rt_parent._update(ref, ctx)
     def _get_reference(self, n):
         raise NotImplemented()
+    def _iter(self):
+        raise AttributeError("{} is not iterable".format(type(self)))
     def to_JSON(self, ctx, top):
         raise NotImplemented()
     def merge(self, other, ctx):
