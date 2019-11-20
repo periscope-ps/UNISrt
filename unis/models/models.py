@@ -255,7 +255,9 @@ class List(_unistype):
         v = v if isinstance(v, list) else [v]
         self._rt_ls = [x.getObject() if isinstance(x, Context) else x for x in v]
     def _getitem(self, i, ctx):
-        try: return self._lift(self._rt_ls[i], self._rt_reference, ctx)._rt_raw
+        try:
+            self._rt_ls[i] = self._lift(self._rt_ls[i], self._rt_reference, ctx)
+            return self._rt_ls[i]._rt_raw
         except SkipResource:
             return self._getitem(i+1, ctx)
     def _setitem(self, i, v, ctx):
