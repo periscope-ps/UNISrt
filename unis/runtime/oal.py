@@ -97,6 +97,7 @@ class ObjectLayer(object):
     def _update(self, res):
         if res.selfRef:
             if res not in self._pending:
+                res._staged = True
                 self._pending.add(res)
                 if not self.settings['proxy']['defer_update']:
                     self._do_update({(res.getSource(), res.getCollection().name): [res]})
@@ -131,6 +132,7 @@ class ObjectLayer(object):
                     self._cache(col).updateIndex(r)
                     try: self._pending.remove(r)
                     except KeyError: continue
+                    r._staged = False
                 self._cache(col).locked = False
     
     def addSources(self, hrefs):

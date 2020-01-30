@@ -121,10 +121,10 @@ class _nodefault(object): pass
 @trace("unis.models")
 class _unistype(object):
     _rt_parent = _attr()
-    _rt_source, _rt_raw, _rt_reference = _attr(), _attr(), _attr()
+    _rt_source, _rt_raw, _rt_reference, _staged = _attr(), _attr(), _attr(), _attr()
     _rt_restricted = []
     def __init__(self, v, ref):
-        self._rt_reference, self._rt_raw, = ref, self
+        self._rt_reference, self._rt_raw, self._staged = ref, self, False
     
     def __getattribute__(self, n):
         if not hasattr(type(self), n) and n not in self._rt_restricted:
@@ -644,7 +644,7 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
         Merges two :class:`UnisObject <unis.models.models.UnisObject>`, the instance with the highest
         timestamp takes priority.
         """
-        if self.ts > other.ts: return
+        if self._staged or self.ts > other.ts: return
         other = other._obj if isinstance(other, Context) else other
         for k,v in other.__dict__.items():
             if k in self.__dict__:

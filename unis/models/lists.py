@@ -482,8 +482,7 @@ class UnisCollection(object):
                         self._proto_get_next([_rkey(uid, cid)])
                         try: resource = self.get([v['selfRef']])[0]
                         except UnisReferenceError: return
-                    for k,v in v.items():
-                        resource.__dict__[k] = v
+                    resource.__dict__['ts'] = v['ts']
                     self.update(resource)
             elif action == 'DELETE':
                 try:
