@@ -359,8 +359,10 @@ class List(_unistype):
         self._rt_ls = other._rt_ls
     
     def _iter(self, ctx):
-        for x in self._rt_ls:
-            try: yield self._lift(x, self._rt_reference, ctx)
+        for i, x in enumerate(self._rt_ls):
+            try:
+                v = self._rt_ls[i] = self._lift(x, self._rt_reference, ctx)
+                yield v._rt_raw
             except SkipResource: pass
     def __len__(self):
         return len(self._rt_ls)
