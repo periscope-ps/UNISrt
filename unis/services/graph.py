@@ -57,6 +57,10 @@ class UnisGrapher(RuntimeService):
             log.warn("Bad port reference in - {}".format(link.selfRef))
             return
         a.link = b.link = link
+        if not hasattr(a, 'links'): a.links = [link]
+        else: a.links.append(link)
+        if not hasattr(b, 'links'): b.links = [link]
+        else: a.links.append(link)
 
         if self._try_add_edge(a):
             a._graph_tag = True
