@@ -399,7 +399,6 @@ class UnisClient(metaclass=_SingletonOnUID):
             f = asyncio.run_coroutine_threadsafe(self._listen(self.loop), self.loop)
             f.add_done_callback(self._handle_exception)
 
-    
     async def getResources(self, sess):
         """
         :param sess: Session object for request
@@ -418,7 +417,7 @@ class UnisClient(metaclass=_SingletonOnUID):
         :return: List of dictionaries containing the selfRefs for resources in a given collection.
         :rtype: coroutine
         """
-        url, hdr = self._get_conn_args(col, fields="selfRef")
+        url, hdr = self._get_conn_args(col, fields="selfRef", unique="true")
         return await self._do(sess.get, url, headers=hdr)
 
     async def get(self, col, sess, **kwargs):
