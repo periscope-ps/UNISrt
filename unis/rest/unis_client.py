@@ -391,7 +391,9 @@ class UnisClient(metaclass=_SingletonOnUID):
             async with fn(*args, ssl=self._sslcontext, timeout=10, **kwargs) as resp:
                 return await self._check_response(resp)
         except (asyncio.TimeoutError, ClientConnectionError):
-            getLogger("unisrt").warn("[{}] No connection to instance, deferring {}".format(args[0], fn.__name__.upper()))
+            arg = args[0][:60] + ('...' if len(args[0]) > 60 else '')
+            getLogger("unisrt").warn("[{}] Timeout on request to instance '{}', deferring {}".format(arg, self._url, fn.__name__.upper()))
+            getLogger("unisrt").debug("[{}] Timeout on request to instance '{}', deferring {}".format(args[0], self._url, fn.__name__.upper()))
             return []
     
     def connect(self):
