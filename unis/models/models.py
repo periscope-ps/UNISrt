@@ -570,7 +570,7 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
         :class:`UnisObject <unis.models.models.UnisObject>` to be marked as pending an update and will include the
         new attribute in the remote data store.
         """
-        if v:
+        if v is not None:
             self.__dict__[n] = v.getObject() if isinstance(v, Context) else v
         if n not in self._rt_remote:
             self._rt_remote.add(n)
