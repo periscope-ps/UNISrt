@@ -1,5 +1,5 @@
-import asyncio, requests, socket, websockets as ws
-import copy, itertools, json, ssl
+import asyncio, requests, socket, zmq, websockets as ws
+import copy, itertools, json, ssl, ast
 
 from aiohttp import ClientSession, ClientResponse
 from aiohttp.client_exceptions import ClientConnectionError
@@ -181,7 +181,19 @@ class UnisProxy(object):
         *  **action** (*str*) - The action [``PUT``, ``POST``] generating the event.
         """
         return await self._gather(self._collect_fn(src, "subscribe"), self._name, cb)
-    
+
+    async def subscribe_connect(self, src):
+        """ 
+        :param src: List of client identifiers for target data stores
+        :type src: list[:class:`CID <unis.rest.unis_client.CID>`]
+        :return: An empty list.
+        :rtype: coroutine
+        
+        Connect Subscriber to get messages from a data store.  Returns a list of dictionaries.
+        
+        """
+        return await self._gather(self._collect_fn(src, "subscribe_connect"))
+            
     def _collect_fn(self, src, fn):
         """
         :param src: List of client identifiers for target data stores
@@ -229,7 +241,7 @@ class _SingletonOnUID(type):
             kwargs.update({'url': authority})
             cls.instances[uuid] = super().__call__(*args, **kwargs)
             cls.instances[uuid].uid = uuid
-            cls.instances[uuid].connect()
+            #cls.instances[uuid].connect()
             return cls.instances[uuid]
         return cls.instances[uuid]
     
@@ -296,7 +308,7 @@ class UnisClient(metaclass=_SingletonOnUID):
     def __init__(self, url, **kwargs):
         self.namespaces = set()
         self.loop = asyncio.new_event_loop()
-        self._open, self._socket = True, None
+        self._open, self._socket, self.socket = True, None, None
         self._virtual = kwargs.get('virtual', False)
         try: asyncio.get_event_loop().run_in_executor(None, self.loop.run_forever)
         except RuntimeError:
@@ -304,7 +316,7 @@ class UnisClient(metaclass=_SingletonOnUID):
             asyncio.get_event_loop().run_in_executor(None, self.loop.run_forever)
 
         self._url, self._verify, self._ssl = url, kwargs.get("verify", False), kwargs.get("ssl")
-        self._channels, self._lock = defaultdict(list), True
+        self._channels, self._lock = defaultdict(list), False #True
         self._sslcontext=None
         if self._ssl:
             self._sslcontext = ssl.create_default_context(purpose=ssl.Purpose.CLIENT_AUTH)
@@ -373,8 +385,29 @@ class UnisClient(metaclass=_SingletonOnUID):
                     self._socket = False
                 else:
                     raise
-        
 
+    async def _listen_zmq(self, col="", subscribe=False):
+        port = "5556"
+        
+        if subscribe:        
+            # Socket to talk to server
+            if self.socket is None:
+                context = zmq.Context()
+                self.socket = context.socket(zmq.SUB)
+                self.socket.connect ("tcp://localhost:%s" % port)
+
+            rs = bytes(col, 'utf-8')
+            self.socket.setsockopt(zmq.SUBSCRIBE, rs)
+        else:
+            total_value = 0
+            while True:
+                string = self.socket.recv()
+                topic, msg = string.decode('utf-8').split("...")
+                msg = ast.literal_eval(msg)
+            
+                for cb in self._channels[msg['headers']['collection']]:
+                    cb(msg['data'], msg['headers']['action'])
+                    
     async def _do(self, fn, *args, **kwargs):
         """ Execute a remote call
         
@@ -489,8 +522,18 @@ class UnisClient(metaclass=_SingletonOnUID):
 
         while self._lock: await asyncio.sleep(0)
         if col not in self._channels:
-            asyncio.run_coroutine_threadsafe(_add_channel(), self.loop)
+            asyncio.run_coroutine_threadsafe(self._listen_zmq(col, True), self.loop)
         self._channels[col].append(cb)
+        return []
+        
+    async def subscribe_connect(self):
+        """
+        :rtype: coroutine
+        """
+        
+        while self._lock: await asyncio.sleep(0)
+        asyncio.run_coroutine_threadsafe(self._listen_zmq(subscribe=False), self.loop)
+                
         return []
     
     def _get_conn_args(self, ref, **kwargs):

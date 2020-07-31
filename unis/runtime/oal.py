@@ -157,6 +157,7 @@ class ObjectLayer(object):
                     service.attach(col)
                     
         asynchronous.make_async(asyncio.gather, *[c.addSources(clients) for c in self._cache()])
+        asynchronous.make_async(asyncio.gather, proxy.subscribe_connect(clients))
     
     def _preload(self):
         _p = lambda c: c.name in self.settings['cache']['preload'] or self.settings['cache']['mode'] == 'greedy'
