@@ -435,7 +435,7 @@ class _metacontextcheck(type):
     def __instancecheck__(self, other):
         try:
             return super(_metacontextcheck, self).__instancecheck__(other.getObject())
-        except AttributeError:
+        except (AttributeError,NotImplementedError):
             return super(_metacontextcheck, self).__instancecheck__(other)
 
 @trace("unis.models")

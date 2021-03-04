@@ -55,8 +55,9 @@ setup(
         "git+https://github.com/periscope-ps/lace.git/@master#egg=lace",
     ],
     install_requires=[
+        "chardet>=3.0.2,<4",
         "validictory>=validictory-0.8.1",
-        "aiohttp==4.0.0a0",
+        "aiohttp",
         "requests",
         "jsonschema",
         #"bson",
