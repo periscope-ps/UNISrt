@@ -300,7 +300,9 @@ class UnisCollection(object):
                 with self._lock:
                     if k in self._indices.keys():
                         for f,v in v.items():
-                            subset &= self._indices[k].subset(f, v)
+                            try:
+                                subset &= self._indices[k].subset(f, v)
+                            except CollectionIndexError: pass
                     else:
                         for f,v in v.items():
                             non_index[k] = op[f](v)

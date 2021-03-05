@@ -162,6 +162,8 @@ class UniqueIndex(object):
         Returns the index of the associated resource with a value `v` 
         in the field associated with the :class:`UniqueIndex <unis.utils.UniqueIndex>`.
         """
+        if v is None:
+            raise CollectionIndexError("{} may not be None".format(self.key))
         if v not in self._index:
             raise CollectionIndexError("Value not in index_{} - {}".format(self.key, v))
         return self._index[v]
