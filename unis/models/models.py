@@ -289,7 +289,7 @@ class List(_unistype):
             v = v.getObject()
         result = self._rt_ls.remove(v)
         self._update(self._rt_reference, ctx)
-        return result
+        return result    
     def where(self, f, ctx):
         """
         :param f: Predicate to filter the list.
@@ -583,7 +583,7 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
         Add a callback to the individual :class:`UnisObject <unis.models.models.UnisObject>`.  This callback
         functions as described in :meth:`UnisCollection.addCallback <unis.models.lists.UnisCollection.addCallback>`.
         """
-        self._rt_callback = lambda s,x,e: fn(Context(x, ctx), e)
+        self._rt_callback = lambda x,e: fn(Context(x, ctx), e)
     def _callback(self, event, ctx=None):
         self._rt_callback(self, event)
     def validate(self, ctx):
