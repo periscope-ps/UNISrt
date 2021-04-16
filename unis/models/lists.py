@@ -115,11 +115,13 @@ class UnisCollection(object):
     
     def __setitem__(self, i, item):
         self._check_record(item)
-        self._cache[i].merge(item, None)
+        if not self._cache[i].merge(item, None):
+            return None
         with self._lock:
             for k, index in self._indices.items():
                 if self._cache[i]._getattribute(k, None, None) is not None:
                     index.update(i, self._cache[i]._getattribute(k, None))
+        return self._cache[i]
 
     def pre_flush(self, items):
         """
@@ -192,6 +194,9 @@ class UnisCollection(object):
         
         .. note:: This function is called automatically by :meth:`ObjectLayer.insert <unis.runtime.oal.ObjectLayer.insert>`
         """
+        return self._validate_append(item)[1]
+
+    def _validate_append(self, item):
         self._check_record(item)
         try:
             i = self.index(item)
@@ -206,15 +211,16 @@ class UnisCollection(object):
                     if item._getattribute(k, None, None) is not None:
                         index.update(i, item._getattribute(k, None))
             self._serve(Events.new, item)
-            return item
+            return (True, item)
         
         uid = item._getattribute('id', None)
-        self.__setitem__(i, item)
+        if not self.__setitem__(i, item):
+            return (False, self._cache[i])
         with self._lock:
             if uid not in self._stubs or isinstance(self._stubs[uid], str):
                 self._stubs[uid] = self._cache[i]
-            return self._cache[i]
-        
+            return (True, self._cache[i])
+
     def remove(self, item):
         """
         :param item: Resource to be removed from the collection
@@ -474,7 +480,8 @@ class UnisCollection(object):
                 model = schemaLoader.get_class(schema, raw=True)
                 if action == 'POST':
                     resource = model(v)
-                    resource = self.append(resource)
+                    changed, resource = self._validate_append(resource)
+                    if not changed: return
                 else:
                     try:
                         resource = self.get([v['selfRef']])[0]

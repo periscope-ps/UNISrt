@@ -646,8 +646,10 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
         Merges two :class:`UnisObject <unis.models.models.UnisObject>`, the instance with the highest
         timestamp takes priority.
         """
-        if self._staged or self.ts > other.ts: return
+        if self._staged or self.ts > other.ts: return False
         other = other._obj if isinstance(other, Context) else other
+        if self.to_JSON(ctx) == other.to_JSON(ctx):
+            return False
         for k,v in other.__dict__.items():
             if k in self.__dict__:
                 if isinstance(v, (list, dict)):
@@ -666,6 +668,7 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
                 self.__dict__[k] = v
         for n in other._rt_remote:
             self._rt_remote.add(n)
+        return True
     
     def clone(self, ctx):
         """
