@@ -466,7 +466,7 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
         super(UnisObject, self)._setattr(n, v, ctx)
     def _update(self, ref, ctx):
         if ref in self._rt_remote and self._rt_collection and ctx and self._rt_live:
-            self._rt_collection.update(self)
+            self._rt_collection.update(self, internal=True)
             ctx._update(Context(self, ctx))
     def _get_reference(self, n):
         return n

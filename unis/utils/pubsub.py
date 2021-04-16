@@ -2,9 +2,10 @@ from enum import Enum
 
 class Events(Enum):
     new = 1
-    update = 2
-    delete = 3
-    commit = 4
-    preflush = 5
-    postflush = 6
-    data = 7
+    internalupdate = 2
+    update = 3
+    delete = 4
+    commit = 5
+    preflush = 6
+    postflush = 7
+    data = 8

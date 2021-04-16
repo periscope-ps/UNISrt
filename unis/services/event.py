@@ -105,8 +105,9 @@ def update_event(cols):
         
         * **resource:** :class:`UnisObject <unis.models.models.UnisObject>` invoking the event.
     """
-    cols = cols if isinstance(cols, list) else [cols]
-    return _reg([Event(col, 'update') for col in cols])
+    events, cols = [], (cols if isinstance(cols, list) else [cols])
+    [events.extend([Event(col, 'update'), Event(col, 'internalupdate')]) for col in cols]
+    return _reg(events)
 
 def delete_event(cols):
     """
@@ -136,7 +137,7 @@ def new_update_event(cols):
     cols = cols if isinstance(cols, list) else [cols]
     events = []
     for col in cols:
-        events.extend([Event(col, 'new'), Event(col, 'update')])
+        events.extend([Event(col, 'new'), Event(col, 'update'), Event(col, 'internalupdate')])
     return _reg(events)
 
 def new_delete_event(cols):

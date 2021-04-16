@@ -141,7 +141,7 @@ class UnisCollection(object):
         flushed.
         """
         [self._serve(Events.postflush, item.getObject()) for item in items]
-    def update(self, item):
+    def update(self, item, internal=False):
         """
         :param item: Resource to update.
         
@@ -151,7 +151,7 @@ class UnisCollection(object):
         :class:`RuntimeServices <unis.services.abstract.RuntimeService>` when updates to the resource
         occur.
         """
-        self._serve(Events.update, item)
+        self._serve(Events.internalupdate if internal else Events.update, item)
     def load(self):
         """
         :return: List of :class:`UnisObjects <unis.models.models.UnisObject>`.
@@ -485,7 +485,7 @@ class UnisCollection(object):
                         try: resource = self.get([v['selfRef']])[0]
                         except UnisReferenceError: return
                     resource.__dict__['ts'] = v['ts']
-                    self.update(resource)
+                self.update(resource)
             elif action == 'DELETE':
                 try:
                     i = self._indices['id'].index(v['id'])
