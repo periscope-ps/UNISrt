@@ -18,10 +18,10 @@ from setuptools import Command
 
 import sys
 
-version = "1.2.0"
+version = "2.0.0"
 
 sys.path.append(".")
-if sys.version_info[0] < 3 or sys.version_info[1] < 5: 
+if sys.version_info[0] < 3 or sys.version_info[1] < 5:
     print("------------------------------")
     print("Must use python 3.5 or greater", file=sys.stderr)
     print("Found python version ", sys.version_info, file=sys.stderr)
@@ -39,29 +39,28 @@ class tester(Command):
         pass
 
     def run(self):
-        import unis.test.runtests as tests
-        return tests.main(True, True)
+        import unis.tests.runtests as tests
+        return tests.main(True, True, 2)
 
 setup(
-    name = "unisrt",
-    version = version,
-    py_modules=['settings'],
-    packages = ["unis", "unis.runtime", "unis.models", "unis.utils", "unis.rest", "unis.services", "unis.measurements", "unis.test"],
-    package_data = { 'unis': ['schemas/*']},
-    author = "Jeremy Musser",
-    author_email="jemusser@umail.iu.edu",
+    name="unisrt",
+    version=version,
+    packages=["unis", "unis.models", "unis.containers", "unis.tests", "unis.events", "unis.utils"],
+    package_data={ 'unis': ['schemas/*']},
+    author="Jeremy Musser",
+    author_email="jemusser@gmail.iu.edu",
     license="http://www.apache.org/licenses/LICENSE-2.0",
     dependency_links=[
         "git+https://github.com/periscope-ps/lace.git/@master#egg=lace",
     ],
     install_requires=[
-        "validictory>=validictory-0.8.1",
-        "aiohttp",
+        #"validictory>=validictory-0.8.1",
         "requests",
         "jsonschema",
-        #"bson",
+        "bson",
+        "lace",
         "websockets",
-        "lace"
+        "pyyaml"
     ],
     cmdclass={'test': tester },
 )

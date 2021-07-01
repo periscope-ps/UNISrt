@@ -1,33 +1,19 @@
+from requests import exceptions
+
 class UnisError(Exception):
     """
-    Base class for all Runtime exceptions.
+    Base class for all Runtime exceptions
     """
     pass
+
 class UnisReferenceError(UnisError):
     """
-    Exception thrown when the runtime attempts to resolve an
-    unresolvable reference.
+    Exception thrown when a resource is requested at a bad url
     """
-    
-    def __init__(self, msg, hrefs):
-        super(UnisReferenceError, self).__init__(msg)
-        self.hrefs = hrefs
-    def __str__(self):
-        return super().__str__() + ": " + str(self.hrefs)
-    
-class ConnectionError(UnisError):
-    """
-    Exception thrown when the runtime fails to connect to
-    remote instance.
-    """
-    def __init__(self, msg, code):
-        super(ConnectionError, self).__init__(msg)
-        self.status = code
+    pass
 
-
-class CollectionIndexError(UnisError):
+class ConnectionError(UnisError, exceptions.ConnectionError):
     """
-    Exception thrown when an index attempts to access a resource
-    not currently in the Index.
+    Exception thrown when a connection to a backend data store fails
     """
     pass

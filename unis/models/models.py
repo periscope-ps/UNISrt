@@ -1,589 +1,420 @@
-import asyncio
-import itertools
-import json
-import jsonschema
-import os
-import re
-import requests
-import time, types
+import os, types as ptypes, uuid
+import json, jsonschema, requests, logging, unis
 
-from lace.logging import trace
-from urllib.parse import urlparse
+from lace.logging import trace, getLogger
+from collections import defaultdict
 
-from unis.exceptions import UnisReferenceError
-from unis.rest import UnisClient
-from unis.settings import SCHEMA_CACHE_DIR
-from unis.utils import async, Events
+import unis
 
-class SkipResource(Exception):
-    """
-    Special exception used by :class:`UnisObject <unis.models.models.UnisObject>`
-    to identify invalid or incomplete resources and remove them from iteration.
-    """
-    pass
+from unis import events
+from unis.settings import ID_FIELD, TS_FIELD
+from unis.utils.lists import dict_filter
 
-class _attr(object):
-    def __init__(self, default=None):
-        self._default, self.__values__ = default, {}
-    def __get__(self, obj, cls):
-        return self.__values__.get(obj, self._default)
-    def __set__(self, obj, v):
-        self.__values__[obj] = v
-    
-class Context(object):
-    """
-    :param obj: :class:`UnisObject <unis.models.models.UnisObject>` referenced by the context.
-    :param runtime: :class:`Runtime <unis.runtime.runtime.Runtime>` associated with the context.
-    :type obj: :class:`UnisObject <unis.models.models.UnisObject>`
-    :type runtime: :class:`Runtime <unis.runtime.runtime.Runtime>`
-    
-    Wrapper class linking :class:`UnisObjects <unis.models.models.UnisObject>` to
-    :class:`Runtimes <unis.runtime.runtime.Runtime>`
-    """
-    
-    def __init__(self, obj, runtime):
-        self.setObject(obj)
-        self.setRuntime(runtime)
+class queryable(type):
+    @property
+    def Q(cls): return unis.Q().istype(cls)
+
+@trace("unis.models")
+class _unisclass(object, metaclass=queryable):
+    _rt_restricted = [ID_FIELD, 'selfRef', TS_FIELD]
+    __slots__ = ('_rt_parent', '_rt_raw', '_rt_ref', '_rt_locks')
+    def __init__(self, v, r, p):
+        setr = object.__setattr__
+        setr(self, '_rt_raw', v)
+        setr(self, '_rt_locks', [])
+        setr(self, '_rt_ref', r)
+        setr(self, '_rt_parent', p)
     def __getattribute__(self, n):
-        if n not in ['_obj', '_rt'] and not hasattr(type(self), n):
-            v = self._obj._getattribute(n, self._rt)
-            if callable(v):
-                def f(*args, **kwargs):
-                    kwargs['ctx'] = self._rt
-                    return v(*args, **kwargs)
-                return f
-            return Context(v, self._rt) if isinstance(v, _unistype) else v
-        return super(Context, self).__getattribute__(n)
-    def __setattr__(self, n, v):
-        if n in ['_obj', '_rt']:
-            return super(Context, self).__setattr__(n, v)
-        return self._obj._setattr(n, v, self._rt)
-    def __getitem__(self, i):
-        v = self._obj._getitem(i, self._rt)
-        return Context(v, self._rt) if isinstance(v, _unistype) else v
-    def __setitem__(self, i, v):
-        return self._obj._setitem(i, v, self._rt)
-    def __iter__(self):
-        for v in self._obj._iter(self._rt):
-            yield Context(v, self._rt) if isinstance(v, _unistype) else v
-    def __dir__(self):
-        return dir(self._obj)
-    def __contains__(self, x):
-        return self._obj.__contains__(x, self._rt)
-    def __len__(self):
-        if hasattr(type(self._obj), '__len__'):
-            return self._obj.__len__()
-        else:
-            return 1
-    def __repr__(self):
-        return repr(self._obj)
-    def __eq__(self, other):
-        if isinstance(other, Context):
-            return self._obj == other._obj
-        return self._obj == other
-    def __hash__(self):
-        return hash(self._obj)
-    
-    def getRuntime(self):
-        """
-        :return: :class:`Runtime <unis.runtime.runtime.Runtime>` associated with the :class:`Context <unis.models.models.Context>`.
-        
-        Get the :class:`Runtime <unis.runtime.runtime.Runtime>` associated with the 
-        :class:`Context <unis.models.models.Context>`.
-        """
-        return self._rt
-    def setRuntime(self, runtime):
-        """
-        :param runtime: Instance associated with the :class:`Context <unis.models.models.Context>`.
-        :type runtime: :class:`Runtime <unis.runtime.runtime.Runtime>`
-        
-        Set the :class:`Runtime <unis.runtime.runtime.Runtime>` associated with the 
-        :class:`Context <unis.models.models.Context>`.
-        """
-        self._rt = runtime
-    def getObject(self):
-        """
-        :return: :class:`UnisObject <unis.models.models.UnisObject>` associated with the :class:`Context <unis.models.models.Context>`.
-        
-        Get the raw :class:`UnisObject <unis.models.models.UnisObject>` associated with the 
-        :class:`Context <unis.models.models.Context>`.
-        """
-        return self._obj
-    def setObject(self, res):
-        """
-        :param res: Resource instance maintained by the :class:`Context <unis.models.models.Context>`.
-        :type res: :class:`UnisObject <unis.models.models.UnisObject>`
-    
-        set the resource associated with the :class:`Context <unis.models.models.Context>`.
-        """
-        self._obj = res.getObject() if isinstance(res, Context) else res
+        if hasattr(type(self), n): return super().__getattribute__(n)
+        v = super().__getattribute__(n)
+        return v._rt_raw if hasattr(type(v), '_rt_raw') else v
 
-class _nodefault(object): pass
-class _unistype(object):
-    _rt_parent = _attr()
-    _rt_source, _rt_raw, _rt_reference = _attr(), _attr(), _attr()
-    _rt_restricted = []
-    @trace.debug("unistype")
-    def __init__(self, v, ref):
-        self._rt_reference, self._rt_raw, = ref, self
-    
-    def __getattribute__(self, n):
-        if not hasattr(type(self), n) and n not in self._rt_restricted:
-            raise NotImplementedError # This is for debugging purposes, this line should never be reached
-        v = super(_unistype, self).__getattribute__(n)
-        return v._rt_raw if isinstance(v, Primitive) else v
-    @trace.debug("unistype")
-    def _getattribute(self, n, ctx, default=_nodefault()):
-        try:
-            v = super(_unistype, self).__getattribute__(n)
-        except AttributeError:
-            v = default
-            if isinstance(default, _nodefault):
-                raise
-        if n != '__dict__' and n in self.__dict__:
-            self.__dict__[n] = self._lift(v, self._get_reference(n), ctx)
-            return self.__dict__[n]._rt_raw
-        return v
-    
-    @trace.debug("unistype")
     def __setattr__(self, n, v):
+        super().__setattr__(n, v)
         if not hasattr(type(self), n):
-            raise NotImplementedError # This is for debugging purposes, this line should never be reached
-        return super(_unistype, self).__setattr__(n, v)
-    @trace.debug("unistype")
-    def _setattr(self, n, v, ctx):
-        def _eq(a, b):
-            if isinstance(b, _unistype):
-                return (isinstance(a, _unistype) and a._rt_raw == b._rt_raw) or a == b._rt_raw
-            return (isinstance(a, _unistype) and a._rt_raw == b) or a == b
-        if isinstance(v, Context):
-            v = v.getObject()
-        if n in self._rt_restricted:
-            raise AttributeError("Cannot change restricted attribute {}".format(n))
-        if hasattr(type(self), n):
-            object.__setattr__(self, n, v)
-        else:
-            if n not in self.__dict__ or not _eq(self.__dict__[n], v):
-                super(_unistype, self).__setattr__(n, v)
-                self._update(self._get_reference(n), ctx)
-    
-    @trace.debug("unistype")
-    def _lift(self, v, ref, ctx, remote=True):
-        v = v.getObject() if isinstance(v, Context) else v
-        if isinstance(v, _unistype):
-            return v
+            self._rt_locks.append(n)
+            self._update(self._get_ref(n))
+
+    def _lift(self, v, ref, remote=True):
+        if isinstance(v, _unisclass): return v
         elif isinstance(v, dict):
-            if '$schema' in v or 'href' in v:
-                if remote and ctx:
-                    return ctx.insert(v) if "$schema" in v else ctx.find(v['href'])[0]
-                else:
-                    return v
-            else:
-                v =  Local(v, ref)
+            if 'href' in v:
+                return unis.runtime.find(v['href'], remote)[0]
+            return Local(v, ref, self._rt_parent)
         elif isinstance(v, list):
-            v = List(v, ref)
+            return List(v, ref, self._rt_parent)
         else:
-            v = Primitive(v, ref)
-        v._rt_parent = self._rt_parent
-        return v
-    
-    @trace.debug("unistype")
-    def _update(self, ref, ctx):
-        if self._rt_parent:
-            self._rt_parent._update(ref, ctx)
-    @trace.debug("unistype")
-    def _get_reference(self, n):
-        raise NotImplemented()
-    @trace.info("unistype")
-    def to_JSON(self, ctx, top):
-        raise NotImplemented()
-    @trace.info("unistype")
-    def merge(self, other, ctx):
-        raise NotImplemented()
-    @trace.none
-    def __repr__(self):
-        return super().__repr__()
-    
-class Primitive(_unistype):
+            return Primitive(v, ref, self._rt_parent)
+
+    def _update(self, ref):
+        try: self._rt_parent._update(ref)
+        except AttributeError: return
+    def _get_ref(self, n): return self._rt_ref
+    def is_locked(self):
+        return self._rt_locks
+    def unlock(self):
+        self._rt_locks = []
+    def load_all_reference(self): raise NotImplemented()
+    def _merge(self, other): raise NotImplemented()
+    def _clone(self): return self._rt_raw
+
+@trace("unis.models")
+class Primitive(_unisclass):
     """
-    :param list v: The value of the object.
-    :param ref: The owner of the object.
-    :type ref: :class:`UnisObject <unis.models.models.UnisObject>`
+    :param any v: The value of the object.
+    :param str r: The property referencing the object.
+    :param p: The parent containing the object
+    :type p: :class:`UnisObject <unis.models.models.UnisObject>`
     
-    A runtime type representation of a python ``number``, ``string``, and ``boolean``.
+    A runtime type representation of python ``number``, ``string`, or ``boolean`` objects.
     """
-    @trace.debug("Primitive")
-    def __init__(self, v, ref):
-        super(Primitive, self).__init__(v, ref)
-        self._rt_raw = v
-    @trace.debug("Primitive")
-    def _get_reference(self, n):
-        return self._rt_reference
-    @trace.info("Primitive")
-    def to_JSON(self, ctx, top):
+    __slots__ = tuple()
+    def _merge(self, b):
         """
-        :param ctx: Context of the current operation.
-        :param bool top: Indicates if this is the first ``to_JSON`` call in the chain.
-        :returns: string or number value of the :class:`UnisObject <unis.models.models.Primitive>`
+        :param b: Instance to merge with the :class:`Primitive <unis.models.models.Primitive>`
+        :type b: :class:`Primitive <unis.models.models.Primitive>`
         
-        Returns the raw value stored in the object.
+        Merges two :class:`Primitives <unis.models.models.Primitive>`, the passed in instance
+        overwrites the calling instance where conflicts occur.
         """
-        return self._rt_raw
-    def merge(self, other, ctx):
-        """
-        :param other: Instance to merge with the :class:`Primitive <unis.models.models.Primitive>`.
-        :type other: :class:`Primitive <unis.models.models.Primitive>`
-        
-        Merges two :class:`Primitives <unis.models.models.Primitive>`, the passed in instance overwrites
-        the calling instance where conflicts occur.
-        """
-        self._rt_raw = other._rt_raw if isinstance(other, _unistype) else other
-    @trace.none
-    def __repr__(self):
-        return "<unis.Primitive>"#.format(self._rt_raw)
-    
-class List(_unistype):
+        self._rt_raw = b._rt_raw if isinstance(b, _unisclass) else b
+    def load_all_references(self): pass
+    def __repr__(self): return f"<unis.Primitive {hex(id(self))}>"
+    def __str__(self): return self._rt_raw.__str__()
+    def __eq__(a, b): return (isinstance(b, _unisclass) and a._rt_raw) or a._rt_raw == b
+
+@trace("unis.models")
+class List(_unisclass):
     """
     :param list v: The list of values in the object.
-    :param ref: The owner of the object.
-    :type ref: :class:`UnisObject <unis.models.models.UnisObject>`
+    :param str r: The property referencing the list.
+    :param p: The parent containing the list.
+    :type p: :class:`UnisObject <unis.models.models.UnisObject>`
     
-    A runtime type representation of a python ``list``.
+    A runtime type representation of python ``list`` objects.
     """
-    _rt_ls = _attr()
-    @trace.debug("List")
-    def __init__(self, v, ref):
-        super(List, self).__init__(v, ref)
-        v = v if isinstance(v, list) else [v]
-        self._rt_ls = [x.getObject() if isinstance(x, Context) else x for x in v]
-    @trace.debug("List")
-    def _getitem(self, i, ctx):
-        return self._lift(self._rt_ls[i], self._rt_reference, ctx)._rt_raw
-    @trace.debug("list")
-    def _setitem(self, i, v, ctx):
-        if isinstance(v, Context):
-            v = v.getObject()
+    __slots__ = ('_rt_ls',)
+    def __init__(self, v, r, p):
+        self._rt_ls = v if isinstance(v, list) else [v]
+        self._rt_raw, self._rt_locks, self._rt_ref, self._rt_parent = self, [], r, p
+    def __setitem__(self, i, v):
         self._rt_ls[i] = v
-        self._update(self._rt_reference, ctx)
-    @trace.info("List")
-    def append(self, v, ctx):
+        self._rt_locks.append(i)
+        self._update(self._rt_ref)
+    def __getitem__(self, i):
+        return self._lift(self._rt_ls[i], self._rt_ref)._rt_raw
+
+    def append(self, v):
         """
         :param any v: Value to be appended to the :class:`List <unis.models.models.List>`.
-        :param ctx: Context of the current operation.
         
-        Append a value to the :class:`List <unis.models.models.List>`.  This value may be of any type.
+        Append a value to the :class:`List <unis.models.models.List>`.
         """
-        if isinstance(v, Context):
-            v = v.getObject()
+        self._rt_locks.append(len(self._rt_ls))
         self._rt_ls.append(v)
-        self._update(self._rt_reference, ctx)
-    @trace.info("List")
-    def remove(self, v, ctx):
+        self._update(self._rt_ref)
+
+    def remove(self, v):
         """
         :param any v: Value to be removed from the :class:`List <unis.models.models.List>`.
-        :param ctx: Context of the current operation.
-        :returns: The value removed.
         
-        Remove a value from the :class:`List <unis.models.models.List>`.  This must be a member of the 
-        :class:`List <unis.models.models.List>`.
+        Remove a value from the :class:`List <unis.models.models.List>`.  This value must be a
+        member of the list.
         """
-        if isinstance(v, Context):
-            v = v.getObject()
-        result = self._rt_ls.remove(v)
-        self._update(self._rt_reference, ctx)
-        return result
-    @trace.info("List")
-    def where(self, f, ctx):
+        ls = self._rt_ls
+        self._rt_locks = list(range(len(ls)))
+        ls.remove(v)
+        self._update(self._rt_ref)
+
+    def where(self, f):
         """
         :param f: Predicate to filter the list.
-        :param ctx: Context of the current operation.
-        :returns: Generator returning filtered values.
-        
+        :returns: List containing entries of the list matching the predicate.
+
         Return a subset of the :class:`List <unis.models.models.List>` including only members
         where ``f`` holds True.  This function takes the same style predicate as
-        :meth:`UnisCollection.where <unis.models.lists.UnisCollection.where>`.
+        :meth:`UnisCollection.where <unis.containers.UnisCollection.where>`.
         """
-        if isinstance(f, types.FunctionType):
-            return (v for v in filter(f, self._rt_ls))
-        else:
-            ops = {
-                "gt": lambda b: lambda a: type(a) is type(b) and a > b,
-                "ge": lambda b: lambda a: type(a) is type(b) and a >= b,
-                "lt": lambda b: lambda a: type(a) is type(b) and a < b,
-                "le": lambda b: lambda a: type(a) is type(b) and a <= b,
-                "eq": lambda b: lambda a: type(a) is type(b) and a == b
-            }
-            f = [(k,ops[k](v)) for k,v in f.items()]
-            def _check(x, k, op):
-                return isinstance(x, _unistype) and hasattr(x, k) and op(getattr(x, k))
-            return (self._lift(x, self._rt_reference, ctx) for x in self if all([_check(x,*v) for v in f]))
-    
-    @trace.debug("List")
-    def _get_reference(self, n):
-        return self._rt_reference
-    @trace.info("List")
-    def to_JSON(self, ctx, top):
-        """
-        :param ctx: Context of the current operation.
-        :param bool top: Indicates if this is the first ``to_JSON`` call in the chain.
-        :returns: ``list`` containing the values in the object.
-        
-        Returns a plain ``list`` formated version of the object, recursively calling 
-        ``to_JSON`` on all members of the :class:`List <unis.models.models.List>` where
-        applicable.
-        """
-        res = []
-        for i, item in enumerate(self._rt_ls):
-            if isinstance(item, (list, dict)):
-                self._rt_ls[i] = self._lift(item, self._get_reference(i), ctx, False)
-        for item in self._rt_ls:
-            try:
-                res.append(item.to_JSON(ctx, top) if isinstance(item, _unistype) else item)
-            except SkipResource:
-                pass
-        return res
-    @trace.info("List")
-    def merge(self, other, ctx):
-        """
-        :param other: Instance to merge with the :class:`List <unis.models.models.List>`.
-        :type other: :class:`List <unis.models.models.List>`
-        
-        Merges two :class:`Lists <unis.models.models.List>`, the passed in instance overwrites
-        the calling instance where conflicts occur.
-        """
-        for v in other._rt_ls:
-            self._rt_ls.append(v)
-    
-    @trace.debug("List")
-    def _iter(self, ctx):
-        self._rt_ls = [self._lift(x, self._rt_reference, ctx) for x in self._rt_ls]
-        return iter([x._rt_raw for x in self._rt_ls])
-    @trace.debug("List")
-    def __len__(self):
-        return len(self._rt_ls)
-    @trace.debug("List")
-    def __contains__(self, v, ctx):
-        v = v.to_JSON(ctx, False) if isinstance(v, _unistype) else v
-        def t(x):
-            return v==x.to_JSON(ctx, False) if isinstance(x, _unistype) else v==x
-        return any([t(x) for x in self._rt_ls])
-    @trace.none
-    def __repr__(self):
-        return "<unis.List {}>".format(self._rt_ls.__repr__())
+        if not isinstance(f, (ptypes.FunctionType, dict)):
+            msg = f"Invalid type `{type(f)}` passed to .where"
+            logging.getLogger("unis.models").error(msg)
+            raise ValueError(msg)
+        f = f if isinstance(f, ptypes.FunctionType) else dict_filter(f)
+        return list(filter(f, [self._lift(x, self._get_ref(i))._rt_raw for i,x in enumerate(self._rt_ls)]))
 
-class Local(_unistype):
+    def _merge(self, b):
+        """
+        :param b: Instance to merge with the :class:`List <unis.models.models.List>`.
+        :type b: :class:`List <unis.models.models.List>`
+        
+        Merges two :class:`Lists <unis.models.models.List>`, values in the merging list
+        in the merged list are appended.
+        """
+        if not self.is_locked():
+            self._rt_ls = b
+
+    def _clone(self): return [(v._clone() if isinstance(v, _unisclass) else v) for v in self._rt_ls]
+    def is_locked(self): return bool(self._rt_locks) or any([x.is_locked() for x in self if hasattr(x, 'is_locked')])
+    def load_all_references(self):
+        """
+        Forces the object and all sub-objects to reify themselves into unis types.
+        """
+        for i,v in enumerate(self._rt_ls):
+            self._rt_ls[i] = v = self._lift(v, self._get_ref(i))
+            v.load_all_references()
+    def unlock(self):
+        """
+        Unlocks fields that have been modified by the client for remote modification.
+        This function is called automatically by the runtime when a resource is 
+        stored to the data store.
+        """
+        self._rt_locks = []
+        [x.unlock() for x in self._rt_ls if hasattr(x, 'unlock')]
+    def __iter__(self):
+        return iter([self._lift(x, self._rt_ref)._rt_raw for x in self._rt_ls])
+    def __len__(self): return len(self._rt_ls)
+    def __contains__(self, v): return v in self._rt_ls
+    def __repr__(self): return f"<unis.List {hex(id(self))}>"
+    def __str__(self): return self._rt_ls.__str__()
+    def __eq__(a, b): return hasattr(b, '__len__') and len(b) == len(a._rt_ls) and \
+        all([a._rt_ls[i] == b[i] for i in range(len(b))])
+
+@trace("unis.models")
+class Local(_unisclass):
     """
-    :param dict v: The attribute names and values to be included in the object.
-    :param ref: The owner of the object.
-    :type ref: :class:`UnisObject <unis.models.models.UnisObject>`
+    :param any v: The Value of the object.
+    :param str r: The property referencing the object.
+    :param p: The parent containing the object
+    :type p: :class:`UnisObject <unis.models.models.UnisObject>`
     
-    A runtime type representation of a python ``dict``.
+    A runtime type representation of python ``dict`` object.
     """
-    @trace.debug("Local")
-    def __init__(self, v, ref):
-        super(Local, self).__init__(v, ref)
-        for k,v in v.items():
-            self.__dict__[k] = v
-    @trace.debug("Local")
-    def _get_reference(self, n):
-        return self._rt_reference
-    @trace.info("Local")
-    def items(self, ctx=None):
+
+    _rt_defaults = {}
+    __slots__ = ('__dict__',)
+    def __init__(self, v, r, p):
+        super().__init__(self, r, p)
+        object.__getattribute__(self, '__dict__').update(**(v or {}))
+
+    def __getattribute__(self, n):
+        if hasattr(type(self), n): return object.__getattribute__(self, n)
+        try: v = super().__getattribute__(n)
+        except AttributeError as e:
+            if n in self._rt_defaults: v = self._rt_defaults[n]
+            else: raise e
+        if n != '__dict__' and (n in self.__dict__ or n in self._rt_defaults):
+            self.__dict__[n] = v = self._lift(v, self._get_ref(n))
+        return v._rt_raw if hasattr(type(v), '_rt_raw') else v
+
+    def __setattr__(self, n, v):
+        if n in _unisclass._rt_restricted:
+            raise AttributeError(f"Cannot change restricted attribute {n}")
+        d = object.__getattribute__(self, '__dict__')
+        if n not in d or v != d[n]:
+            super().__setattr__(n, v)
+
+    def items(self, onlyremote=False):
         """
-        :returns: key,value tuple
-        
-        Returns a key,value pair for each property stored in the resource.
+        :returns: key,value tuple of object properties.
+
+        Returns the key and value pairs for each property in the resource.
         """
-        for k,v in self.__dict__.items():
-            if isinstance(v, (list, dict)):
-                yield (k, self._lift(v, self._get_reference(k), ctx, False))
-            else:
-                yield (k, v)
-    @trace.info("Local")
-    def to_JSON(self, ctx, top):
-        """
-        :param ctx: Context of the current operation.
-        :param bool top: Indicates if this is the first ``to_JSON`` call in the chain.
-        :returns: ``dict`` containing the raw respresentation of all child members.
-        
-        Returns a plain ``dict`` formated version of the object, recursively calling 
-        ``to_JSON`` on all members of the :class:`Local <unis.models.models.Local>` where
-        applicable.
-        """
-        res = {}
-        for k,v in self.__dict__.items():
-            if isinstance(v, (list, dict)):
-                self.__dict__[k] = v = self._lift(v, self._get_reference(k), ctx, False)
-            try:
-                res[k] = v.to_JSON(ctx, top) if isinstance(v, _unistype) else v
-            except SkipResource:
-                pass
-        return res
-    @trace.info("Local")
-    def merge(self, other, ctx):
+        return [(k, self._lift(v, self._get_ref(k))) for k,v in self.__dict__.items() if v is not None]
+
+    def _merge(self, b):
         """
         :param other: Instance to merge with the :class:`Local <unis.models.models.Local>`.
-        :type other: :class:`Local <unis.models.models.Local>`
-        
+        :type other: :class:`Local <unis.models.models.Local>'
+
         Merges two :class:`Locals <unis.models.models.Local>`, the passed in instance overwrites
         the calling instance where conflicts occur.
         """
-        for k,v in other.__dict__.items():
-            self.__dict__[k] = v
-    @trace.none
+        for k,v in b.__dict__.items():
+            if k not in self._rt_locks:
+                if k not in self.__dict__ or not hasattr(self.__dict__[k], '_merge'):
+                    self.__dict__[k] = v
+                else:
+                    self.__dict__[k]._merge(self._lift(v, self._get_ref(k)))
+    def unlock(self):
+        self._rt_locks = []
+        [x.unlock() for x in self.__dict__.values() if hasattr(x, 'unlock')]
+    def is_locked(self):
+        return self._rt_locks or any([hasattr(x, 'is_locked') and x.is_locked() for x in self.__dict__.values()])
+    def load_all_references(self):
+        for k,v in self.__dict__.items():
+            self.__dict__[k] = v = self._lift(v, self._get_ref(k))
+            v.load_all_references()
+    def _clone(self): return {k:(v._clone() if isinstance(v, _unisclass) else v) for k,v in self.__dict__.items()}
     def __repr__(self):
-        return "<unis.Local {}>".format(self.__dict__.__repr__())
-
-class _metacontextcheck(type):
-    def __instancecheck__(self, other):
-        if not hasattr(other, '_getattribute'):
-            if hasattr(other, 'getObject'):
-                other = other.getObject()
-            else:
-                return False
-        other = other if hasattr(other, '_getattribute') else other.getObject()
-        return super(_metacontextcheck, self).__instancecheck__(other)
-class UnisObject(_unistype, metaclass=_metacontextcheck):
+        return f"<unis.Local {hex(id(self))}>"
+    def __str__(self):
+        return str(dict(self.items()))
+    def __eq__(a, b): return hasattr(b, 'items') and \
+        set([x for x,_ in a.items()]) == set([x for x,_ in b.items()]) and \
+        all([getattr(a, k) == v for k,v in b.items()])
+    def __iter__(self):
+        for k,v in self.items(onlyremote=True): yield k, _flatten(v)
+@trace("unis.models")
+class UnisObject(Local):
     """
     :param dict v: (optional) A ``dict`` containing all attribute names and values in the resource.
-    :param ref: (optional) A reference to the owner of the object.
-    :type ref: :class:`UnisObject <unis.models.models.UnisObject>`
-    
+
     The base class for all runtime resources.  This is used to maintain a record
     of the construction and state of the internal attributes.
-    
+
     All attributes listed in ``v`` are considered to be *remote* attributes and are included in
     the data store on update.
     """
-    _rt_remote, _rt_collection = _attr(), _attr()
-    _rt_restricted, _rt_live = ["ts", "selfRef"], False
-    _rt_callback = lambda s,x,e: x
-    @trace.info("UnisObject")
-    def __init__(self, v=None, ref=None):
-        v = {k: (v.getObject() if isinstance(v, Context) else v) for k,v in (v or {}).items()}
-        super(UnisObject, self).__init__(v, ref)
-        self._rt_parent, self._rt_remote, self._rt_live = self, set(v.keys()) | set(self._rt_defaults.keys()), True
-        self.__dict__.update({**self._rt_defaults, **v})
-        if self.__dict__.get('selfRef'):
-            self._rt_source = UnisClient.resolve(self._getattribute('selfRef', None))
-    
-    @trace.debug("UnisObject")
-    def _setattr(self, n, v, ctx):
-        super(UnisObject, self)._setattr(n, v, ctx)
-    @trace.debug("UnisObject")
-    def _update(self, ref, ctx):
-        if ref in self._rt_remote and self._rt_collection and ctx and self._rt_live:
-            self._rt_collection.update(self)
-            ctx._update(Context(self, ctx))
-    @trace.debug("UnisObject")
-    def _get_reference(self, n):
-        return n
+    __slots__ = ('_rt_remote', '_rt_callbacks', '_rt_container')
+    def __init__(self, v=None):
+        super().__init__(v, None, self)
+        setr = object.__setattr__
+        setr(self, '_rt_remote', list({**(v or {}), **type(self)._rt_defaults}))
+        setr(self, '_rt_callbacks', {})
+        if not getattr(self, ID_FIELD):
+            setr(self, ID_FIELD, str(uuid.uuid4()))
+        unis.containers.nullcontainer.insert(self)
+        events.manager.publish(self, events.types.CREATE)
 
-    @trace.info("UnisObject")
-    def _delete(self, ctx):
+    def _update(self, ref):
+        c = getattr(self, '_rt_container', None)
+        if ref in self._rt_remote and c:
+            c.update(self)
+
+    def _get_ref(self, n): return n
+    def _delete(self):
         self.__dict__['selfRef'] = ''
-        self._rt_source = None
-    @trace.info("UnisObject")
-    def touch(self, ctx):
+
+    def extend_schema(self, n, v=None):
         """
-        :param ctx: Context of the current operation.
-        
-        Force the :class:`UnisObject <unis.models.models.UnisObject>` to modify its timestamp in the data store.
-        This affects a "keep alive" signal to the data store.
-        """
-        if self._getattribute('selfRef', ctx):
-            cid, rid = self.getSource(), self._getattribute('id', ctx)
-            async.make_async(self._rt_collection._unis.put, cid, rid, {'id': rid})
-    @trace.info("UnisObject")
-    def getSource(self, ctx=None):
-        """
-        :param ctx: Context of the current operation.
-        :returns: :class:`CID <unis.rest.unis_client.CID>` for this object.
-        
-        Returns the ID of the data store in which the resource is stored.
-        """
-        if not self._rt_source:
-            raise UnisReferenceError("Attempting to resolve unregistered resource.", [])
-        return self._rt_source
-    @trace.info("UnisObject")
-    def setCollection(self, v, ctx=None):
-        """
-        :param v: Collection to set.
-        :param ctx: Context of the current operation.
-        
-        Sets the :class:`UnisCollection <unis.models.lists.UnisCollection>` that the object
-        belongs to.
-        """
-        self._rt_collection = v
-    @trace.info("UnisObject")
-    def getCollection(self, ctx=None):
-        """
-        :param ctx: Context of the current operation.
-        :returns: :class:`UnisCollection <unis.models.lists.UnisCollection>` that the object belongs to.
-        
-        Returns the collection that the object belongs to.
-        """
-        return self._rt_collection
-    @trace.info("UnisObject")
-    def commit(self, publish_to=None, ctx=None):
-        """
-        :param str publish_to: Data store in which to insert the resource.
-        :param ctx: Context of the current operation.
-        
-        ``commit`` stages the object to be inserted into a remote data store.
-        If the object is already a member of an instance, this function does
-        nothing.  Like any modification to the remote data stores, this function's
-        behavior is dependent of the state of the :class:`Runtime's <unis.runtime.runtime.Runtime>`
-        ``defer_update`` setting.
-        
-        If the calling :class:`Runtime <unis.runtime.runtime.Runtime>` is in ``deferred_mode``, the
-        :class:`UnisObject <unis.models.models.UnisObject>` will only be staged and sent to the remote
-        instance only after a call the :meth:`ObjectLayer.flush <unis.runtime.oal.ObjectLayer>`.  In
-        ``immediate_mode`` the resource will be dispatched immediately.
-        """
-        if not ctx:
-            raise AttributeError("Failed to aquire runtime context")
-        if not self.selfRef and self._rt_collection:
-            url = publish_to or ctx.settings['default_source']
-            try:
-                self._rt_source = UnisClient.resolve(url)
-            except UnisReferenceError:
-                ctx.addSources([{'url': url, 'default': False, 'enabled': True}])
-                self._rt_source = UnisClient.resolve(url)
-            self.__dict__['selfRef'] = "{}/{}/{}".format(url, self._rt_collection.name, self._getattribute('id', ctx))
-            self._rt_collection._serve(Events.commit, self)
-            self._update('id', ctx)
-    @trace.info("UnisObject")
-    def extendSchema(self, n, v=None, ctx=None):
-        """
-        :param str n: Name of the attribute to add.
+        :param str n: Name of the attribuet to add.
         :param any v: (optional) Value to set to the new attribute.
-        :param ctx: Context of the current operation.
         
         Add a new attribute to the internal schema.  Adding an attribute to the schema will cause the corresponding
         :class:`UnisObject <unis.models.models.UnisObject>` to be marked as pending an update and will include the
         new attribute in the remote data store.
         """
-        if v:
-            self.__dict__[n] = v
+        if v: setattr(self, n, v)
         if n not in self._rt_remote:
-            self._rt_remote.add(n)
-            self._update(n, ctx)
-    @trace.info("UnisObject")
-    def addCallback(self, fn, ctx=None):
+            self._rt_remote.append(n)
+            self._update(n)
+
+    def add_callback(self, fn):
         """
         :param callable fn: Callback function to attach to the :class:`UnisObject <unis.models.models.UnisObject>`.
-        :param ctx: Context of the current operation.
         
-        Add a callback to the individual :class:`UnisObject <unis.models.models.UnisObject>`.  This callback
-        functions as described in :meth:`UnisCollection.addCallback <unis.models.lists.UnisCollection.addCallback>`.
+        Add a callback to the :class:`UnisObject <unis.model.model.UnisObject>` object.  This callback functions
+        as described in :meth:`UnisCollection.add_callback <unis.containers.UnisCollection.add_callback>`.
         """
-        self._rt_callback = lambda s,x,e: fn(Context(x, ctx), e)
-    @trace.debug("UnisObject")
-    def _callback(self, event, ctx=None):
-        self._rt_callback(self, event)
-    @trace.info("UnisObject")
-    def validate(self, ctx):
+        self._rt_callbacks.append(fn)
+
+    def _callback(self, event):
+        [cb(self, event) for cb in self._rt_callbacks]
+
+    def items(self, onlyremote=False):
+        """
+        :returns: list of key,value tuples
+        
+        Returns the key,value pairs for each property stored in the resource.
+        """
+        result = {**self._rt_defaults, **self.__dict__}
+        for k,v in result.items():
+            if not onlyremote or k in self._rt_remote:
+                yield (k, self._lift(v, self._get_ref(k), False))
+
+    def set_container(self, v, c):
+        """
+        :param v: Container holding this resource.
+        :param c: Name of the collection holding this resource.
+        :type v: `Container <unis.containers.Container>`
+        :type c: str
+        
+        Sets the container currently storing this resource.
+        """
+        object.__setattr__(self, '_rt_container', (v, c))
+
+    def get_container(self):
+        """
+        :returns: `Container <unis.containers.Container>`
+
+        Returns the container currently holding this resource.
+        """
+        return self._rt_container[0] if self._rt_container else None
+
+    def get_collection(self):
+        """
+        :returns: str
+        
+        Returns the collection name holding this resource.
+        """
+        return self._rt_container[1] if self._rt_container else None
+
+    def clone(self):
+        """
+        Create an exact clone of the object, clearing the ``selfRef`` and ``id`` attributes.
+        
+        .. warning:: Any references made in the object will retain their old value.  This function is
+        insufficient to make a complete clone of a heirarchy of resources.
+        """
+        d = {k:(v._clone() if isinstance(v, _unisclass) else v) for k,v in self.__dict__.items()}
+        return type(self)({**d, **{'selfRef': '', ID_FIELD: ''}})
+    def is_locked(self):
+        """
+        Indicates the locked status of an object.  Locked objects take priority on merge.  Top level
+        resources are always unlocked, but may contain individual properties that are locked.
+        """
+        return False
+    def merge(self, b):
+        """
+        :param other: Instance to merge with the :class:`UnisObject <unis.models.models.UnisObject>`.
+        :type other: :class:`UnisObject <unis.models.models.UnisObject>'
+
+        Merges two :class:`UnisObjects <unis.models.models.UnisObject>`, the passed in instance overwrites
+        the calling instance where conflicts occur unless the field has been written to but not pushed.
+        """
+        self.__class__ = b.__class__
+        return super()._merge(b)
+    def get_measurement(self, ty):
+        """
+        :param ty: `eventType` name associated with the measurement
+        :type ty: str
+        :returns: :class:`DataCollection <unis.measurements.data.DataCollection>`
+
+        Returns a :class:`DataCollection <unis.measurements.data.DataCollection>` associated with a
+        measurement type `ty` for the resource.
+        """
+        return self._rt_measurements[ty]
+    def add_measurement(self, ty, md=None):
+        """
+        :param ty: `eventType` name associated with the measurement
+        :param md: :class:`Metadata <unis.models.models.UnisObject>` describing the measurement
+        :type ty: str
+        :type md: :class:`Metadata <unis.models.models.UnisObject>`
+        :returns: :class:`DataCollection <unis.measurement.data.DataCollection>`
+
+        Adds a :class:`DataCollection <unis.measurement.data.DataCollection>` to the resource
+        with the provided `eventType`.  If no measurement of that type exists in the remote,
+        one will be created.
+        """
+        if not md:
+            Metadata = _SchemaCache().get_class(settings.SCHEMAS['Metadata'])
+            md = Metadata({'subject': self, 'eventType': ty})
+            self._rt_container.insert(md)
+            dc = DataCollection(md, registered=False)
+        else:
+            dc = DataCollection(md)
+        self._rt_measurements[ty] = dc
+        return dc
+    def touch_remote(self):
+        """
+        Updates the timestamp of any remote without modifying other fields.
+        
+        .. note:: This operation is storage efficient compared to property writes but will be
+        pushed immediately on call, regardless of the state of the `defer_update` setting.
+        """
+        uid = self._dict__[ID_FIELD]
+        self._rt_container._client.put(uid, {ID_FIELD: uid})
+    def validate(self):
         """
         :param ctx: Context of the current operation.
         :raises ValidationError: If :class:`UnisObject <unis.models.models.UnisObject>` fails to validate.
@@ -591,145 +422,88 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
         Validate the :class:`UnisObject <unis.models.models.UnisObject>` against the JSON Schema used
         to construct its type.
         """
-        jsonschema.validate(self.to_JSON(ctx), self._rt_schema, resolver=self._rt_resolver)
-
-    @trace.info("UnisObject")
-    def items(self, ctx=None):
-        """
-        :returns: key,value tuple
-        
-        Returns a key,value pair for each property stored in the resource.
-        """
-        for k,v in self.__dict__.items():
-            if isinstance(v, (list, dict)):
-                yield (k, self._lift(v, self._get_reference(k), ctx, False))
-            else:
-                yield (k, v)
-    @trace.info("UnisObject")
-    def to_JSON(self, ctx=None, top=True):
-        """
-        :param ctx: Context of the current operation.
-        :param bool top: Indicates if this is the first ``to_JSON`` call in the chain.
-        :returns: ``dict`` containing the raw respresentation of all child members.
-        
-        Returns a plain ``dict`` formated version of the object, recursively calling 
-        **to_JSON** on all members of the :class:`Local <unis.models.models.Local>` where
-        applicable.
-        
-        If ``top`` is ``False``, **to_JSON** instead returns a dict containing the reference to
-        the resource's remote data store entry.
-        """
-        result = {}
-        if top:
-            for k,v in filter(lambda x: x[0] in self._rt_remote, self.__dict__.items()):
-                if isinstance(v, (list, dict)):
-                    self.__dict__[k] = v = self._lift(v, self._get_reference(k), ctx, False)
-                try:
-                    result[k] = v.to_JSON(ctx, False) if isinstance(v, _unistype) else v
-                except SkipResource:
-                    pass
-            result['$schema'] = self._rt_schema['id']
-        else:
-            if self.selfRef:
-                result = { "rel": "full", "href": self.selfRef }
-            else:
-                raise SkipResource()
-        return result
-
-    @trace.info("UnisObject")
-    def merge(self, other, ctx):
-        """
-        :param other: Instance to merge with the :class:`UnisObject <unis.models.models.UnisObject>`.
-        :type other: :class:`UnisObject <unis.models.models.UnisObject>`
-        
-        Merges two :class:`UnisObject <unis.models.models.UnisObject>`, the instance with the highest
-        timestamp takes priority.
-        """
-        a, b = (self, other) if self.ts < other.ts else (other, self)
-        for k,v in b.__dict__.items():
-            if k in a.__dict__:
-                if isinstance(v, (list, dict)):
-                    v = a._lift(v, a._get_reference(k), ctx, False)
-                if isinstance(a.__dict__[k], _unistype):
-                    if isinstance(v, dict):
-                        a.__dict__[k] = v if v.get('selfRef', '') != a.selfRef else a.__dict__[k]
-                    else:
-                        a.__dict__[k].merge(v, ctx)
-                else:
-                    a.__dict__[k] = v
-            else:
-                a.__dict__[k] = v
-        for n in b._rt_remote:
-            a._rt_remote.add(n)
-    
-    @trace.info("UnisObject")
-    def clone(self, ctx):
-        """
-        :param ctx: Context of the current operation.
-        
-        Create an exact clone of the object, clearing the ``selfRef`` and ``id``
-        attributes.
-        
-        .. warning:: Any references made in the object will retain their old value.  This function is insufficient to make a complete clone of a heirarchy of resources.
-        """
-        d = self.to_JSON(ctx)
-        d.update(**{'selfRef': '', 'id': ''})
-        model = type(self)
-        return Context(model(d), None)
-    
-    @trace.none
+        pass
+        #resolver = jsonschema.RefResolver(self._rt_schema[ID_FIELD], self._rt_schema, _CACHE)
+        #jsonschema.validate(, self._rt_schema, resolver=resolver)
+    def _clone(self):
+        return self
     def __repr__(self):
-        return "<{}.{} {}>".format(self.__class__.__module__, self.__class__.__name__, self.__dict__.keys())
+        return f"<{type(self).__module__}.{type(self).__name__} {hex(id(self))}>"
 
 _CACHE = {}
-if SCHEMA_CACHE_DIR:
-    try:
-        os.makedirs(SCHEMA_CACHE_DIR)
-    except FileExistsError:
-        pass
-    except OSError as exp:
-        raise exp
-    for n in os.listdir(SCHEMA_CACHE_DIR):
-        with open(SCHEMA_CACHE_DIR + "/" + n) as f:
-            schema = json.load(f)
-            _CACHE[schema['id']] = schema
+d = {'null': None, 'string': "", 'boolean': False,
+     'number': 0, 'integer': 0, 'object': {}, 'array': []}
 
-def _schemaFactory(schema, n, tys, raw=False):
-    class _jsonMeta(*tys):
-        def __init__(cls, name, bases, attrs):
-            def _value(v):
-                tys = {'null': None, 'string': "", 'boolean': False, 'number': 0, 'integer': 0, 'object': {}, 'array': []}
-                return v.get('default', tys[v.get('type', 'null')])
-            _props = lambda s: {k:_value(v) for k,v in s.get('properties', {}).items()}
-            cls.names, cls._rt_defaults, cls.ts = set(), {}, 0
-            super(_jsonMeta, cls).__init__(name, bases, attrs)
-            cls.names.add(n)
-            cls._rt_defaults.update({k:v for k,v in _props(schema).items()})
-            setattr(cls, '$schema', schema['id'])
-            cls._rt_schema, cls._rt_resolver = schema, jsonschema.RefResolver(schema['id'], schema, _CACHE)
-            cls.__doc__ = schema.get('description', None)
-        
-        def __call__(cls, *args, **kwargs):
-            instance = super(_jsonMeta, cls).__call__(*args, **kwargs)
-            return Context(instance, None) if not raw else instance
-        
-        def __instancecheck__(self, other):
-            return hasattr(other, 'names') and not self.names - other.names
-    return _jsonMeta
+_log = getLogger('unis.models')
+class _add_defaults(object):
+    def __init__(self, s, n, p): self.schema, self.n, self.parents = s, n, p
+    def __call__(self, cls):
+        props, tys = self.get_props()
+        props.update(**{k:v for p in self.parents for k,v in getattr(p, '_rt_defaults', {}).items()})
+        tys.update(**{k:v for p in self.parents for k,v in getattr(p, '_rt_types', {}).items()})
+        cls._rt_defaults, cls._rt_types, cls._rt_schema = props, tys, self.schema
+        cls._rt_resolver = jsonschema.RefResolver(self.schema['$id'], self.schema, _CACHE)
+        cls.__name__ = cls.__qualname__ = self.n
+        setattr(cls, ':type', self.schema['$id'])
+        setattr(cls, '__doc__', self.schema.get('description', None))
+        cls._rt_defaults[':type'] = self.schema['$id']
+        return cls
+
+    def get_props(self):
+        props, tys = {}, {}
+        _log.debug(f"--Loading Schema '{self.schema['$id']}'")
+        _log.debug(self.schema)
+        try:
+            for k,v in self.schema['oneOf'][0]['properties'].items():
+                try:
+                    props[k] = v.get('default', d[v['type']])
+                    tys[k] = v
+                except KeyError: pass
+        except (KeyError, IndexError): pass
+        try:
+            for k,v in self.schema['properties'].items():
+                try:
+                    props[k] = v.get('default', d[v['type']])
+                    tys[k] = v
+                except KeyError: pass
+        except (KeyError, IndexError): pass
+        return props, tys
+
+def _schemaFactory(schema, n, parents):
+    @_add_defaults(schema, n, parents)
+    class _abstract(*parents):
+        __slots__ = tuple()
+    return _abstract
 
 class _SchemaCache(object):
     _CLASSES = {}
-    def get_class(self, schema_uri, class_name=None, raw=False):
-        key = (schema_uri, raw)
+    def get_class(self, schema_url, class_name=None, isfile=False):
         def _make_class():
-            schema = _CACHE.get(schema_uri, None) or requests.get(schema_uri).json()
-            if SCHEMA_CACHE_DIR and schema_uri not in _CACHE:
-                with open(SCHEMA_CACHE_DIR + "/" + schema['id'].replace('/', ''), 'w') as f:
-                    json.dump(schema, f)
-            parents = [self.get_class(p['$ref'], None, True) for p in schema.get('allOf', [])] or [UnisObject]
-            pmeta = [type(p) for p in parents]
-            meta = _schemaFactory(schema, class_name or schema['name'], pmeta, raw)
-            _CACHE[schema['id']] = schema
-            self._CLASSES[key] = meta(class_name or schema['name'], tuple(parents), {})
-            return self._CLASSES[key]
-        return self._CLASSES.get(key, None) or _make_class()
+            schema = self.cache(schema_url, isfile)
+            parents = [self.get_class(p['$ref'], None) for p in schema.get('allOf', [])] or [UnisObject]
+            self._CLASSES[schema['$id']] = _schemaFactory(schema, class_name or schema['title'], parents)
+            return self._CLASSES[schema['$id']]
+        return self._CLASSES.get(schema_url, None) or _make_class()
+
+    def cache(self, schema_url, isfile=False):
+        if schema_url in _CACHE:
+            return _CACHE[schema_url]
+        elif isfile:
+            with open(schema_url) as f:
+                schema = json.load(f)
+                _CACHE[schema['$id']] = schema
+        else:
+            r = requests.get(schema_url)
+            r.raise_for_status()
+            schema = r.json()
+            _CACHE[schema['$id']] = schema
+        return schema
+
+def _flatten(o):
+    if isinstance(o, (UnisObject, Local)):
+        return {k: _flatten(v) for k,v in o}
+    elif isinstance(o, List):
+        return [_flatten(v) for v in o]
+    elif isinstance(o, Primitive):
+        return o._rt_raw
+    return o
