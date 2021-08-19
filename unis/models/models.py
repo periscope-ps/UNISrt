@@ -75,7 +75,7 @@ class Context(object):
         else:
             return 1
     def __repr__(self):
-        return repr(self._obj)
+        return repr(self._obj) if hasattr(self, '_obj') else super().__repr__()
     def __eq__(self, other):
         if isinstance(other, Context):
             return self._obj == other._obj
