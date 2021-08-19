@@ -41,6 +41,7 @@ class Context(object):
     """
     
     def __init__(self, obj, runtime):
+        self._obj, self._rt = None, None
         self.setObject(obj)
         self.setRuntime(runtime)
     def __getattribute__(self, n):
