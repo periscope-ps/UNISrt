@@ -294,7 +294,7 @@ class UnisCollection(object):
             with self._lock:
                 for v in self._cache:
                     try:
-                        if pred(oContext(v, ctx)): yield v
+                        if v and pred(oContext(v, ctx)): yield v
                     except UnisAttributeError:
                         pass
         else:
