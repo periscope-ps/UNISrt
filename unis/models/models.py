@@ -685,6 +685,14 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
         d.update(**{'selfRef': '', 'id': ''})
         model = type(self)
         return Context(model(d), None)
+
+    def reload(self, ctx):
+        """
+        :param ctx: Context of the current operation.
+        
+        Manually retrieve the most recent version of this record from the datastore.  This function overrides any other optimization settings and always attempts an update.
+        """
+        ctx.find(self.selfRef)
     
     def __repr__(self):
         return "<{}.{} {}>".format(self.__class__.__module__, self.__class__.__name__, self.__dict__.keys())

@@ -175,7 +175,7 @@ class UnisCollection(object):
         with self._lock:
             ids = [urlparse(r).path.split('/')[-1] for r in hrefs]
             try:
-                to_get = [_rkey(uid, self._stubs[uid]) for uid in ids if isinstance(self._stubs[uid], str)]
+                to_get = [_rkey(uid, self._stubs[uid]) for uid in ids if isinstance(self._stubs[uid], str) or not self._subscribe]
             except KeyError as e:
                 raise UnisReferenceError("Requested object in unregistered instance", hrefs) from e
         if to_get:
