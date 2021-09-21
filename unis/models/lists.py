@@ -107,6 +107,7 @@ class UnisCollection(object):
         self.createIndex("selfRef", unique=True)
         self._loop = asyncio.get_event_loop()
         self._callbacks = []
+        self._cids = set()
         
     def __getitem__(self, i):
         if i >= self._cache.full_length():
@@ -360,15 +361,18 @@ class UnisCollection(object):
         """
         with self._lock:
             self._complete_cache, self._get_next = self._proto_complete_cache, self._proto_get_next
-            for v in filter(lambda x: 'selfRef' in x, await self._unis.getStubs(cids)):
-                uid = urlparse(v['selfRef']).path.split('/')[-1]
-                if uid not in self._stubs:
-                    try: self._stubs[uid] = UnisClient.resolve(v['selfRef'])
-                    except UnisReferenceError:
-                        if uid in self._stubs:
-                            del self._stubs[uid]
+            await self._update_stubs(cids)
         await self._add_subscription(cids)
-    
+
+    async def _update_stubs(self, cids):
+        for v in filter(lambda x: 'selfRef' in x, await self._unis.getStubs(cids)):
+            uid = urlparse(v['selfRef']).path.split('/')[-1]
+            if uid not in self._stubs:
+                try: self._stubs[uid] = UnisClient.resolve(v['selfRef'])
+                except UnisReferenceError:
+                    pass
+        self._cids.update(cids)
+        
     def addService(self, service):
         """
         :param service: Service to include in the collection.
@@ -431,24 +435,22 @@ class UnisCollection(object):
         [f(ctx) for f in tocall]
     
     def _proto_complete_cache(self):
+        if not self._subscribe:
+            asynchronous.make_async(self._update_stubs, self._cids)
         with self._lock:
             self._block_size = max(self._block_size, len(self._stubs) - len(self._cache))
         self._get_next()
     
     def _proto_get_next(self, ids=None):
-        ids = ids or []
         with self._lock:
-            todo = (_rkey(k,v) for k,v in self._stubs.items() if isinstance(v, str))
-        while len(ids) < self._block_size:
-            try:
-                ids.append(next(todo))
-            except StopIteration:
-                self._complete_cache = lambda: None
-                self._get_next = lambda x: None
-                break
+            if ids is None:
+                ids = [_rkey(k,v) for k,v in self._stubs.items() if isinstance(v,str) or not self._subscribe]
+        if self._subscribe and self._blocks_size >= len(ids):
+            self._complete_cache, self._get_next = lambda x: None, lambda x: None
         requests = defaultdict(list)
-        for v in ids:
-            requests[v.cid].append(v.uid)
+        for v in ids[:self._block_size]:
+            src = v.cid if isinstance(v.cid, str) else v.cid.getSource()
+            requests[src].append(v.uid)
 
         futs = [self._get_block(k,v,self._block_size) for k,v in requests.items()]
         results = asynchronous.make_async(asyncio.gather, *futs)

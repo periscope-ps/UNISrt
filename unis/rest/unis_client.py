@@ -45,7 +45,7 @@ class UnisProxy(object):
     def __init__(self, col=None):
         self._name = col
     
-    def addSources(self, sources, ns):
+    def addSources(self, sources, ns, subscribe=True):
         """
         :param list[dict] sources: List of remote endpoints to connect to
         :param str ns: Namespace fort the source.
@@ -62,7 +62,7 @@ class UnisProxy(object):
         new = []
         old = [c.uid for c in list(UnisClient.instances.values()) if ns in c.namespaces]
         for s in sources:
-            client = UnisClient(**s)
+            client = UnisClient(**s, subscribe=subscribe)
             if client.virtual and s['default']:
                 raise ConnectionError("Failed to connect to default client", 404)
             if not client.virtual and client.uid not in old:
@@ -212,7 +212,7 @@ class UnisProxy(object):
 
 class _SingletonOnUID(type):
     fqdns, instances, virtuals = ReferenceDict(), {}, {}
-    def __call__(cls, url, *args, **kwargs):
+    def __call__(cls, url, *args, subscribe=True, **kwargs):
         ref = urlparse(url)
         authority = "{}://{}".format(ref.scheme, ref.netloc)
         if not ref.netloc:
@@ -229,7 +229,8 @@ class _SingletonOnUID(type):
             kwargs.update({'url': authority})
             cls.instances[uuid] = super().__call__(*args, **kwargs)
             cls.instances[uuid].uid = uuid
-            cls.instances[uuid].connect()
+            if subscribe:
+                cls.instances[uuid].connect()
             return cls.instances[uuid]
         return cls.instances[uuid]
     

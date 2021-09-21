@@ -145,7 +145,7 @@ class ObjectLayer(object):
         This function may be used to add new data stores manually, but should do so sparingly.
         """
         proxy = UnisProxy()
-        clients = proxy.addSources(hrefs, self.settings['namespace'])
+        clients = proxy.addSources(hrefs, self.settings['namespace'], self.settings['proxy']['subscribe'])
         if not clients:
             return
         for r in asynchronous.make_async(proxy.getResources, clients):

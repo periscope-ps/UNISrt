@@ -561,6 +561,7 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
             self.__dict__['selfRef'] = "{}/{}/{}".format(url, self._rt_collection.name, self._getattribute('id', ctx))
             self._rt_collection._serve(Events.commit, self)
             self._update('id', ctx)
+        return Context(self, ctx)
     def extendSchema(self, n, v=None, ctx=None):
         """
         :param str n: Name of the attribute to add.

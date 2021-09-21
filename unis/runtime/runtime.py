@@ -163,8 +163,7 @@ class Runtime(object):
         place until :meth:`flush <unis.runtime.oal.OAL.flush>` is called.
         """
         if commit or track:
-            self._oal._insert(resource).commit(publish_to=publish_to)
-            return resource
+            return self._oal._insert(resource).commit(publish_to=publish_to)
         return self._oal._insert(resource)
 
     def delete(self, resource):
