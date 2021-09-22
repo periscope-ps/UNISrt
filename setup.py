@@ -18,7 +18,7 @@ from setuptools import Command
 
 import sys
 
-version = "1.2.0"
+version = "1.3.0"
 
 sys.path.append(".")
 if sys.version_info[0] < 3 or sys.version_info[1] < 5: 
