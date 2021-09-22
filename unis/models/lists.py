@@ -213,7 +213,7 @@ class UnisCollection(object):
                         index.update(i, item._getattribute(k, None))
             self._serve(Events.new, item)
             return (True, item)
-        
+
         uid = item._getattribute('id', None)
         if not self.__setitem__(i, item):
             return (False, self._cache[i])
@@ -442,9 +442,9 @@ class UnisCollection(object):
         self._get_next()
     
     def _proto_get_next(self, ids=None):
+        ids = ids or []
         with self._lock:
-            if ids is None:
-                ids = [_rkey(k,v) for k,v in self._stubs.items() if isinstance(v,str) or not self._subscribe]
+            ids += [_rkey(k,v) for k,v in self._stubs.items() if isinstance(v,str) or not self._subscribe]
         if self._subscribe and self._block_size >= len(ids):
             self._complete_cache, self._get_next = lambda: None, lambda x=None: None
         requests = defaultdict(list)

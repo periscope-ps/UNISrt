@@ -170,7 +170,7 @@ class _unistype(object):
         class _localdict(dict):
             @property
             def _rt_raw(self): return self
-            
+
         v = v.getObject() if isinstance(v, Context) else v
         if isinstance(v, _unistype):
             return v
