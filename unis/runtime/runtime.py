@@ -150,7 +150,7 @@ class Runtime(object):
         :param resource: Resource to be added to the runtime for tracking.
         :param bool commit: (optional) Indicates whether the resource should be marked for insertion into a remote data store. Default ``False``. **Depreciated in version 1.1**
         :param bool track: (optional) Indicates whether the resource should be marked for insertion into a remote data store. Default ``False``. Alias for commit.
-        :param bool publish_to: (optional) If commit is ``True``, this indicates which remote data store to commit to.  If not provided, 
+        :param str publish_to: (optional) If commit is ``True``, this indicates which remote data store to commit to.  If not provided, 
         :type resource: :class:`UnisObject <unis.models.models.UnisObject>`
         :return: :class:`UnisObject <unis.models.models.UnisObject>` the default store from the :class:`Runtime <unis.runtime.runtime.Runtime>` settings.
         

@@ -445,8 +445,8 @@ class UnisCollection(object):
         with self._lock:
             if ids is None:
                 ids = [_rkey(k,v) for k,v in self._stubs.items() if isinstance(v,str) or not self._subscribe]
-        if self._subscribe and self._blocks_size >= len(ids):
-            self._complete_cache, self._get_next = lambda x: None, lambda x: None
+        if self._subscribe and self._block_size >= len(ids):
+            self._complete_cache, self._get_next = lambda: None, lambda x=None: None
         requests = defaultdict(list)
         for v in ids[:self._block_size]:
             src = v.cid if isinstance(v.cid, str) else v.cid.getSource()
