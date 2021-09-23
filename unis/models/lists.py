@@ -313,11 +313,10 @@ class UnisCollection(object):
                     else:
                         for f,v in v.items():
                             non_index[k] = op[f](v)
-                            
             for i in subset:
                 record = self._cache[i]
                 try:
-                    if all([f(record._getattribute(k, ctx, None)) for k,f in non_index.items()]):
+                    if record and all([f(record._getattribute(k, ctx, None)) for k,f in non_index.items()]):
                         yield record
                 except (TypeError,UnisAttributeError):
                     pass
