@@ -86,8 +86,10 @@ class UnisCollection(object):
         
         Locate an existing collection within a runtime by name.
         """
-        if name:
+        if name is not None:
             namespace = "{}::{}".format(runtime.settings['namespace'], name)
+            if namespace not in cls.collections:
+                raise KeyError(f"Invalid collection name '{name}'")
             return UnisCollection.Context(cls.collections[namespace], runtime)
         else:
             results = []
