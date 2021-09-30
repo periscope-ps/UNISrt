@@ -214,7 +214,7 @@ class _SingletonOnUID(type):
     fqdns, instances, virtuals = ReferenceDict(), {}, {}
     def __call__(cls, url, *args, subscribe=True, **kwargs):
         ref = urlparse(url)
-        authority = "{}://{}".format(ref.scheme, ref.netloc)
+        authority = "{}://{}".format(ref.scheme, ref.netloc.strip('/'))
         if not ref.netloc:
             raise ValueError("invalid url - {}".format(url))
         try:
@@ -270,7 +270,7 @@ class _SingletonOnUID(type):
         :rtype: CID
         """
         url = urlparse(url)
-        authority = "{}://{}".format(url.scheme, url.netloc)
+        authority = "{}://{}".format(url.scheme, url.netloc.strip('/'))
         try:
             uuid = cls.fqdns[url.netloc]
         except UnisReferenceError as e:
@@ -304,6 +304,7 @@ class UnisClient(metaclass=_SingletonOnUID):
             asyncio.set_event_loop(asyncio.new_event_loop())
             asyncio.get_event_loop().run_in_executor(None, self.loop.run_forever)
 
+        url = (lambda x: f"{x.scheme}://{x.netloc.strip('/')}")(urlparse(url))
         self._url, self._verify, self._ssl = url, kwargs.get("verify", False), kwargs.get("ssl")
         self._channels, self._lock = defaultdict(list), True
         self._sslcontext=None

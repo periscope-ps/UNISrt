@@ -554,10 +554,11 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
         if not self.selfRef and self._rt_collection:
             url = publish_to or ctx.settings['default_source']
             try:
-                self._rt_source = UnisClient.resolve(url)
+                src = self._rt_source = UnisClient.resolve(url)
             except UnisReferenceError:
                 ctx.addSources([{'url': url, 'default': False, 'enabled': True}])
-                self._rt_source = UnisClient.resolve(url)
+                src = self._rt_source = UnisClient.resolve(url)
+            url = UnisClient.instances[src]._url
             self.__dict__['selfRef'] = "{}/{}/{}".format(url, self._rt_collection.name, self._getattribute('id', ctx))
             self._rt_collection._serve(Events.commit, self)
             self._update('id', ctx)
