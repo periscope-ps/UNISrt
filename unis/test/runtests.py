@@ -42,7 +42,7 @@ except: pass
 trace.enabled(True)
 trace.showReturn(True)
 trace.showCallDepth(True)
-logger = logging.getLogger("unis")
+logger = logging.getLogger("unisrt")
 logger.setLevel(5)
 hdl = logging.FileHandler(TRACELOG)
 hdl.setFormatter(logging.Formatter("[{levelname:.2}] {message} > {name}", style="{"))

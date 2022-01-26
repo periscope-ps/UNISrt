@@ -85,7 +85,7 @@ class Runtime(object):
                     "enabled": unis.get('enabled', True)
                 }
         
-        self.log = logging.getLogger()
+        self.log = logging.getLogger("unisrt")
         self.log.info("Starting Unis network Runtime Environment...")
         try:
             asyncio.get_event_loop()

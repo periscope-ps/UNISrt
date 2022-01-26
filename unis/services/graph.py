@@ -6,7 +6,7 @@ from unis.services.graphbuilder import Graph
 
 from lace.logging import trace
 
-log = logging.getLogger("unis.graph")
+log = logging.getLogger("unisrt.graph")
 @trace("unis.services")
 class UnisGrapher(RuntimeService):
     """
