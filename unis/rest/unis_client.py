@@ -249,7 +249,7 @@ class _SingletonOnUID(type):
             cls.verify = kwargs.get("verify", False)
         headers = { 'Content-Type': 'application/perfsonar+json', 'Accept': MIME['PSJSON'] }
         try:
-            resp = requests.get(urljoin(url, "about"), cert=(cls.cert), verify=cls.verify, headers=headers)
+            resp = requests.get(urljoin(url, "about"), cert=(cls.cert), timeout=0.1, verify=cls.verify, headers=headers)
         except RequestsConnectionError as e:
             raise UnisReferenceError("Cannot connect to remote /about", url) from e
         if 200 <= resp.status_code <= 299:

@@ -155,9 +155,9 @@ class ObjectLayer(object):
                 col = UnisCollection.get_collection(ref[0], model, self)
                 for service in self._services:
                     service.attach(col)
-                    
+
         asynchronous.make_async(asyncio.gather, *[c.addSources(clients) for c in self._cache()])
-    
+
     def _preload(self):
         _p = lambda c: c.name in self.settings['cache']['preload'] or self.settings['cache']['mode'] == 'greedy'
         values = [c.load() for c in self._cache() if _p(c)]
