@@ -468,7 +468,7 @@ class UnisClient(metaclass=_SingletonOnUID):
         """
         url, hdr = self._get_conn_args(col)
         try:
-            async with sess.put(url, data=json.dumps(data), headers=hdr, ssl=self._sslcontext, timeout=1, **kwargs) as resp:
+            async with sess.put(url, data=json.dumps(data), headers=hdr, ssl=self._sslcontext, timeout=1) as resp:
                 await self._check_response(resp)
                 return True
         except (asyncio.TimeoutError, ClientConnectionError):
