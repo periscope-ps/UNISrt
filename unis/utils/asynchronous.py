@@ -11,7 +11,7 @@ def make_async(coro, *args, **kwargs):
     except RuntimeError:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-        
+
     if loop.is_running():
         new_loop = asyncio.new_event_loop()
         def _complete(future):

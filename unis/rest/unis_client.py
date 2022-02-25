@@ -467,7 +467,15 @@ class UnisClient(metaclass=_SingletonOnUID):
         :rtype: coroutine
         """
         url, hdr = self._get_conn_args(col)
-        return await self._do(sess.put, url, data=json.dumps(data), headers=hdr)
+        try:
+            async with sess.put(url, data=json.dumps(data), headers=hdr, ssl=self._sslcontext, timeout=1, **kwargs) as resp:
+                await self._check_response(resp)
+                return True
+        except (asyncio.TimeoutError, ClientConnectionError):
+            arg = args[0][:60] + ('...' if len(args[0]) > 60 else '')
+            getLogger("unisrt").warn( f"[{col}] Timeout on request to instance '{self._url}', deferring PUT")
+            getLogger("unisrt").debug(f"   + Data | {data}")
+            return False
 
     async def delete(self, col, sess):
         """
