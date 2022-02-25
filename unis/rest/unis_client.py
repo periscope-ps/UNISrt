@@ -472,7 +472,6 @@ class UnisClient(metaclass=_SingletonOnUID):
                 await self._check_response(resp)
                 return True
         except (asyncio.TimeoutError, ClientConnectionError):
-            arg = args[0][:60] + ('...' if len(args[0]) > 60 else '')
             getLogger("unisrt").warn( f"[{col}] Timeout on request to instance '{self._url}', deferring PUT")
             getLogger("unisrt").debug(f"   + Data | {data}")
             return False
