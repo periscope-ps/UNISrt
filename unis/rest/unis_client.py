@@ -1,7 +1,7 @@
 import asyncio, requests, socket, websockets as ws
 import copy, itertools, json, ssl
 
-from aiohttp import ClientSession, ClientResponse
+from aiohttp import ClientSession
 from aiohttp.client_exceptions import ClientConnectionError
 from collections import defaultdict
 from lace.logging import trace
