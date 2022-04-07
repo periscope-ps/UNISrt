@@ -385,7 +385,7 @@ class Local(_unistype):
     def __init__(self, v, ref):
         super(Local, self).__init__(v, ref)
         for k,v in v.items():
-            self.__dict__[k] = v
+            self.__dict__[k] = v.getObject() if isinstance(v, Context) else v
     def _get_reference(self, n):
         return self._rt_reference
     def items(self, ctx=None):
@@ -630,7 +630,7 @@ class UnisObject(_unistype, metaclass=_metacontextcheck):
                 try:
                     if isinstance(v, (list, dict)):
                         self.__dict__[k] = v = self._lift(v, self._get_reference(k), ctx, False)
-                    result[k] = v.to_JSON(ctx, False) if isinstance(v, _unistype) else v
+                    result[k] = v.to_JSON(ctx, not self._rt_source) if isinstance(v, _unistype) else v
                 except SkipResource:
                     continue
             result['$schema'] = self._rt_schema['id']
