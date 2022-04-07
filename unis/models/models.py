@@ -720,9 +720,9 @@ def _schemaFactory(schema, n, tys, raw=False):
                 return v.get('default', tys[v.get('type', 'null')])
             _valid_prop = lambda k,v,s: k in s.get('required', {}) or v is not None
             _props = lambda s: {k:_value(v) for k,v in s.get('properties', {}).items() if _valid_prop(k,_value(v),s)}
-            cls.names, cls._rt_defaults, cls.ts = set(), {"selfRef": ""}, 0
+            cls.names, cls._rt_defaults, cls.ts = [], {"selfRef": ""}, 0
             super(_jsonMeta, cls).__init__(name, bases, attrs)
-            cls.names.add(n)
+            if n not in cls.names: cls.names.insert(0, n)
             cls._rt_defaults.update({k:v for k,v in _props(schema).items()})
             if "$schema" in cls._rt_defaults: del cls._rt_defaults['$schema']
             setattr(cls, '$schema', schema['id'])
@@ -734,7 +734,7 @@ def _schemaFactory(schema, n, tys, raw=False):
             return Context(instance, None) if not raw else instance
         
         def __instancecheck__(self, other):
-            return hasattr(other, 'names') and not self.names - other.names
+            return hasattr(other, 'names') and not set(self.names) - set(other.names)
     return _jsonMeta
 
 @trace("unis.models")

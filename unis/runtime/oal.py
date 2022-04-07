@@ -185,10 +185,14 @@ class ObjectLayer(object):
         In order to support json schema style inheritence, each resource contains a list of names
         similar to the python MRO.
         """
-        try:
-            return next(c.name for c in self._cache() if c.model._rt_schema["name"] in list(names))
-        except StopIteration:
-            raise ValueError("Resource type {n} not found in ObjectLayer".format(n=names))
+        names = [n for n in names]
+        for name in names:
+            for col in self._cache():
+                try: names[names.index(col.model._rt_schema["name"])] = col
+                except ValueError: pass
+        for col in names:
+            if not isinstance(col, str): return col.name
+        raise ValueError(f"Resource type {names} not found in ObjectLayer")
     
     def about(self):
         """
