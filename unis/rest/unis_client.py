@@ -531,7 +531,7 @@ class UnisClient(metaclass=_SingletonOnUID):
             return resp if isinstance(resp, list) else [resp]
         else:
             raise ConnectionError("Error from unis - [{}] {}".format(r.status, await r.text()), r.status)
-    
+
     @classmethod
     def shutdown(cls):
         """

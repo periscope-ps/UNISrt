@@ -11,6 +11,8 @@ from unis.models.models import DeletedResource, Context as oContext
 from unis.rest import UnisProxy, UnisClient
 from unis.utils import Events, Index, UniqueIndex, asynchronous
 
+MAX_QUERY_COUNT=1600
+
 class _sparselist(list):
     def __len__(self):
         return len(self.valid_list())
@@ -439,7 +441,7 @@ class UnisCollection(object):
         if not self._subscribe:
             asynchronous.make_async(self._update_stubs, self._cids)
         with self._lock:
-            self._block_size = max(self._block_size, len(self._stubs) - len(self._cache))
+            self._block_size = min(MAX_QUERY_COUNT, max(self._block_size, len(self._stubs) - len(self._cache)))
         self._get_next()
     
     def _proto_get_next(self, ids=None):
