@@ -1,8 +1,9 @@
-from unis import events
-from unis.settings import OPTIONS
-from unis import config
-from unis.containers import container, watchdog
+from unis import watchdog
+from unis.version import VERSION
+from unis.containers import container
+from logging import getLogger
 
+_log = getLogger("mundus")
 def connect(url, ws=False, allowvirtual=False):
     """
     Connect to a remote data store and return a handle for the requested store.  This function
@@ -20,40 +21,32 @@ def connect(url, ws=False, allowvirtual=False):
     :raises mundus.exceptions.ConnectionError: Exception raised if ``href`` finds no route to host
     :rtype RemoteContainer:  :mundus.containers.RemoteContainer:`RemoteContainer`
     """
-    conn = container.get_container(url, allowvirtual):
-    if ws: conn.connect()
+    _log.info(f"Establishing connecting to {url}")
+    conn = container.get_container(url, allowvirtual)
+    if ws:
+        _log.debug(f"- Creating websocket socket for {url}")
+        conn.connect()
     return conn
 
 def push():
+    _log.debug("Pushing records to remote")
     [c.push() for c in container.instances.values()]
 
 def delete_record(v):
-    v.get_container().delete(v)
+    _log.debug(f"Deleting {v.selfRef} from system")
+    container.from_instance(v).delete(v)
 
 def types():
     return list(set(sum([c.records.keys() for c in container.instances.values()])))
 
-def Q():
-    q = None
-    for c in container.instances.values():
-        if not q: q = c.Q()
-        else: q |= c.Q()
-    return q
+#def Q():
+#    q = None
+#    for c in container.instances.values():
+#        if not q: q = c.Q()
+#        else: q |= c.Q()
+#    return q
 
-def set_option(n, v):
-    f"""
-    Modify the behavior of mundus.  Options are as follows.
-    
-    {config.print_config()}
-    """
-    setattr(config.Configuration(), n, v)
-
-_sentinal = object()
-def get_option(n, default=_sentinal):
-    if default == _sentinal: return getattr(config.Configuration(), n)
-    return getattr(config.Configuration(), n, default)
-
-def register_listener(fn):
-    events.manager.register(fn)
+#def register_listener(fn):
+#    events.manager.register(fn)
 
 watchdog.run()

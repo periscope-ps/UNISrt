@@ -18,7 +18,9 @@ from setuptools import Command
 
 import sys
 
-version = "2.0.0"
+
+__version__ = '0.1.1'
+
 
 sys.path.append(".")
 if sys.version_info[0] < 3 or sys.version_info[1] < 5:
@@ -39,14 +41,14 @@ class tester(Command):
         pass
 
     def run(self):
-        import unis.tests.runtests as tests
-        return tests.main(True, True, 2)
+        import pytest
+        sys.exit(pytest.main(["-x", "tests", "--cov", "mundus", "--cov-report", "term-missing", "-vv",
+                              "--cov-config", ".coveragerc"]))
 
 setup(
-    name="unisrt",
-    version=version,
-    packages=["unis", "unis.models", "unis.containers", "unis.tests", "unis.events", "unis.utils"],
-    package_data={ 'unis': ['schemas/*']},
+    name="mundus",
+    version=__version__,
+    packages=["mundus", "mundus.models", "mundus.containers"],
     author="Jeremy Musser",
     author_email="jemusser@gmail.iu.edu",
     license="http://www.apache.org/licenses/LICENSE-2.0",
@@ -59,8 +61,9 @@ setup(
         "jsonschema",
         "bson",
         "lace",
-        "websockets",
-        "pyyaml"
+        #"websockets",
+        "pyyaml",
+        "aiohttp"
     ],
     cmdclass={'test': tester },
 )
