@@ -1,0 +1,24 @@
+cache:
+  - ~/open/unis/unis-schema/schema/schema-07
+  - ~/open/unis/unis-schema/schema/hyper-schema-07
+  - ~/open/unis/unis-schema/schema/links-07
+models:
+  - ~/open/unis/unis-schema/schema/entities/unisentity
+  - ~/open/unis/unis-schema/schema/entities/softentity
+  - ~/open/unis/unis-schema/schema/entities/user
+  - ~/open/unis/unis-schema/schema/entities/topology/networkresource
+  - ~/open/unis/unis-schema/schema/entities/topology/node
+  - ~/open/unis/unis-schema/schema/entities/topology/physicalnode
+  - ~/open/unis/unis-schema/schema/entities/topology/computenode
+  - ~/open/unis/unis-schema/schema/entities/topology/switchnode
+  - ~/open/unis/unis-schema/schema/entities/topology/link
+  - ~/open/unis/unis-schema/schema/entities/topology/port
+  - ~/open/unis/unis-schema/schema/entities/topology/service
+  - ~/open/unis/unis-schema/schema/entities/data/exnode
+  - ~/open/unis/unis-schema/schema/entities/data/allocation
+  - ~/open/unis/unis-schema/schema/entities/data/ibp
+  - ~/open/unis/unis-schema/schema/entities/data/rdma
+  - ~/open/unis/unis-schema/schema/entities/data/ceph
+  - ~/open/unis/unis-schema/schema/entities/measurements/measurement
+  - ~/open/unis/unis-schema/schema/entities/measurements/datum
+  - ~/open/unis/unis-schema/schema/entities/measurements/metadata

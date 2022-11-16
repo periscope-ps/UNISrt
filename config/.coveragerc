@@ -1,0 +1,2 @@
+[run]
+omit = lib/mundus/config.py,lib/mundus/events/*,lib/mundus/measurements/*,lib/mundus/watchdog.py

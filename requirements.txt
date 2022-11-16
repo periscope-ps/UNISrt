@@ -1,7 +1,0 @@
-jsonschema
-httplib2
-requests
-pytz
-python-dateutil
-websocket-client
-validictory

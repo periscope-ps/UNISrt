@@ -13,19 +13,20 @@
 # under the License.
 
 from __future__ import print_function 
-from setuptools import setup
-from setuptools import Command
+from setuptools import setup, Command
 
-import sys
+import sys, os
 
-
-__version__ = '0.1.1'
-
+NAME="mundus"
+PACKAGE=f"lib/{NAME}"
+with open(os.path.join(f"{PACKAGE}", "version.py")) as f:
+    code = compile(f.read(), "version.py", "exec")
+    exec(code)
 
 sys.path.append(".")
-if sys.version_info[0] < 3 or sys.version_info[1] < 5:
+if sys.version_info[0] < 3 or sys.version_info[1] < 6:
     print("------------------------------")
-    print("Must use python 3.5 or greater", file=sys.stderr)
+    print("Must use python 3.6 or greater", file=sys.stderr)
     print("Found python version ", sys.version_info, file=sys.stderr)
     print("Installation aborted", file=sys.stderr)
     print("------------------------------")
@@ -48,22 +49,17 @@ class tester(Command):
 setup(
     name="mundus",
     version=__version__,
-    packages=["mundus", "mundus.models", "mundus.containers"],
+    packages=[f"{NAME}", f"{NAME}.models", f"{MUNDUS}.containers"],
+    package_dir={'': 'lib'},
     author="Jeremy Musser",
     author_email="jemusser@gmail.iu.edu",
     license="http://www.apache.org/licenses/LICENSE-2.0",
-    dependency_links=[
-        "git+https://github.com/periscope-ps/lace.git/@master#egg=lace",
-    ],
     install_requires=[
-        #"validictory>=validictory-0.8.1",
         "requests",
         "jsonschema",
         "bson",
-        "lace",
-        #"websockets",
         "pyyaml",
         "aiohttp"
     ],
-    cmdclass={'test': tester },
+    cmdclass={'test': tester }
 )
