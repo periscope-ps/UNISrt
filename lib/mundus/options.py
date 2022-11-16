@@ -1,12 +1,11 @@
-from importlib.metadata import version
 
-from mundus import config
+from mundus import config, version
 from mundus.settings import OPTIONS, CONFIG_PATH
 from mundus.utils import docs
 
 _options = config.from_template(OPTIONS, ischild=True,
                                 default_filepath=CONFIG_PATH, filevar="$MUNDUS_CONFIG_PATH",
-                                version=version('mundus'))
+                                version=version.__version__)
 def stringify():
     return "\n    ".join([f"{h}.{k}: {v}" for h,b in _options.items() for k,v in b.items()])
 
