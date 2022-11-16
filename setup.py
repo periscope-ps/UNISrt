@@ -49,7 +49,7 @@ class tester(Command):
 setup(
     name="mundus",
     version=__version__,
-    packages=[f"{NAME}", f"{NAME}.models", f"{MUNDUS}.containers"],
+    packages=[f"{NAME}", f"{NAME}.models", f"{NAME}.containers"],
     package_dir={'': 'lib'},
     author="Jeremy Musser",
     author_email="jemusser@gmail.iu.edu",
