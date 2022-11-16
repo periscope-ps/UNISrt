@@ -4,6 +4,240 @@
       "name": "",
       "description": "",
       "status": "UNKNOWN",
+      "urn": "uuid:port:9b68772d3df3d8a645074a0e60455cdd:lo",
+      "expires": 0,
+      "address": "lo",
+      "addressType": "phy",
+      "capacity": 0
+    },
+    "target": {
+      "name": "",
+      "description": "",
+      "status": "UNKNOWN",
+      "urn": "",
+      "expires": 1668641313870848,
+      "address": "00:00:00:00:00:00",
+      "addressType": "eth",
+      "capacity": 0
+    },
+    "index": "",
+    ":id": "4b06129d-2916-4d84-a2db-3611dc645e07",
+    ":ts": 1668640713871176,
+    ":type": "http://unis.open.sice.indiana.edu/schema/2.0.0/relationship#"
+  },
+  {
+    "subject": {
+      "name": "",
+      "description": "",
+      "status": "UNKNOWN",
+      "urn": "",
+      "expires": 1668641313870848,
+      "address": "00:00:00:00:00:00",
+      "addressType": "eth",
+      "capacity": 0
+    },
+    "target": {
+      "name": "",
+      "description": "",
+      "status": "UNKNOWN",
+      "urn": "",
+      "expires": 1668641313870892,
+      "address": "127.0.0.1",
+      "addressType": "ipv4",
+      "capacity": 0
+    },
+    "index": "",
+    ":id": "845cac50-2fc7-429a-831b-5318f3bfc589",
+    ":ts": 1668640713871260,
+    ":type": "http://unis.open.sice.indiana.edu/schema/2.0.0/relationship#"
+  },
+  {
+    "subject": {
+      "name": "",
+      "description": "",
+      "status": "UNKNOWN",
+      "urn": "",
+      "expires": 1668641313870848,
+      "address": "00:00:00:00:00:00",
+      "addressType": "eth",
+      "capacity": 0
+    },
+    "target": {
+      "name": "",
+      "description": "",
+      "status": "UNKNOWN",
+      "urn": "",
+      "expires": 1668641313870916,
+      "address": "::1",
+      "addressType": "ipv6",
+      "capacity": 0
+    },
+    "index": "",
+    ":id": "e63868fa-70e1-4dc6-9770-7cc227a7964c",
+    ":ts": 1668640713871341,
+    ":type": "http://unis.open.sice.indiana.edu/schema/2.0.0/relationship#"
+  },
+  {
+    "subject": {
+      "name": "",
+      "description": "",
+      "status": "UNKNOWN",
+      "urn": "uuid:port:9b68772d3df3d8a645074a0e60455cdd:bond0",
+      "expires": 0,
+      "address": "bond0",
+      "addressType": "phy",
+      "capacity": 0
+    },
+    "target": {
+      "name": "",
+      "description": "",
+      "status": "UNKNOWN",
+      "urn": "",
+      "expires": 1668641313870954,
+      "address": "ea:80:72:31:8d:25",
+      "addressType": "eth",
+      "capacity": 0
+    },
+    "index": "",
+    ":id": "2783574e-d4c9-4340-98eb-da3d3f4a82d1",
+    ":ts": 1668640713871420,
+    ":type": "http://unis.open.sice.indiana.edu/schema/2.0.0/relationship#"
+  },
+  {
+    "subject": {
+      "name": "",
+      "description": "",
+      "status": "UNKNOWN",
+      "urn": "uuid:port:9b68772d3df3d8a645074a0e60455cdd:dummy0",
+      "expires": 0,
+      "address": "dummy0",
+      "addressType": "phy",
+      "capacity": 0
+    },
+    "target": {
+      "name": "",
+      "description": "",
+      "status": "UNKNOWN",
+      "urn": "",
+      "expires": 1668641313870999,
+      "address": "46:89:2c:0f:34:56",
+      "addressType": "eth",
+      "capacity": 0
+    },
+    "index": "",
+    ":id": "dce52ce1-699b-4e06-84d5-a3c24c805092",
+    ":ts": 1668640713871499,
+    ":type": "http://unis.open.sice.indiana.edu/schema/2.0.0/relationship#"
+  },
+  {
+    "subject": {
+      "name": "",
+      "description": "",
+      "status": "UNKNOWN",
+      "urn": "uuid:port:9b68772d3df3d8a645074a0e60455cdd:eth0",
+      "expires": 0,
+      "address": "eth0",
+      "addressType": "phy",
+      "capacity": 0
+    },
+    "target": {
+      "name": "",
+      "description": "",
+      "status": "UNKNOWN",
+      "urn": "",
+      "expires": 1668641313871024,
+      "address": "00:15:5d:e3:8e:22",
+      "addressType": "eth",
+      "capacity": 0
+    },
+    "index": "",
+    ":id": "402f0681-e7a4-4485-a3ae-b74418ed6f9a",
+    ":ts": 1668640713871578,
+    ":type": "http://unis.open.sice.indiana.edu/schema/2.0.0/relationship#"
+  },
+  {
+    "subject": {
+      "name": "",
+      "description": "",
+      "status": "UNKNOWN",
+      "urn": "",
+      "expires": 1668641313871024,
+      "address": "00:15:5d:e3:8e:22",
+      "addressType": "eth",
+      "capacity": 0
+    },
+    "target": {
+      "name": "",
+      "description": "",
+      "status": "UNKNOWN",
+      "urn": "",
+      "expires": 1668641313871047,
+      "address": "172.22.136.201",
+      "addressType": "ipv4",
+      "capacity": 0
+    },
+    "index": "",
+    ":id": "ee738c9b-d3e6-44ef-a431-0f27db76948f",
+    ":ts": 1668640713871656,
+    ":type": "http://unis.open.sice.indiana.edu/schema/2.0.0/relationship#"
+  },
+  {
+    "subject": {
+      "name": "",
+      "description": "",
+      "status": "UNKNOWN",
+      "urn": "",
+      "expires": 1668641313871024,
+      "address": "00:15:5d:e3:8e:22",
+      "addressType": "eth",
+      "capacity": 0
+    },
+    "target": {
+      "name": "",
+      "description": "",
+      "status": "UNKNOWN",
+      "urn": "",
+      "expires": 1668641313871069,
+      "address": "fe80::215:5dff:fee3:8e22%eth0",
+      "addressType": "ipv6",
+      "capacity": 0
+    },
+    "index": "",
+    ":id": "6ac85b0e-f12f-4c6a-98bd-766461702fce",
+    ":ts": 1668640713871734,
+    ":type": "http://unis.open.sice.indiana.edu/schema/2.0.0/relationship#"
+  },
+  {
+    "subject": {
+      "name": "",
+      "description": "",
+      "status": "UNKNOWN",
+      "urn": "uuid:port:9b68772d3df3d8a645074a0e60455cdd:sit0",
+      "expires": 0,
+      "address": "sit0",
+      "addressType": "phy",
+      "capacity": 0
+    },
+    "target": {
+      "name": "",
+      "description": "",
+      "status": "UNKNOWN",
+      "urn": "",
+      "expires": 1668641313871091,
+      "address": "00:00:00:00",
+      "addressType": "eth",
+      "capacity": 0
+    },
+    "index": "",
+    ":id": "c8604a4f-1a2e-4035-8de8-d2dfb84f6e28",
+    ":ts": 1668640713871812,
+    ":type": "http://unis.open.sice.indiana.edu/schema/2.0.0/relationship#"
+  },
+  {
+    "subject": {
+      "name": "",
+      "description": "",
+      "status": "UNKNOWN",
       "urn": "uuid:port:12f1f1d223154353a425d2b4e12b1818:lo",
       "expires": 0,
       "address": "lo",
