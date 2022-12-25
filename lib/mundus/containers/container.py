@@ -203,6 +203,7 @@ class Container(object):
     """
     def __init__(self, netloc, scheme, connect=True):
         self._remote, self._netloc, self._scheme = _NullRemote(), netloc, scheme
+        netloc_map[self._remote] = self._netloc or ""
         if netloc is not None and connect:
             self._connect()
 
@@ -234,6 +235,7 @@ class Container(object):
                 with _lock:
                     remote_map[ident] = _Remote(client, *desc)
             remote_map[ident]._import(self._remote)
+            del netloc_map[self._remote]
             reverse_map[self._netloc] = self._remote = remote_map[ident]
             netloc_map[self._remote] = self._netloc
         except ConnectionError:
