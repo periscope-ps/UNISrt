@@ -1,5 +1,5 @@
 import asyncio, requests, socket, websockets as ws
-import copy, itertools, json, ssl
+import copy, itertools, json, ssl, time
 
 from aiohttp import ClientSession
 from aiohttp.client_exceptions import ClientConnectionError
@@ -249,7 +249,7 @@ class _SingletonOnUID(type):
             cls.verify = kwargs.get("verify", False)
         headers = { 'Content-Type': 'application/perfsonar+json', 'Accept': MIME['PSJSON'] }
         try:
-            resp = requests.get(urljoin(url, "about"), cert=(cls.cert), timeout=0.1, verify=cls.verify, headers=headers)
+            resp = requests.get(urljoin(url, "about"), cert=(cls.cert), timeout=0.5, verify=cls.verify, headers=headers)
         except RequestsConnectionError as e:
             raise UnisReferenceError("Cannot connect to remote /about", url) from e
         if 200 <= resp.status_code <= 299:
@@ -297,12 +297,14 @@ class UnisClient(metaclass=_SingletonOnUID):
     def __init__(self, url, **kwargs):
         self.namespaces = set()
         self.loop = asyncio.new_event_loop()
+        self._alive = True
         self._open, self._socket = True, None
         self._virtual = kwargs.get('virtual', False)
-        try: asyncio.get_event_loop().run_in_executor(None, self.loop.run_forever)
+        try:
+            self.watchdog = asyncio.get_event_loop().run_in_executor(None, self.loop.run_until_complete, self.watchdog_loop())
         except RuntimeError:
             asyncio.set_event_loop(asyncio.new_event_loop())
-            asyncio.get_event_loop().run_in_executor(None, self.loop.run_forever)
+            self.watchdog = asyncio.get_event_loop().run_in_executor(None, self.loop.run_until_complete, self.watchdog_loop())
 
         url = (lambda x: f"{x.scheme}://{x.netloc.strip('/')}")(urlparse(url))
         self._url, self._verify, self._ssl = url, kwargs.get("verify", False), kwargs.get("ssl")
@@ -311,7 +313,6 @@ class UnisClient(metaclass=_SingletonOnUID):
         if self._ssl:
             self._sslcontext = ssl.create_default_context(purpose=ssl.Purpose.CLIENT_AUTH)
             self._sslcontext.load_cert_chain(self._ssl)
-        
     @property
     def virtual(self):
         return self._virtual
@@ -321,6 +322,11 @@ class UnisClient(metaclass=_SingletonOnUID):
         if not v:
             if self._socket is None:
                 self.connect()
+
+    async def watchdog_loop(self):
+        while self._alive:
+            await asyncio.sleep(0.01)
+
     async def check(self):
         """
         :rtype: boolean
@@ -350,24 +356,26 @@ class UnisClient(metaclass=_SingletonOnUID):
             while not self._socket:
                 try:
                     fut = ws.connect(ref, loop=loop, ssl=self._sslcontext)
-                    self._socket = await asyncio.wait_for(fut, timeout=1, loop=loop)
+                    self._socket = await asyncio.wait_for(fut, timeout=10)
                     self._lock = True
                     for col in self._channels.keys():
                         await self._socket.send(json.dumps({'query':{}, 'resourceType': col}))
                     self._lock = False
                 except OSError:
-                    import time
                     msg = "[{}]No websocket connection, retrying...".format(urlparse(self._url).netloc)
-                    time.sleep(1)
+                    await asyncio.sleep(1)
                     getLogger("unisrt").warn(msg)
                 except asyncio.TimeoutError:
                     msg = "[{}]No websocket connection, retrying...".format(urlparse(self._url).netloc)
                     getLogger("unisrt").warn(msg)
             try:
                 while True:
-                    msg = json.loads(await self._socket.recv())
-                    for cb in self._channels[msg['headers']['collection']]:
-                        cb(msg['data'], msg['headers']['action'])
+                    try:
+                        msg = json.loads(await self._socket.recv())
+                        for cb in self._channels[msg['headers']['collection']]:
+                            cb(msg['data'], msg['headers']['action'])
+                    except (TimeoutError, asyncio.exceptions.TimeoutError):
+                        if not self._alive: return
             except ConnectionClosed:
                 if self._open:
                     msg = "[{}]Lost websocket connection, retrying...".format(urlparse(self._url).netloc)
@@ -547,14 +555,14 @@ class UnisClient(metaclass=_SingletonOnUID):
     
     def _shutdown(self):
         async def close(loop):
-            [t.cancel() for t in asyncio.Task.all_tasks(loop) if t != asyncio.Task.current_task(loop)]
             if self._socket:
                 await self._socket.close()
             else:
                 await asyncio.sleep(0)
-            loop.stop()
+            await asyncio.sleep(0)
         """
         :rtype: None
         """
-        self._open = False
+        self._alive = self._open = False
+        [t.cancel() for t in asyncio.all_tasks(self.loop)]
         asyncio.run_coroutine_threadsafe(close(self.loop), self.loop)
