@@ -212,6 +212,22 @@ class Query(object):
         if not self._result:
             self._result = list(self._get_all())
         return iter(self._result)
+
+    def __aiter__(self):
+        class _query_aiter(object):
+            def __init__(self, obj):
+                self.obj, self.idx = obj, 0
+                self.remotes = mundus.containers.container.netloc_map.keys()
+            async def __anext__(self):
+                if not self.obj._result:
+                    await self.obj._pull_records(self.remotes)
+                    self.obj._result = self.obj._filter_records(self.remotes)
+                if self.idx >= len(self.obj._result):
+                    raise StopAsyncIteration
+                res, self.idx = self.obj._result[self.idx], self.idx + 1
+                return res
+        return _query_aiter(self)
+
     def _get_all(self):
         remotes = mundus.containers.container.netloc_map.keys()
         asyncio.get_event_loop().run_until_complete(self._pull_records(remotes))
@@ -267,6 +283,20 @@ class Query(object):
             except IndexError: return None
         try: return next(self.__iter__())
         except StopIteration: return None
+    async def afirst(self):
+        """
+        :return: Returns the first `Entity <mundus.models.models.Entity>` that match the query
+        :rtype: `Entity <mundus.models.models.Entity>`
+
+        Resolved the query and caches the result.  It returns the first valid match using asyncio.
+        """
+        if self._result:
+            try: return self._result[0]
+            except IndexError: return None
+        async for r in self:
+            return r
+        return None
+        
     def reset(self):
         """
         Reset the internal cursor to evict the local result cache.  Calls to `execute`, `first` and
