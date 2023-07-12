@@ -1,11 +1,11 @@
 import jsonschema, uuid
 from typing import NoReturn, Any, Callable
 
-from mundus import containers
+import mundus
+from mundus import containers, exceptions
 from mundus.models.cache import class_factory, _cache, _CACHE
 from mundus.models.relationship import RelationshipList
 from mundus.settings import ID_FIELD as ID_NAME, TS_FIELD as TS_NAME, TY_FIELD as TY_NAME
-from mundus import events, exceptions
 
 _sentinal, getr = object(), object.__getattribute__
 class AbstractObject(object):
@@ -242,7 +242,7 @@ class Entity(AbstractObject):
         super().__init__(v, self)
         containers.get_container(None).add(self)
         self.__callback = lambda x,ch: None
-        events.manager.publish(self, events.types.CREATE)
+        mundus.events.manager.publish(self, mundus.events.types.CREATE)
 
     def __getattribute__(self, n: str):
         try:
