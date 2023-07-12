@@ -49,7 +49,8 @@ class tester(Command):
 setup(
     name="mundus",
     version=__version__,
-    packages=[f"{NAME}", f"{NAME}.models", f"{NAME}.containers", f"{NAME}.utils"],
+    packages=[f"{NAME}", f"{NAME}.models", f"{NAME}.containers", f"{NAME}.utils",
+              f"{NAME}.measurements", f"{NAME}.events", f"{NAME}.listeners"],
     package_dir={'': 'lib'},
     author="Jeremy Musser",
     author_email="jemusser@gmail.iu.edu",

@@ -1,7 +1,7 @@
 import jsonschema, uuid
 from typing import NoReturn, Any, Callable
 
-import mundus
+import mundus, mundus.events
 from mundus import containers, exceptions
 from mundus.models.cache import class_factory, _cache, _CACHE
 from mundus.models.relationship import RelationshipList
